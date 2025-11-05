@@ -62,9 +62,12 @@ class PellematicAPI:
         if self._session is None or self._session.closed:
             connector = aiohttp.TCPConnector(ssl=False)
             timeout = aiohttp.ClientTimeout(total=30)
+            # Create explicit cookie jar to ensure cookies are saved
+            cookie_jar = aiohttp.CookieJar(unsafe=True)
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
+                cookie_jar=cookie_jar,
                 headers={
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
