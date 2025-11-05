@@ -35,19 +35,16 @@ class PellematicAPI:
         
         # Key parameters for normal operation (subset of all_parameters)
         self.key_parameters = [
+            # Basis Systemparameter - VERIFIED WORKING FROM CURL
             "CAPPL:LOCAL.L_aussentemperatur_ist",
             "CAPPL:FA[0].L_kesselstatus",
             "CAPPL:FA[0].L_kesseltemperatur",
             "CAPPL:FA[0].L_kesseltemperatur_soll_anzeige",
-            "CAPPL:FA[1].L_kesselstatus",
-            "CAPPL:FA[1].L_kesseltemperatur", 
-            "CAPPL:FA[1].L_kesseltemperatur_soll_anzeige",
-            "CAPPL:FA[2].L_kesselstatus",
-            "CAPPL:FA[2].L_kesseltemperatur",
-            "CAPPL:FA[2].L_kesseltemperatur_soll_anzeige",
-            "CAPPL:FA[3].L_kesselstatus",
-            "CAPPL:FA[3].L_kesseltemperatur",
-            "CAPPL:FA[3].L_kesseltemperatur_soll_anzeige",
+            "CAPPL:FA[0].L_abgastemperatur",
+            "CAPPL:FA[0].L_abgastemperatur_vorhanden",
+            "CAPPL:FA[0].L_feuerraumtemperatur",
+            "CAPPL:FA[0].L_feuerraumtemperatur_vorhanden",
+            "CAPPL:FA[0].L_feuerraumtemperatur_soll",
             "CAPPL:LOCAL.L_bestke_temp_ist",
             "CAPPL:LOCAL.L_bestke_umschaltventil",
             "CAPPL:LOCAL.L_pu[0].pumpe",
@@ -55,7 +52,34 @@ class PellematicAPI:
             "CAPPL:LOCAL.L_pu[2].pumpe",
             "CAPPL:LOCAL.L_zaehler_fehler",
             "CAPPL:LOCAL.anlage_betriebsart",
+            
+            # System und Fernwartung - FROM CURL
             "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek",
+            "CAPPL:LOCAL.fernwartung_einheit",
+            "CAPPL:LOCAL.pellematic_vorhanden[0]",
+            
+            # CRITICAL: Fan and Underpressure - FROM YOUR CURL REQUEST
+            "CAPPL:FA[0].L_luefterdrehzahl",
+            "CAPPL:FA[0].L_saugzugdrehzahl", 
+            "CAPPL:FA[0].unterdruck_modus",
+            "CAPPL:FA[0].L_unterdruck",
+            
+            # Betriebszeiten - FROM CURL
+            "CAPPL:FA[0].L_einschublaufzeit",
+            "CAPPL:FA[0].L_pausenzeit",
+            "CAPPL:FA[0].L_pe_schnecke_sauganlage",
+            "CAPPL:FA[0].L_saugintervall",
+            
+            # TURBINE PARAMETERS - FROM YOUR WORKING CURL
+            "CAPPL:FA[0].L_cmp_fa",
+            "CAPPL:FA[0].rm_reinigungszeit1_befuellung",
+            "CAPPL:FA[0].rm_reinigungszeit1_befuellung_cmp",
+            "CAPPL:FA[0].turbine_takt_ra_vacuum",
+            "CAPPL:FA[0].turbine_pause_ra_vacuum",
+            "CAPPL:FA[0].turbine_saugintervall",
+            "CAPPL:FA[0].turbine_saugzeit_max",
+            "CAPPL:FA[0].turbine_nachlauf",
+            
             # Heizkreis-Parameter (erweitert)
             "CAPPL:LOCAL.hk[0].betriebsart[1]",
             "CAPPL:LOCAL.hk[0].raumtemp_heizen",
@@ -79,55 +103,35 @@ class PellematicAPI:
             "CAPPL:LOCAL.hk[1].betriebsart[1]",
             "CAPPL:LOCAL.L_hk[1].vorlauftemp_ist",
             "CAPPL:LOCAL.L_hk[1].vorlauftemp_soll",
-            "CAPPL:LOCAL.L_hk[1].raumtemp_ist",
-            "CAPPL:LOCAL.L_hk[1].raumtemp_soll",
-            "CAPPL:LOCAL.L_hk[1].pumpe",
-            # Warmwasser-Parameter
+            
+            # Warmwasser-Parameter - FROM YOUR CURL
             "CAPPL:LOCAL.ww[0].betriebsart[1]",
-            "CAPPL:LOCAL.ww[0].einmal_aufbereiten",
-            "CAPPL:LOCAL.ww[0].temp_heizen",
-            "CAPPL:LOCAL.ww[0].temp_absenken",
+            "CAPPL:LOCAL.ww[0].solltemp_komfort",
+            "CAPPL:LOCAL.ww[0].solltemp_reduziert",
             "CAPPL:LOCAL.ww[0].aktives_zeitprogramm",
-            "CAPPL:LOCAL.L_ww[0].einschaltfuehler_ist",
+            "CAPPL:LOCAL.L_ww[0].temp_ist",
             "CAPPL:LOCAL.L_ww[0].temp_soll",
-            "CAPPL:LOCAL.L_ww[0].ausschaltfuehler_ist",
-            "CAPPL:LOCAL.L_ww[0].pumpe",
+            "CAPPL:LOCAL.L_ww[0].ladepumpe",
+            "CAPPL:LOCAL.L_ww[0].durchlauferhitzer",
+            "CAPPL:LOCAL.L_ww[0].wwauto",
+            "CAPPL:LOCAL.L_ww[0].wweinmalladung",
+            "CAPPL:LOCAL.ww[0].waermepumpe_mode",
+            "CAPPL:LOCAL.ww[0].temperaturband",
+            "CAPPL:LOCAL.ww[0].einschaltdifferenz",
+            "CAPPL:LOCAL.ww[0].ausschaltdifferenz",
             
-            # Zusätzliche Systemparameter
-            "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek",
-            "CAPPL:FA[0].asche_externe_aschebox",
-            "CAPPL:FA[0].asche_minimum_laufzeit_asche",
-            "CAPPL:FA[0].asche_aschedauer",
-            "CAPPL:FA[0].asche_nachlaufzeit_aschebox",
-            "CAPPL:LOCAL.pellematic_vorhanden[0]",
-            "CAPPL:FA[0].L_kesselstatus",
-            "CAPPL:LOCAL.fernwartung_einheit",
-            "CAPPL:FA[0].L_kesseltemperatur_soll_anzeige",
-            "CAPPL:FA[0].L_drehzahl_ascheschnecke_ist",
-            "CAPPL:LOCAL.L_zaehler_fehler",
-            
-            # Turbine und Reinigungssystem
-            "CAPPL:FA[0].L_cmp_fa",
-            "CAPPL:FA[0].rm_reinigungszeit1_befuellung",
-            "CAPPL:FA[0].rm_reinigungszeit1_befuellung_cmp",
-            "CAPPL:FA[0].turbine_takt_ra_vacuum",
-            "CAPPL:FA[0].turbine_pause_ra_vacuum",
-            "CAPPL:FA[0].turbine_saugintervall",
-            "CAPPL:FA[0].turbine_saugzeit_max",
-            "CAPPL:FA[0].turbine_nachlauf",
-            
-            # Erweiterte Temperatur- und Verfügbarkeitssensoren
-            "CAPPL:FA[0].L_abgastemperatur_vorhanden",
-            "CAPPL:FA[0].L_feuerraumtemperatur_vorhanden",
-            "CAPPL:FA[0].L_feuerraumtemperatur_soll",
-            "CAPPL:FA[0].L_einschublaufzeit",
-            "CAPPL:FA[0].L_pausenzeit",
-            "CAPPL:FA[0].L_luefterdrehzahl",
-            "CAPPL:FA[0].L_saugzugdrehzahl",
-            "CAPPL:FA[0].unterdruck_modus",
-            "CAPPL:FA[0].L_unterdruck",
-            "CAPPL:FA[0].L_pe_schnecke_sauganlage",
-            "CAPPL:FA[0].L_saugintervall",
+            # ASH and CLEANING Parameters - FROM YOUR CURL  
+            "CAPPL:FA[0].rm_reinigungsmodul_aktiv",
+            "CAPPL:FA[0].L_rm_status_tuere_reinigungsmodul",
+            "CAPPL:FA[0].L_rm_status_austragung",
+            "CAPPL:FA[0].L_rm_status_reinigung",
+            "CAPPL:FA[0].L_rm_position_reinigungsmodul",
+            "CAPPL:FA[0].rm_befuellung_zeit",
+            "CAPPL:FA[0].rm_befuellung_dauer",
+            "CAPPL:FA[0].L_asche_wiegung_vorhanden",
+            "CAPPL:FA[0].L_asche_gewicht",
+            "CAPPL:FA[0].asche_maxgewicht",
+            "CAPPL:FA[0].asche_warnschwelle"
         ]
     
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -233,6 +237,12 @@ class PellematicAPI:
                 ["CAPPL:LOCAL.L_hk[0].raumtemp_ist", "CAPPL:LOCAL.L_hk[0].vorlauftemp_ist"],
                 # Hot water parameters
                 ["CAPPL:LOCAL.ww[0].betriebsart[1]", "CAPPL:LOCAL.L_ww[0].temp_soll"],
+                # Underpressure and fan parameters - try different variations
+                ["CAPPL:FA[0].unterdruck_modus", "CAPPL:FA[0].L_unterdruck"],
+                ["CAPPL:FA[0].L_luefterdrehzahl", "CAPPL:FA[0].L_saugzugdrehzahl"],
+                # Alternative underpressure parameter names to test
+                ["CAPPL:FA[0].unterdruck", "CAPPL:FA[0].saugzug_unterdruck"],
+                ["CAPPL:FA[0].L_unterdruck_ist", "CAPPL:FA[0].L_unterdruck_soll"],
             ]
             
             headers = {
@@ -307,6 +317,8 @@ class PellematicAPI:
                     
                     # Map parameters to values - extract and format values correctly
                     result = {}
+                    missing_parameters = []
+                    
                     for i, param in enumerate(parameters_to_fetch):
                         if i < len(data_array):
                             api_object = data_array[i]
@@ -331,8 +343,18 @@ class PellematicAPI:
                                         'processed_value': processed_value
                                     }
                             else:
-                                # Fallback for non-dict responses
-                                result[param] = api_object
+                                # Fallback for non-dict responses or missing data
+                                if api_object is None or (isinstance(api_object, dict) and not api_object.get('value')):
+                                    missing_parameters.append(param)
+                                    _LOGGER.warning(f"Parameter {param} returned no data or invalid response: {api_object}")
+                                else:
+                                    result[param] = api_object
+                        else:
+                            missing_parameters.append(param)
+                            _LOGGER.warning(f"Parameter {param} not found in API response")
+                    
+                    if missing_parameters:
+                        _LOGGER.info(f"Missing/unavailable parameters: {missing_parameters}")
                     
                     if self.debug_mode:
                         _LOGGER.info(f"DEBUG MODE: Retrieved {len(result)} data points")
