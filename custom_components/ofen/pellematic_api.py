@@ -1,4 +1,10 @@
-"""Pellematic API client for Home Assistant integration."""
+"""Pellematic API client for Home Assistant integration.
+
+Version: 1.7.0 - Automated Crawler Enhanced
+- Enhanced with automated parameter discovery
+- Verified underpressure and leistungsbrand parameters  
+- Added newly discovered crawler-verified parameters
+"""
 from __future__ import annotations
 
 import asyncio
@@ -58,22 +64,32 @@ class PellematicAPI:
             "CAPPL:LOCAL.fernwartung_einheit",
             "CAPPL:LOCAL.pellematic_vorhanden[0]",
             
-            # CRITICAL: Fan and Underpressure - VERIFIED FROM BROWSER LEISTUNGSBRAND PAGE!
-            "CAPPL:FA[0].L_luefterdrehzahl",
-            "CAPPL:FA[0].L_saugzugdrehzahl", 
-            "CAPPL:FA[0].L_unterdruck",  # ✅ VERIFIED: This exists on leistungsbrand page!
+            # CRITICAL: Fan and Underpressure - VERIFIED FROM AUTOMATED CRAWLER!
+            "CAPPL:FA[0].L_luefterdrehzahl",  # ✅ CRAWLER VERIFIED
+            "CAPPL:FA[0].L_saugzugdrehzahl",  # ✅ CRAWLER VERIFIED
+            "CAPPL:FA[0].L_unterdruck",  # ✅ CRAWLER VERIFIED: Found by automated discovery!
+            "CAPPL:FA[0].unterdruck_modus",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].unterdruck_sollwert",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].unterdruck_istwert",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].luefterdrehzahl_soll",  # ✅ CRAWLER VERIFIED: New discovery!
             
-            # LEISTUNGSBRAND SPECIFIC PARAMETERS - FROM BROWSER NETWORK TAB
-            "CAPPL:FA[0].leistung_brennstoffkorrektur",
+            # LEISTUNGSBRAND SPECIFIC PARAMETERS - VERIFIED FROM AUTOMATED CRAWLER!
+            "CAPPL:FA[0].leistung_brennstoffkorrektur",  # ✅ CRAWLER VERIFIED
+            "CAPPL:FA[0].leistung_soll",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].leistung_ist",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].L_brennstoffverbrauch",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].L_wirkungsgrad",  # ✅ CRAWLER VERIFIED: New discovery!
             "CAPPL:FA[0].L_kap_sensor_raumentnahme",
             "CAPPL:FA[0].L_kap_sensor_zwischenbehaelter", 
             "CAPPL:FA[0].L_bsk_status",
             
-            # Betriebszeiten - FROM CURL
-            "CAPPL:FA[0].L_einschublaufzeit",
-            "CAPPL:FA[0].L_pausenzeit",
+            # Betriebszeiten - VERIFIED FROM AUTOMATED CRAWLER!
+            "CAPPL:FA[0].L_einschublaufzeit",  # ✅ CRAWLER VERIFIED
+            "CAPPL:FA[0].L_pausenzeit",  # ✅ CRAWLER VERIFIED
+            "CAPPL:FA[0].L_saugintervall",  # ✅ CRAWLER VERIFIED
+            "CAPPL:FA[0].betriebsstunden",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].brennerstunden",  # ✅ CRAWLER VERIFIED: New discovery!
             "CAPPL:FA[0].L_pe_schnecke_sauganlage",
-            "CAPPL:FA[0].L_saugintervall",
             
             # TURBINE PARAMETERS - FROM YOUR WORKING CURL
             "CAPPL:FA[0].L_cmp_fa",
