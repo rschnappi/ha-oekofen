@@ -18,12 +18,14 @@ from .const import (
     CONF_LANGUAGE,
     CONF_INTERVAL,
     CONF_DEBUG_MODE,
+    CONF_DEVICE_NAME,
     DEFAULT_URL,
     DEFAULT_USERNAME,
     DEFAULT_PASSWORD,
     DEFAULT_LANGUAGE,
     DEFAULT_INTERVAL,
     DEFAULT_DEBUG_MODE,
+    DEFAULT_DEVICE_NAME,
     DOMAIN,
     LANGUAGE_OPTIONS,
 )
@@ -40,6 +42,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required(CONF_INTERVAL, default=DEFAULT_INTERVAL): vol.All(
             vol.Coerce(int), vol.Range(min=5, max=3600)
         ),
+        vol.Optional(CONF_DEVICE_NAME, default=DEFAULT_DEVICE_NAME): str,
         vol.Optional(CONF_DEBUG_MODE, default=DEFAULT_DEBUG_MODE): bool,
     }
 )

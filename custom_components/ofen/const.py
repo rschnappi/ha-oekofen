@@ -11,6 +11,7 @@ CONF_PASSWORD = "password"
 CONF_LANGUAGE = "language"
 CONF_INTERVAL = "interval"
 CONF_DEBUG_MODE = "debug_mode"
+CONF_DEVICE_NAME = "device_name"
 
 # Defaults
 DEFAULT_URL = "172.21.9.50"
@@ -20,6 +21,7 @@ DEFAULT_LANGUAGE = "en"
 DEFAULT_INTERVAL = 30
 DEFAULT_DEBUG_MODE = False
 DEFAULT_NAME = "ÖkOfen Device"
+DEFAULT_DEVICE_NAME = "ÖkOfen"
 
 # Language options
 LANGUAGE_OPTIONS = ["de", "en"]
