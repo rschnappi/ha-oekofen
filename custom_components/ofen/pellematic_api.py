@@ -1,10 +1,10 @@
 """Pellematic API client for Home Assistant integration.
 
-Version: 1.8.0 - Advanced Crawler Enhanced
-- Enhanced with automated parameter discovery v2.0
-- Added 9 new crawler-verified temperature and pressure parameters
-- Comprehensive underpressure and system monitoring
-- Extended temperature measurement capabilities
+Version: 1.8.1 - Manifest Sync
+- Synchronized manifest.json version with API version
+- Advanced crawler-verified parameters maintained
+- 9 new temperature and pressure parameters included
+- Comprehensive ÖkOfen system monitoring capabilities
 """
 from __future__ import annotations
 
