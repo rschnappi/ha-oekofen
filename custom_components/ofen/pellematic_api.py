@@ -197,6 +197,73 @@ class PellematicAPI:
             self._authenticated = False
             return False
     
+    async def _visit_contexts(self) -> None:
+        """Visit different contexts to ensure all parameters are loaded."""
+        session = await self._get_session()
+        
+        # Different approaches to load parameters from various contexts
+        try:
+            # Method 1: Try visiting hash URLs (frontend routing)
+            hash_contexts = [
+                f"{self.url}/#/pellematic.0",           # Main pellematic context
+                f"{self.url}/#/pellematic.0/turbine",   # Turbine parameters
+                f"{self.url}/#/pellematic.0/entaschung", # Ash removal parameters
+                f"{self.url}/#/pellematic.0/reinigung",  # Cleaning parameters
+                f"{self.url}/#/heizkreis.0",            # Heating circuit details
+                f"{self.url}/#/warmwasser.0",           # Hot water details
+            ]
+            
+            for context_url in hash_contexts:
+                try:
+                    async with async_timeout.timeout(3):
+                        async with session.get(context_url) as response:
+                            _LOGGER.debug(f"Visited context: {context_url}")
+                            await asyncio.sleep(0.1)
+                except Exception as e:
+                    _LOGGER.debug(f"Hash URL visit failed {context_url}: {e}")
+                    continue
+            
+            # Method 2: Try to load specific parameter sets to trigger context loading
+            context_parameters = [
+                # Turbine parameters
+                ["CAPPL:FA[0].turbine_takt_ra_vacuum", "CAPPL:FA[0].turbine_pause_ra_vacuum"],
+                # Ash parameters  
+                ["CAPPL:FA[0].asche_externe_aschebox", "CAPPL:FA[0].L_drehzahl_ascheschnecke_ist"],
+                # Heating circuit parameters
+                ["CAPPL:LOCAL.L_hk[0].raumtemp_ist", "CAPPL:LOCAL.L_hk[0].vorlauftemp_ist"],
+                # Hot water parameters
+                ["CAPPL:LOCAL.ww[0].betriebsart[1]", "CAPPL:LOCAL.L_ww[0].temp_soll"],
+            ]
+            
+            headers = {
+                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                'Accept-Language': self.language,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Referer': f'{self.url}/',
+                'Origin': self.url
+            }
+            
+            # Pre-load specific parameter groups
+            for param_group in context_parameters:
+                try:
+                    async with async_timeout.timeout(5):
+                        async with session.post(
+                            f"{self.url}/?action=get&attr=1",
+                            data=json.dumps(param_group),
+                            headers=headers
+                        ) as response:
+                            if response.status == 200:
+                                await response.json()  # Read and discard, just to trigger loading
+                                _LOGGER.debug(f"Pre-loaded parameter group: {param_group[:2]}...")
+                            await asyncio.sleep(0.1)
+                except Exception as e:
+                    _LOGGER.debug(f"Parameter group pre-load failed: {e}")
+                    continue
+                    
+        except Exception as e:
+            _LOGGER.warning(f"Error visiting contexts: {e}")
+    
     async def fetch_data(self) -> Optional[Dict[str, Any]]:
         """Fetch data from the Pellematic system."""
         if not self._authenticated:
@@ -204,6 +271,9 @@ class PellematicAPI:
                 return None
         
         session = await self._get_session()
+        
+        # Visit different contexts to load all parameters
+        await self._visit_contexts()
         
         # Choose parameters based on debug mode
         parameters_to_fetch = self.all_parameters if self.debug_mode else self.key_parameters
