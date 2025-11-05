@@ -162,11 +162,25 @@ class PellematicAPI:
                     response.raise_for_status()
                     data_array = await response.json()
                     
-                    # Map parameters to values
+                    # Map parameters to values - extract actual values from JSON objects
                     result = {}
                     for i, param in enumerate(parameters_to_fetch):
                         if i < len(data_array):
-                            result[param] = data_array[i]
+                            api_object = data_array[i]
+                            if isinstance(api_object, dict) and 'value' in api_object:
+                                # Extract numeric value and apply divisor
+                                value = api_object['value']
+                                divisor = api_object.get('divisor', '1')
+                                try:
+                                    if divisor and divisor != '' and divisor != '1':
+                                        result[param] = float(value) / float(divisor)
+                                    else:
+                                        result[param] = float(value)
+                                except (ValueError, TypeError):
+                                    result[param] = value  # Fallback to string value
+                            else:
+                                # Fallback for non-dict responses
+                                result[param] = api_object
                     
                     if self.debug_mode:
                         _LOGGER.info(f"DEBUG MODE: Retrieved {len(result)} data points")
