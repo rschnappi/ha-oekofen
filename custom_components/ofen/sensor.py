@@ -48,6 +48,7 @@ async def async_setup_entry(
         PellematicBufferTankTemperatureSensor(coordinator, config_entry, device_name),
         PellematicErrorCountSensor(coordinator, config_entry, device_name),
         PellematicSystemModeSensor(coordinator, config_entry, device_name),
+        PellematicMaintenanceTimestampSensor(coordinator, config_entry, device_name),
     ]
 
     # Add boiler sensors
@@ -65,6 +66,44 @@ async def async_setup_entry(
             entities.append(
                 PellematicPumpSensor(coordinator, config_entry, device_name, pump['index'])
             )
+    
+    # Add heating circuit sensors
+    if coordinator.data and 'heating_circuits' in coordinator.data:
+        for hc in coordinator.data['heating_circuits']:
+            entities.extend([
+                PellematicHeatingCircuitModeSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitRoomTempActualSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitRoomTempTargetSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitRoomTempHeatingSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitRoomTempLoweringSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitFlowTempActualSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitFlowTempTargetSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitActiveProgramSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitPumpSensor(coordinator, config_entry, device_name, hc['index']),
+                # Heizkurven-Sensoren
+                PellematicHeatingCircuitHeatingCurveSlopeSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitHeatingCurveFootPointSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitHeatingLimitHeatSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitHeatingLimitLowerSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitLeadTimeSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitRoomSensorInfluenceSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCircuitRoomTempPlusSensor(coordinator, config_entry, device_name, hc['index']),
+            ])
+    
+    # Add hot water sensors
+    if coordinator.data and 'hot_water' in coordinator.data:
+        for hw in coordinator.data['hot_water']:
+            entities.extend([
+                PellematicHotWaterModeSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterOncePreapreSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterTempHeatingSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterTempLoweringSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterActiveProgramSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterSwitchOnSensorTempSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterTempTargetSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterSwitchOffSensorTempSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterPumpSensor(coordinator, config_entry, device_name, hw['index']),
+            ])
     
     # Add additional sensors for all raw data points if in debug mode
     if debug_mode and coordinator.data and 'raw_data' in coordinator.data:
@@ -250,6 +289,27 @@ class PellematicSystemModeSensor(CoordinatorEntity, SensorEntity):
         return str(system_mode) if system_mode is not None else None
 
 
+class PellematicMaintenanceTimestampSensor(CoordinatorEntity, SensorEntity):
+    """Representation of maintenance timestamp sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_maintenance_timestamp"
+        self._attr_name = f"{device_name} Maintenance Timestamp"
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        timestamp_data = self.coordinator.data.get("maintenance_timestamp")
+        if isinstance(timestamp_data, dict):
+            return timestamp_data.get('readable', timestamp_data.get('datetime'))
+        return str(timestamp_data) if timestamp_data is not None else None
+
+
 class PellematicBoilerTargetTemperatureSensor(CoordinatorEntity, SensorEntity):
     """Representation of boiler target temperature sensor."""
 
@@ -334,3 +394,230 @@ class PellematicGenericSensor(CoordinatorEntity, SensorEntity):
                 return value['numeric_value']
         
         return value
+
+
+# Heating Circuit Sensors
+class PellematicHeatingCircuitModeSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit mode sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_mode"
+        self._attr_name = f"{device_name} Heating Circuit {hc_index + 1} Mode"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                mode_text = hc.get('mode_text')
+                if mode_text:
+                    return mode_text
+                mode_numeric = hc.get('mode_numeric')
+                return str(mode_numeric) if mode_numeric is not None else None
+        return None
+
+
+class PellematicHeatingCircuitRoomTempActualSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit room temperature actual sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_room_temp_actual"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Room Temperature"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('room_temp_actual')
+        return None
+
+
+class PellematicHeatingCircuitRoomTempTargetSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit room temperature target sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_room_temp_target"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Room Target Temperature"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('room_temp_target')
+        return None
+
+
+class PellematicHeatingCircuitRoomTempHeatingSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit room temperature heating setting sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_room_temp_heating"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Heating Temperature"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('room_temp_heating')
+        return None
+
+
+class PellematicHeatingCircuitRoomTempLoweringSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit room temperature lowering setting sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_room_temp_lowering"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Lowering Temperature"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('room_temp_lowering')
+        return None
+
+
+class PellematicHeatingCircuitFlowTempActualSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit flow temperature actual sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_flow_temp_actual"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Flow Temperature"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('flow_temp_actual')
+        return None
+
+
+class PellematicHeatingCircuitFlowTempTargetSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit flow temperature target sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_flow_temp_target"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Flow Target Temperature"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('flow_temp_target')
+        return None
+
+
+class PellematicHeatingCircuitActiveProgramSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit active program sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_active_program"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Active Program"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                program_text = hc.get('active_program_text')
+                if program_text:
+                    return program_text
+                program_numeric = hc.get('active_program_numeric')
+                return str(program_numeric) if program_numeric is not None else None
+        return None
+
+
+class PellematicHeatingCircuitPumpSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating circuit pump sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_pump"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Pump"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                pump_running = hc.get('pump_running')
+                if pump_running is not None:
+                    return "Running" if pump_running else "Stopped"
+        return None

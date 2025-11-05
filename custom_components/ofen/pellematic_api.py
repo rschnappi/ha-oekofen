@@ -54,7 +54,44 @@ class PellematicAPI:
             "CAPPL:LOCAL.L_pu[1].pumpe",
             "CAPPL:LOCAL.L_pu[2].pumpe",
             "CAPPL:LOCAL.L_zaehler_fehler",
-            "CAPPL:LOCAL.anlage_betriebsart"
+            "CAPPL:LOCAL.anlage_betriebsart",
+            "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek",
+            # Heizkreis-Parameter (erweitert)
+            "CAPPL:LOCAL.hk[0].betriebsart[1]",
+            "CAPPL:LOCAL.hk[0].raumtemp_heizen",
+            "CAPPL:LOCAL.hk[0].raumtemp_absenken",
+            "CAPPL:LOCAL.hk[0].aktives_zeitprogramm",
+            "CAPPL:LOCAL.L_hk[0].vorlauftemp_ist",
+            "CAPPL:LOCAL.L_hk[0].vorlauftemp_soll",
+            "CAPPL:LOCAL.L_hk[0].raumtemp_ist",
+            "CAPPL:LOCAL.L_hk[0].raumtemp_soll",
+            "CAPPL:LOCAL.L_hk[0].pumpe",
+            # Heizkurven-Parameter
+            "CAPPL:LOCAL.hk[0].heizkurve_steigung",
+            "CAPPL:LOCAL.hk[0].heizkurve_fusspunkt",
+            "CAPPL:LOCAL.hk[0].heizgrenze_heizen",
+            "CAPPL:LOCAL.hk[0].heizgrenze_absenken",
+            "CAPPL:LOCAL.hk[0].vorhaltezeit",
+            "CAPPL:LOCAL.hk[0].raumfuehler_einfluss",
+            "CAPPL:LOCAL.hk[0].raumtemp_plus",
+            "CAPPL:LOCAL.hk[0].raumfuehler_zuweisung",
+            # Erweiterte Heizkreise (falls vorhanden)
+            "CAPPL:LOCAL.hk[1].betriebsart[1]",
+            "CAPPL:LOCAL.L_hk[1].vorlauftemp_ist",
+            "CAPPL:LOCAL.L_hk[1].vorlauftemp_soll",
+            "CAPPL:LOCAL.L_hk[1].raumtemp_ist",
+            "CAPPL:LOCAL.L_hk[1].raumtemp_soll",
+            "CAPPL:LOCAL.L_hk[1].pumpe",
+            # Warmwasser-Parameter
+            "CAPPL:LOCAL.ww[0].betriebsart[1]",
+            "CAPPL:LOCAL.ww[0].einmal_aufbereiten",
+            "CAPPL:LOCAL.ww[0].temp_heizen",
+            "CAPPL:LOCAL.ww[0].temp_absenken",
+            "CAPPL:LOCAL.ww[0].aktives_zeitprogramm",
+            "CAPPL:LOCAL.L_ww[0].einschaltfuehler_ist",
+            "CAPPL:LOCAL.L_ww[0].temp_soll",
+            "CAPPL:LOCAL.L_ww[0].ausschaltfuehler_ist",
+            "CAPPL:LOCAL.L_ww[0].pumpe",
         ]
     
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -288,8 +325,11 @@ class PellematicAPI:
             'buffer_tank_temperature': raw_data.get("CAPPL:LOCAL.L_bestke_temp_ist"),
             'error_count': raw_data.get("CAPPL:LOCAL.L_zaehler_fehler"),
             'system_mode': raw_data.get("CAPPL:LOCAL.anlage_betriebsart"),
+            'maintenance_timestamp': raw_data.get("CAPPL:LOCAL.L_fernwartung_datum_zeit_sek"),
             'boilers': [],
-            'pumps': []
+            'pumps': [],
+            'heating_circuits': [],
+            'hot_water': []
         }
         
         # Parse boiler data - check up to 4 boilers
@@ -325,6 +365,122 @@ class PellematicAPI:
                     'index': i,
                     'running': bool(pump_state)
                 })
+        
+        # Parse heating circuit data - check up to 2 heating circuits
+        for i in range(2):
+            hc_mode = raw_data.get(f"CAPPL:LOCAL.hk[{i}].betriebsart[1]")
+            hc_temp_heat = raw_data.get(f"CAPPL:LOCAL.hk[{i}].raumtemp_heizen")
+            hc_temp_lower = raw_data.get(f"CAPPL:LOCAL.hk[{i}].raumtemp_absenken")
+            hc_active_program = raw_data.get(f"CAPPL:LOCAL.hk[{i}].aktives_zeitprogramm")
+            hc_flow_temp_actual = raw_data.get(f"CAPPL:LOCAL.L_hk[{i}].vorlauftemp_ist")
+            hc_flow_temp_target = raw_data.get(f"CAPPL:LOCAL.L_hk[{i}].vorlauftemp_soll")
+            hc_room_temp_actual = raw_data.get(f"CAPPL:LOCAL.L_hk[{i}].raumtemp_ist")
+            hc_room_temp_target = raw_data.get(f"CAPPL:LOCAL.L_hk[{i}].raumtemp_soll")
+            hc_pump = raw_data.get(f"CAPPL:LOCAL.L_hk[{i}].pumpe")
+            
+            # Heizkurven und erweiterte Parameter
+            hc_heating_curve_slope = raw_data.get(f"CAPPL:LOCAL.hk[{i}].heizkurve_steigung")
+            hc_heating_curve_foot = raw_data.get(f"CAPPL:LOCAL.hk[{i}].heizkurve_fusspunkt")
+            hc_heating_limit_heat = raw_data.get(f"CAPPL:LOCAL.hk[{i}].heizgrenze_heizen")
+            hc_heating_limit_lower = raw_data.get(f"CAPPL:LOCAL.hk[{i}].heizgrenze_absenken")
+            hc_lead_time = raw_data.get(f"CAPPL:LOCAL.hk[{i}].vorhaltezeit")
+            hc_room_sensor_influence = raw_data.get(f"CAPPL:LOCAL.hk[{i}].raumfuehler_einfluss")
+            hc_room_temp_plus = raw_data.get(f"CAPPL:LOCAL.hk[{i}].raumtemp_plus")
+            hc_room_sensor_assignment = raw_data.get(f"CAPPL:LOCAL.hk[{i}].raumfuehler_zuweisung")
+            
+            # Only add heating circuit if we have at least some data
+            if any(x is not None for x in [hc_mode, hc_temp_heat, hc_flow_temp_actual, hc_room_temp_actual, hc_pump, hc_heating_curve_slope]):
+                # Extract mode text if available
+                mode_text = None
+                mode_numeric = None
+                if isinstance(hc_mode, dict) and 'text_value' in hc_mode:
+                    mode_text = hc_mode['text_value']
+                    mode_numeric = hc_mode['numeric_value']
+                elif hc_mode is not None:
+                    mode_numeric = hc_mode
+
+                # Extract program text if available
+                program_text = None
+                program_numeric = None
+                if isinstance(hc_active_program, dict) and 'text_value' in hc_active_program:
+                    program_text = hc_active_program['text_value']
+                    program_numeric = hc_active_program['numeric_value']
+                elif hc_active_program is not None:
+                    program_numeric = hc_active_program
+                
+                parsed['heating_circuits'].append({
+                    'index': i,
+                    'mode_numeric': mode_numeric,
+                    'mode_text': mode_text,
+                    'mode_raw': hc_mode,
+                    'room_temp_heating': hc_temp_heat,
+                    'room_temp_lowering': hc_temp_lower,
+                    'active_program_numeric': program_numeric,
+                    'active_program_text': program_text,
+                    'active_program_raw': hc_active_program,
+                    'flow_temp_actual': hc_flow_temp_actual,
+                    'flow_temp_target': hc_flow_temp_target,
+                    'room_temp_actual': hc_room_temp_actual,
+                    'room_temp_target': hc_room_temp_target,
+                    'pump_running': bool(hc_pump) if hc_pump is not None else None,
+                    # Heizkurven-Parameter
+                    'heating_curve_slope': hc_heating_curve_slope,
+                    'heating_curve_foot_point': hc_heating_curve_foot,
+                    'heating_limit_heat': hc_heating_limit_heat,
+                    'heating_limit_lower': hc_heating_limit_lower,
+                    'lead_time': hc_lead_time,
+                    'room_sensor_influence': hc_room_sensor_influence,
+                    'room_temp_plus': hc_room_temp_plus,
+                    'room_sensor_assignment': hc_room_sensor_assignment
+                })
+        
+        # Parse hot water data - check hot water circuit 0
+        hw_mode = raw_data.get("CAPPL:LOCAL.ww[0].betriebsart[1]")
+        hw_once_prepare = raw_data.get("CAPPL:LOCAL.ww[0].einmal_aufbereiten")
+        hw_temp_heat = raw_data.get("CAPPL:LOCAL.ww[0].temp_heizen")
+        hw_temp_lower = raw_data.get("CAPPL:LOCAL.ww[0].temp_absenken")
+        hw_active_program = raw_data.get("CAPPL:LOCAL.ww[0].aktives_zeitprogramm")
+        hw_switch_on_sensor = raw_data.get("CAPPL:LOCAL.L_ww[0].einschaltfuehler_ist")
+        hw_temp_target = raw_data.get("CAPPL:LOCAL.L_ww[0].temp_soll")
+        hw_switch_off_sensor = raw_data.get("CAPPL:LOCAL.L_ww[0].ausschaltfuehler_ist")
+        hw_pump = raw_data.get("CAPPL:LOCAL.L_ww[0].pumpe")
+        
+        # Only add hot water if we have at least some data
+        if any(x is not None for x in [hw_mode, hw_temp_heat, hw_temp_target, hw_pump]):
+            # Extract mode text if available
+            hw_mode_text = None
+            hw_mode_numeric = None
+            if isinstance(hw_mode, dict) and 'text_value' in hw_mode:
+                hw_mode_text = hw_mode['text_value']
+                hw_mode_numeric = hw_mode['numeric_value']
+            elif hw_mode is not None:
+                hw_mode_numeric = hw_mode
+
+            # Extract program text if available
+            hw_program_text = None
+            hw_program_numeric = None
+            if isinstance(hw_active_program, dict) and 'text_value' in hw_active_program:
+                hw_program_text = hw_active_program['text_value']
+                hw_program_numeric = hw_active_program['numeric_value']
+            elif hw_active_program is not None:
+                hw_program_numeric = hw_active_program
+            
+            parsed['hot_water'].append({
+                'index': 0,
+                'mode_numeric': hw_mode_numeric,
+                'mode_text': hw_mode_text,
+                'mode_raw': hw_mode,
+                'once_prepare': bool(hw_once_prepare) if hw_once_prepare is not None else None,
+                'temp_heating': hw_temp_heat,
+                'temp_lowering': hw_temp_lower,
+                'active_program_numeric': hw_program_numeric,
+                'active_program_text': hw_program_text,
+                'active_program_raw': hw_active_program,
+                'switch_on_sensor_temp': hw_switch_on_sensor,
+                'temp_target': hw_temp_target,
+                'switch_off_sensor_temp': hw_switch_off_sensor,
+                'pump_running': bool(hw_pump) if hw_pump is not None else None
+            })
         
         return parsed
     
