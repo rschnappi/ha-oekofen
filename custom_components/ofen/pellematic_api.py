@@ -221,13 +221,16 @@ class PellematicAPI:
         try:
             # Method 1: Try visiting hash URLs (frontend routing)
             hash_contexts = [
-                f"{self.url}/#/pellematic.0",           # Main pellematic context
-                f"{self.url}/#/pellematic.0/leistungsbrand", # CRITICAL: Underpressure parameters page!
-                f"{self.url}/#/pellematic.0/turbine",   # Turbine parameters
-                f"{self.url}/#/pellematic.0/entaschung", # Ash removal parameters
-                f"{self.url}/#/pellematic.0/reinigung",  # Cleaning parameters
-                f"{self.url}/#/heizkreis.0",            # Heating circuit details
-                f"{self.url}/#/warmwasser.0",           # Hot water details
+                f"{self.url}/#/pellematic",             # Main pellematic context
+                f"{self.url}/#/pellematic/leistungsbrand", # CRITICAL: Underpressure parameters page!
+                f"{self.url}/#/pellematic/turbine",     # Turbine parameters
+                f"{self.url}/#/pellematic/entaschung",  # Ash removal parameters
+                f"{self.url}/#/pellematic/reinigung",   # Cleaning parameters
+                f"{self.url}/#/heizkreis",              # Heating circuit details
+                f"{self.url}/#/warmwasser",             # Hot water details
+                # Also try with .0 notation for multi-unit systems
+                f"{self.url}/#/pellematic.0",           # Main pellematic context (unit 0)
+                f"{self.url}/#/pellematic.0/leistungsbrand", # Underpressure parameters (unit 0)
             ]
             
             for context_url in hash_contexts:
