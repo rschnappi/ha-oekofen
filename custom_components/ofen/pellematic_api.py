@@ -58,11 +58,18 @@ class PellematicAPI:
             "CAPPL:LOCAL.fernwartung_einheit",
             "CAPPL:LOCAL.pellematic_vorhanden[0]",
             
-            # CRITICAL: Fan and Underpressure - FROM YOUR CURL REQUEST
+            # CRITICAL: Fan and Underpressure - FROM YOUR CURL REQUEST + LEISTUNGSBRAND VARIATIONS
             "CAPPL:FA[0].L_luefterdrehzahl",
             "CAPPL:FA[0].L_saugzugdrehzahl", 
             "CAPPL:FA[0].unterdruck_modus",
             "CAPPL:FA[0].L_unterdruck",
+            # Additional underpressure variations for leistungsbrand page
+            "CAPPL:FA[0].unterdruck_sollwert", 
+            "CAPPL:FA[0].unterdruck_istwert",
+            "CAPPL:FA[0].L_unterdruck_soll",
+            "CAPPL:FA[0].L_unterdruck_ist",
+            "CAPPL:FA[0].saugzug_unterdruck",
+            "CAPPL:FA[0].unterdruck_sensor",
             
             # Betriebszeiten - FROM CURL
             "CAPPL:FA[0].L_einschublaufzeit",
@@ -131,7 +138,12 @@ class PellematicAPI:
             "CAPPL:FA[0].L_asche_wiegung_vorhanden",
             "CAPPL:FA[0].L_asche_gewicht",
             "CAPPL:FA[0].asche_maxgewicht",
-            "CAPPL:FA[0].asche_warnschwelle"
+            "CAPPL:FA[0].asche_warnschwelle",
+            
+            # Additional Ash Parameters - FROM YOUR CURRENT CURL REQUEST
+            "CAPPL:FA[0].asche_minimum_laufzeit_asche",
+            "CAPPL:FA[0].asche_aschedauer",
+            "CAPPL:FA[0].asche_nachlaufzeit_aschebox"
         ]
     
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -210,6 +222,7 @@ class PellematicAPI:
             # Method 1: Try visiting hash URLs (frontend routing)
             hash_contexts = [
                 f"{self.url}/#/pellematic.0",           # Main pellematic context
+                f"{self.url}/#/pellematic.0/leistungsbrand", # CRITICAL: Underpressure parameters page!
                 f"{self.url}/#/pellematic.0/turbine",   # Turbine parameters
                 f"{self.url}/#/pellematic.0/entaschung", # Ash removal parameters
                 f"{self.url}/#/pellematic.0/reinigung",  # Cleaning parameters
@@ -222,13 +235,25 @@ class PellematicAPI:
                     async with async_timeout.timeout(3):
                         async with session.get(context_url) as response:
                             _LOGGER.debug(f"Visited context: {context_url}")
-                            await asyncio.sleep(0.1)
+                            # Special handling for leistungsbrand page
+                            if "leistungsbrand" in context_url:
+                                _LOGGER.info(f"SPECIAL: Loading leistungsbrand page for underpressure parameters")
+                                await asyncio.sleep(1)  # Give more time for this critical page
+                            else:
+                                await asyncio.sleep(0.1)
                 except Exception as e:
                     _LOGGER.debug(f"Hash URL visit failed {context_url}: {e}")
                     continue
             
             # Method 2: Try to load specific parameter sets to trigger context loading
             context_parameters = [
+                # PRIORITY: Leistungsbrand/Underpressure parameters - try multiple variations
+                ["CAPPL:FA[0].unterdruck_modus", "CAPPL:FA[0].L_unterdruck"],
+                ["CAPPL:FA[0].L_luefterdrehzahl", "CAPPL:FA[0].L_saugzugdrehzahl"],
+                # Alternative underpressure parameter names to test
+                ["CAPPL:FA[0].unterdruck", "CAPPL:FA[0].saugzug_unterdruck"],
+                ["CAPPL:FA[0].L_unterdruck_ist", "CAPPL:FA[0].L_unterdruck_soll"],
+                ["CAPPL:FA[0].unterdruck_sollwert", "CAPPL:FA[0].unterdruck_istwert"],
                 # Turbine parameters
                 ["CAPPL:FA[0].turbine_takt_ra_vacuum", "CAPPL:FA[0].turbine_pause_ra_vacuum"],
                 # Ash parameters  
@@ -237,12 +262,6 @@ class PellematicAPI:
                 ["CAPPL:LOCAL.L_hk[0].raumtemp_ist", "CAPPL:LOCAL.L_hk[0].vorlauftemp_ist"],
                 # Hot water parameters
                 ["CAPPL:LOCAL.ww[0].betriebsart[1]", "CAPPL:LOCAL.L_ww[0].temp_soll"],
-                # Underpressure and fan parameters - try different variations
-                ["CAPPL:FA[0].unterdruck_modus", "CAPPL:FA[0].L_unterdruck"],
-                ["CAPPL:FA[0].L_luefterdrehzahl", "CAPPL:FA[0].L_saugzugdrehzahl"],
-                # Alternative underpressure parameter names to test
-                ["CAPPL:FA[0].unterdruck", "CAPPL:FA[0].saugzug_unterdruck"],
-                ["CAPPL:FA[0].L_unterdruck_ist", "CAPPL:FA[0].L_unterdruck_soll"],
             ]
             
             headers = {
