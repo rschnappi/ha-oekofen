@@ -16,6 +16,10 @@ class PellematicAPI:
     
     def __init__(self, url: str, username: str, password: str, language: str = "de", debug_mode: bool = False) -> None:
         """Initialize the API client."""
+        # Automatically add http:// if no protocol is specified
+        if not url.startswith(('http://', 'https://')):
+            url = f"http://{url}"
+        
         self.url = url.rstrip('/')
         self.username = username
         self.password = password

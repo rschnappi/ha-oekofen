@@ -1,4 +1,4 @@
-"""Ofen Integration for Home Assistant."""
+"""ÖkOfen Integration for Home Assistant."""
 from __future__ import annotations
 
 import logging
@@ -20,13 +20,13 @@ PLATFORMS: list[Platform] = [
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Ofen component."""
+    """Set up the ÖkOfen component."""
     hass.data.setdefault(DOMAIN, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Ofen from a config entry."""
+    """Set up ÖkOfen from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
     # Store entry data for easy access by platforms

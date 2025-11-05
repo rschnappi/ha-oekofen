@@ -10,7 +10,7 @@ async def test_connection():
     """Test the API connection."""
     # REPLACE WITH YOUR ACTUAL CREDENTIALS!
     api = PellematicAPI(
-        url="http://172.21.9.50",
+        url="172.21.9.50",  # Just IP - http:// will be added automatically
         username="YOUR_USERNAME_HERE", 
         password="YOUR_PASSWORD_HERE",
         language="de"

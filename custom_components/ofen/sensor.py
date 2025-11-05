@@ -96,7 +96,7 @@ class PellematicOutsideTemperatureSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_outside_temperature"
-        self._attr_name = "Outside Temperature"
+        self._attr_name = "ÖkOfen Outside Temperature"
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
@@ -115,7 +115,7 @@ class PellematicBufferTankTemperatureSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_buffer_tank_temperature"
-        self._attr_name = "Buffer Tank Temperature"
+        self._attr_name = "ÖkOfen Buffer Tank Temperature"
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
@@ -134,7 +134,7 @@ class PellematicErrorCountSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_error_count"
-        self._attr_name = "Error Count"
+        self._attr_name = "ÖkOfen Error Count"
         self._attr_state_class = SensorStateClass.TOTAL
 
     @property
@@ -152,7 +152,7 @@ class PellematicBoilerTemperatureSensor(CoordinatorEntity, SensorEntity):
         self._config_entry = config_entry
         self._boiler_index = boiler_index
         self._attr_unique_id = f"{config_entry.entry_id}_boiler_{boiler_index}_temperature"
-        self._attr_name = f"Boiler {boiler_index + 1} Temperature"
+        self._attr_name = f"ÖkOfen Boiler {boiler_index + 1} Temperature"
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
@@ -176,7 +176,7 @@ class PellematicBoilerStatusSensor(CoordinatorEntity, SensorEntity):
         self._config_entry = config_entry
         self._boiler_index = boiler_index
         self._attr_unique_id = f"{config_entry.entry_id}_boiler_{boiler_index}_status"
-        self._attr_name = f"Boiler {boiler_index + 1} Status"
+        self._attr_name = f"ÖkOfen Boiler {boiler_index + 1} Status"
 
     @property
     def native_value(self) -> str | None:

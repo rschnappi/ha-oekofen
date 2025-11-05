@@ -47,7 +47,7 @@ class PellematicPumpSwitch(CoordinatorEntity, SwitchEntity):
         self._config_entry = config_entry
         self._pump_index = pump_index
         self._attr_unique_id = f"{config_entry.entry_id}_pump_{pump_index}"
-        self._attr_name = f"Pump {pump_index + 1}"
+        self._attr_name = f"ÖkOfen Pump {pump_index + 1}"
 
     @property
     def is_on(self) -> bool | None:

@@ -1,8 +1,8 @@
-"""Constants for the Ofen integration."""
+"""Constants for the ÖkOfen integration."""
 
 DOMAIN = "ofen"
-NAME = "Ofen"
-VERSION = "1.0.0"
+NAME = "ÖkOfen"
+VERSION = "1.2.0"
 
 # Configuration and options
 CONF_URL = "url"
@@ -13,13 +13,13 @@ CONF_INTERVAL = "interval"
 CONF_DEBUG_MODE = "debug_mode"
 
 # Defaults
-DEFAULT_URL = "http://172.21.9.50"
+DEFAULT_URL = "172.21.9.50"
 DEFAULT_USERNAME = ""
 DEFAULT_PASSWORD = ""
 DEFAULT_LANGUAGE = "en"
 DEFAULT_INTERVAL = 30
 DEFAULT_DEBUG_MODE = False
-DEFAULT_NAME = "Ofen Device"
+DEFAULT_NAME = "ÖkOfen Device"
 
 # Language options
 LANGUAGE_OPTIONS = ["de", "en"]

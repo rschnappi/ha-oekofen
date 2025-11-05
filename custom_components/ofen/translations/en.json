@@ -2,10 +2,10 @@
   "config": {
     "step": {
       "user": {
-        "title": "Set up Ofen",
-        "description": "Enter the connection details for your oven device.",
+        "title": "Set up ÖkOfen",
+        "description": "Enter the connection details for your ÖkOfen Pellematic device.",
         "data": {
-          "url": "URL",
+          "url": "IP Address or Hostname",
           "username": "Username",
           "password": "Password",
           "language": "Language",

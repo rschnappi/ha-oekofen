@@ -71,7 +71,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         await api.close()
 
     # Return info that you want to store in the config entry.
-    return {"title": f"Pellematic {data[CONF_URL]}"}
+    return {"title": f"ÖkOfen {data[CONF_URL]}"}
 
 
 class PlaceholderHub:
