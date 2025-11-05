@@ -58,18 +58,16 @@ class PellematicAPI:
             "CAPPL:LOCAL.fernwartung_einheit",
             "CAPPL:LOCAL.pellematic_vorhanden[0]",
             
-            # CRITICAL: Fan and Underpressure - FROM YOUR CURL REQUEST + LEISTUNGSBRAND VARIATIONS
+            # CRITICAL: Fan and Underpressure - VERIFIED FROM BROWSER LEISTUNGSBRAND PAGE!
             "CAPPL:FA[0].L_luefterdrehzahl",
             "CAPPL:FA[0].L_saugzugdrehzahl", 
-            "CAPPL:FA[0].unterdruck_modus",
-            "CAPPL:FA[0].L_unterdruck",
-            # Additional underpressure variations for leistungsbrand page
-            "CAPPL:FA[0].unterdruck_sollwert", 
-            "CAPPL:FA[0].unterdruck_istwert",
-            "CAPPL:FA[0].L_unterdruck_soll",
-            "CAPPL:FA[0].L_unterdruck_ist",
-            "CAPPL:FA[0].saugzug_unterdruck",
-            "CAPPL:FA[0].unterdruck_sensor",
+            "CAPPL:FA[0].L_unterdruck",  # ✅ VERIFIED: This exists on leistungsbrand page!
+            
+            # LEISTUNGSBRAND SPECIFIC PARAMETERS - FROM BROWSER NETWORK TAB
+            "CAPPL:FA[0].leistung_brennstoffkorrektur",
+            "CAPPL:FA[0].L_kap_sensor_raumentnahme",
+            "CAPPL:FA[0].L_kap_sensor_zwischenbehaelter", 
+            "CAPPL:FA[0].L_bsk_status",
             
             # Betriebszeiten - FROM CURL
             "CAPPL:FA[0].L_einschublaufzeit",
