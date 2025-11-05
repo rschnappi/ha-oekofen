@@ -17,6 +17,9 @@ Eine umfassende Home Assistant Custom Component für ÖkoFen Pellematic Smart XS
 - **Debug-Modus** mit allen verfügbaren Parametern
 - **Konfigurierbare Gerätenamen** über UI
 - **Automatische Wert-Parsing** (formatTexts, Timestamps, Divisoren)
+- **🆕 STEUERUNG & AUTOMATION** - Änderungen an ÖkOfen senden
+- **🆕 HOME ASSISTANT SERVICES** - 5 Services für komplette Kontrolle
+- **🆕 SWITCH ENTITÄTEN** - Warmwasser Auto-Modus, Einmal-Aufbereitung
 
 ## 📊 Verfügbare Sensoren
 
@@ -65,6 +68,93 @@ Im Debug-Modus werden **alle 80+ verfügbaren Parameter** als Sensoren angelegt,
 - Rohwerte aller Sensoren  
 - Detaillierte Steuerungsparameter
 - Zusätzliche Diagnose-Informationen
+
+## 🎛️ Steuerung & Automation
+
+### 🔧 Home Assistant Services
+Die Integration bietet 5 Services für vollständige ÖkOfen-Kontrolle:
+
+#### `ofen.set_parameter`
+Direkte Parameter-Kontrolle
+```yaml
+service: ofen.set_parameter
+data:
+  parameter: "CAPPL:LOCAL.ww[0].betriebsart[1]"
+  value: "0"  # 0=Aus, 1=Heizen, 2=Auto
+```
+
+#### `ofen.set_hot_water_mode`
+Warmwasser-Modus setzen
+```yaml
+service: ofen.set_hot_water_mode
+data:
+  hw_index: 0     # Warmwasser-Kreislauf (meist 0)
+  mode: "auto"    # off/heat/auto
+```
+
+#### `ofen.set_room_temperature` 
+Raumtemperatur-Sollwert
+```yaml
+service: ofen.set_room_temperature
+data:
+  hc_index: 0        # Heizkreis-Index
+  temperature: 21.5  # Zieltemperatur in °C
+```
+
+#### `ofen.set_hot_water_temperature`
+Warmwasser-Temperatur
+```yaml
+service: ofen.set_hot_water_temperature
+data:
+  hw_index: 0
+  temp_type: "heizen"    # heizen/absenken
+  temperature: 55.0      # Temperatur in °C
+```
+
+#### `ofen.set_heating_circuit_mode`
+Heizkreis-Modus
+```yaml
+service: ofen.set_heating_circuit_mode
+data:
+  hc_index: 0
+  mode: "1"    # Modus-Wert
+```
+
+### 🔘 Switch Entitäten
+- **Warmwasser Auto-Modus**: Ein/Aus für automatische Warmwasser-Regelung
+- **Einmal-Aufbereitung**: Trigger für einmalige Warmwasser-Bereitung
+- **Zusätzliche Attribute**: Aktuelle Modi, Temperaturen, Status
+
+### 🤖 Automatisierungs-Beispiele
+
+**Warmwasser nachts abschalten:**
+```yaml
+automation:
+  - alias: "ÖkOfen: Warmwasser Nachtabsenkung"
+    trigger:
+      platform: time
+      at: "22:00:00"
+    action:
+      service: ofen.set_hot_water_mode
+      data:
+        hw_index: 0
+        mode: "0"  # Aus
+```
+
+**Temperatur bei Anwesenheit erhöhen:**
+```yaml
+automation:
+  - alias: "ÖkOfen: Temperatur bei Heimkehr"
+    trigger:
+      platform: state
+      entity_id: person.max_mustermann
+      to: "home"
+    action:
+      service: ofen.set_room_temperature
+      data:
+        hc_index: 0
+        temperature: 22.0
+```
 
 ## 🚀 Installation
 
@@ -183,6 +273,31 @@ cd ha-oekofen
 - ÖkoFen Modell und Firmware-Version angeben
 
 ## 📝 Changelog
+
+### v1.6.0 (2024-11-05) - MAJOR CONTROL FEATURES 🎛️
+- **🎯 VOLLSTÄNDIGE STEUERUNG**: ÖkOfen-Parameter über Home Assistant ändern
+- **🔧 5 HOME ASSISTANT SERVICES**:
+  - `set_parameter` - Direkte Parameter-Kontrolle 
+  - `set_hot_water_mode` - Warmwasser-Modi (Aus/Heizen/Auto)
+  - `set_room_temperature` - Raumtemperatur-Sollwerte
+  - `set_hot_water_temperature` - Warmwasser-Temperaturen
+  - `set_heating_circuit_mode` - Heizkreis-Modi
+  
+- **🔘 NEUE SWITCH ENTITÄTEN**:
+  - Warmwasser Auto-Modus Switch 
+  - Einmal-Aufbereitung Switch
+  - Zusätzliche Status-Attribute für alle Switches
+  
+- **🤖 AUTOMATISIERUNG READY**:
+  - Service-Calls für komplette Heizungsautomatisierung
+  - Beispiel-Automatisierungen für Nachtabsenkung, Anwesenheit
+  - Vollständige YAML-Service-Dokumentation
+
+### v1.5.1 (2024-11-05) - CRITICAL CONTEXT FIX 🔧
+- **🎯 CONTEXT-AWARE PARAMETER LOADING**: Lösung für fehlende Parameter
+- **🔧 DUAL-APPROACH**: Hash-URLs + Parameter-Gruppen Vorladen
+- **📊 ALLE 80+ PARAMETER**: Turbine, Asche, Reinigung jetzt verfügbar
+- **🚀 ENHANCED WORKFLOW**: Kontext-Besuch vor Parameter-Fetch
 
 ### v1.5.0 (2024-11-05) - MAJOR EXPANSION 🔥
 - **MASSIV ERWEITERTE PARAMETER-ABDECKUNG**:

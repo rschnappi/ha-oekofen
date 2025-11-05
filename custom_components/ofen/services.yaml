@@ -1,0 +1,133 @@
+set_parameter:
+  name: Set Parameter
+  description: Set a specific parameter on the ÖkOfen system
+  fields:
+    parameter:
+      name: Parameter
+      description: The parameter name (e.g., "CAPPL:LOCAL.ww[0].betriebsart[1]")
+      required: true
+      example: "CAPPL:LOCAL.ww[0].betriebsart[1]"
+      selector:
+        text:
+    value:
+      name: Value
+      description: The value to set
+      required: true
+      example: "0"
+      selector:
+        text:
+
+set_hot_water_mode:
+  name: Set Hot Water Mode
+  description: Set the operating mode for hot water preparation
+  fields:
+    hw_index:
+      name: Hot Water Index
+      description: Hot water circuit index (usually 0)
+      required: false
+      default: 0
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 5
+    mode:
+      name: Mode
+      description: Operating mode
+      required: true
+      default: "auto"
+      selector:
+        select:
+          options:
+            - label: "Off"
+              value: "0"
+            - label: "Heat"
+              value: "1"
+            - label: "Auto"
+              value: "2"
+
+set_heating_circuit_mode:
+  name: Set Heating Circuit Mode
+  description: Set the operating mode for a heating circuit
+  fields:
+    hc_index:
+      name: Heating Circuit Index
+      description: Heating circuit index (usually 0)
+      required: false
+      default: 0
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 5
+    mode:
+      name: Mode
+      description: Operating mode value
+      required: true
+      example: "1"
+      selector:
+        text:
+
+set_room_temperature:
+  name: Set Room Temperature
+  description: Set target room temperature for heating circuit
+  fields:
+    hc_index:
+      name: Heating Circuit Index
+      description: Heating circuit index (usually 0)
+      required: false
+      default: 0
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 5
+    temperature:
+      name: Temperature
+      description: Target room temperature in Celsius
+      required: true
+      example: 21.0
+      selector:
+        number:
+          min: 10.0
+          max: 30.0
+          step: 0.5
+          unit_of_measurement: "°C"
+
+set_hot_water_temperature:
+  name: Set Hot Water Temperature
+  description: Set hot water temperature (heating or lowering)
+  fields:
+    hw_index:
+      name: Hot Water Index
+      description: Hot water circuit index (usually 0)
+      required: false
+      default: 0
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 5
+    temp_type:
+      name: Temperature Type
+      description: Type of temperature setting
+      required: true
+      default: "heizen"
+      selector:
+        select:
+          options:
+            - label: "Heating Temperature"
+              value: "heizen"
+            - label: "Lowering Temperature"
+              value: "absenken"
+    temperature:
+      name: Temperature
+      description: Target temperature in Celsius
+      required: true
+      example: 55.0
+      selector:
+        number:
+          min: 30.0
+          max: 80.0
+          step: 1.0
+          unit_of_measurement: "°C"

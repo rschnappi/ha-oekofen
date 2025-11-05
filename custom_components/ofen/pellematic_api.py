@@ -349,6 +349,103 @@ class PellematicAPI:
             self._authenticated = False
             return None
     
+    async def set_parameter(self, parameter: str, value: str) -> bool:
+        """Set a parameter value on the Pellematic system."""
+        if not self._authenticated:
+            if not await self.authenticate():
+                return False
+        
+        session = await self._get_session()
+        
+        try:
+            headers = {
+                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                'Accept-Language': self.language,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Referer': f'{self.url}/',
+                'Origin': self.url
+            }
+            
+            # Prepare the data payload as shown in your curl example
+            data_payload = {parameter: value}
+            
+            async with async_timeout.timeout(10):
+                async with session.post(
+                    f"{self.url}/?action=set",
+                    data=json.dumps(data_payload),
+                    headers=headers
+                ) as response:
+                    
+                    if response.status == 403:
+                        _LOGGER.warning("Access forbidden during parameter set - re-authenticating")
+                        self._authenticated = False
+                        if await self.authenticate():
+                            return await self.set_parameter(parameter, value)
+                        return False
+                    
+                    response.raise_for_status()
+                    
+                    # Check if the response indicates success
+                    try:
+                        result = await response.json()
+                        _LOGGER.info(f"Successfully set parameter {parameter} = {value}")
+                        _LOGGER.debug(f"Set parameter response: {result}")
+                        return True
+                    except:
+                        # Some APIs might return empty or non-JSON response on success
+                        if response.status == 200:
+                            _LOGGER.info(f"Successfully set parameter {parameter} = {value}")
+                            return True
+                        else:
+                            _LOGGER.error(f"Unexpected response status for set parameter: {response.status}")
+                            return False
+                    
+        except Exception as e:
+            _LOGGER.error(f"Failed to set parameter {parameter} = {value}: {e}")
+            return False
+    
+    async def set_hot_water_mode(self, hw_index: int, mode: str) -> bool:
+        """Set hot water operating mode. 
+        
+        Args:
+            hw_index: Hot water circuit index (usually 0)
+            mode: Operating mode - "0" for Off, "1" for Heat, "2" for Auto
+        """
+        parameter = f"CAPPL:LOCAL.ww[{hw_index}].betriebsart[1]"
+        return await self.set_parameter(parameter, mode)
+    
+    async def set_heating_circuit_mode(self, hc_index: int, mode: str) -> bool:
+        """Set heating circuit operating mode.
+        
+        Args:
+            hc_index: Heating circuit index (usually 0)
+            mode: Operating mode value
+        """
+        parameter = f"CAPPL:LOCAL.L_hk[{hc_index}].betriebsart"
+        return await self.set_parameter(parameter, mode)
+    
+    async def set_room_temperature(self, hc_index: int, temperature: float) -> bool:
+        """Set target room temperature for heating circuit.
+        
+        Args:
+            hc_index: Heating circuit index
+            temperature: Target temperature in Celsius
+        """
+        parameter = f"CAPPL:LOCAL.L_hk[{hc_index}].raumtemp_soll"
+        return await self.set_parameter(parameter, str(temperature))
+    
+    async def set_hot_water_temperature(self, hw_index: int, temp_type: str, temperature: float) -> bool:
+        """Set hot water temperature.
+        
+        Args:
+            hw_index: Hot water circuit index
+            temp_type: "heizen" or "absenken"
+            temperature: Target temperature in Celsius
+        """
+        parameter = f"CAPPL:LOCAL.ww[{hw_index}].temp_{temp_type}"
+        return await self.set_parameter(parameter, str(temperature))
+    
     async def get_parsed_data(self) -> Optional[Dict[str, Any]]:
         """Get data in a more user-friendly format."""
         raw_data = await self.fetch_data()
