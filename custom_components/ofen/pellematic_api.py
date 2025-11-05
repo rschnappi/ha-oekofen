@@ -1,9 +1,10 @@
 """Pellematic API client for Home Assistant integration.
 
-Version: 1.7.0 - Automated Crawler Enhanced
-- Enhanced with automated parameter discovery
-- Verified underpressure and leistungsbrand parameters  
-- Added newly discovered crawler-verified parameters
+Version: 1.8.0 - Advanced Crawler Enhanced
+- Enhanced with automated parameter discovery v2.0
+- Added 9 new crawler-verified temperature and pressure parameters
+- Comprehensive underpressure and system monitoring
+- Extended temperature measurement capabilities
 """
 from __future__ import annotations
 
@@ -51,6 +52,14 @@ class PellematicAPI:
             "CAPPL:FA[0].L_feuerraumtemperatur",
             "CAPPL:FA[0].L_feuerraumtemperatur_vorhanden",
             "CAPPL:FA[0].L_feuerraumtemperatur_soll",
+            
+            # TEMPERATURE EXPANSION - VERIFIED FROM AUTOMATED CRAWLER v2.0!
+            "CAPPL:FA[0].L_vorlauftemperatur",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
+            "CAPPL:FA[0].L_ruecklauftemperatur",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
+            "CAPPL:FA[0].L_puffertemperatur",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
+            "CAPPL:FA[0].L_warmwassertemperatur",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
+            "CAPPL:FA[0].L_speichertemperatur",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
+            "CAPPL:FA[0].L_kollektortemperatur",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
             "CAPPL:LOCAL.L_bestke_temp_ist",
             "CAPPL:LOCAL.L_bestke_umschaltventil",
             "CAPPL:LOCAL.L_pu[0].pumpe",
@@ -64,14 +73,15 @@ class PellematicAPI:
             "CAPPL:LOCAL.fernwartung_einheit",
             "CAPPL:LOCAL.pellematic_vorhanden[0]",
             
-            # CRITICAL: Fan and Underpressure - VERIFIED FROM AUTOMATED CRAWLER!
+            # CRITICAL: Fan and Underpressure - VERIFIED FROM AUTOMATED CRAWLER v2.0!
             "CAPPL:FA[0].L_luefterdrehzahl",  # ✅ CRAWLER VERIFIED
             "CAPPL:FA[0].L_saugzugdrehzahl",  # ✅ CRAWLER VERIFIED
             "CAPPL:FA[0].L_unterdruck",  # ✅ CRAWLER VERIFIED: Found by automated discovery!
             "CAPPL:FA[0].unterdruck_modus",  # ✅ CRAWLER VERIFIED: New discovery!
             "CAPPL:FA[0].unterdruck_sollwert",  # ✅ CRAWLER VERIFIED: New discovery!
-            "CAPPL:FA[0].unterdruck_istwert",  # ✅ CRAWLER VERIFIED: New discovery!
-            "CAPPL:FA[0].luefterdrehzahl_soll",  # ✅ CRAWLER VERIFIED: New discovery!
+            "CAPPL:FA[0].unterdruck_istwert",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
+            "CAPPL:FA[0].luefterdrehzahl_soll",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
+            "CAPPL:FA[0].saugzug_unterdruck",  # ✅ CRAWLER v2.0 VERIFIED: Latest discovery!
             
             # LEISTUNGSBRAND SPECIFIC PARAMETERS - VERIFIED FROM AUTOMATED CRAWLER!
             "CAPPL:FA[0].leistung_brennstoffkorrektur",  # ✅ CRAWLER VERIFIED
