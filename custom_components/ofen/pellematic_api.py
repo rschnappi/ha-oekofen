@@ -92,6 +92,42 @@ class PellematicAPI:
             "CAPPL:LOCAL.L_ww[0].temp_soll",
             "CAPPL:LOCAL.L_ww[0].ausschaltfuehler_ist",
             "CAPPL:LOCAL.L_ww[0].pumpe",
+            
+            # Zusätzliche Systemparameter
+            "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek",
+            "CAPPL:FA[0].asche_externe_aschebox",
+            "CAPPL:FA[0].asche_minimum_laufzeit_asche",
+            "CAPPL:FA[0].asche_aschedauer",
+            "CAPPL:FA[0].asche_nachlaufzeit_aschebox",
+            "CAPPL:LOCAL.pellematic_vorhanden[0]",
+            "CAPPL:FA[0].L_kesselstatus",
+            "CAPPL:LOCAL.fernwartung_einheit",
+            "CAPPL:FA[0].L_kesseltemperatur_soll_anzeige",
+            "CAPPL:FA[0].L_drehzahl_ascheschnecke_ist",
+            "CAPPL:LOCAL.L_zaehler_fehler",
+            
+            # Turbine und Reinigungssystem
+            "CAPPL:FA[0].L_cmp_fa",
+            "CAPPL:FA[0].rm_reinigungszeit1_befuellung",
+            "CAPPL:FA[0].rm_reinigungszeit1_befuellung_cmp",
+            "CAPPL:FA[0].turbine_takt_ra_vacuum",
+            "CAPPL:FA[0].turbine_pause_ra_vacuum",
+            "CAPPL:FA[0].turbine_saugintervall",
+            "CAPPL:FA[0].turbine_saugzeit_max",
+            "CAPPL:FA[0].turbine_nachlauf",
+            
+            # Erweiterte Temperatur- und Verfügbarkeitssensoren
+            "CAPPL:FA[0].L_abgastemperatur_vorhanden",
+            "CAPPL:FA[0].L_feuerraumtemperatur_vorhanden",
+            "CAPPL:FA[0].L_feuerraumtemperatur_soll",
+            "CAPPL:FA[0].L_einschublaufzeit",
+            "CAPPL:FA[0].L_pausenzeit",
+            "CAPPL:FA[0].L_luefterdrehzahl",
+            "CAPPL:FA[0].L_saugzugdrehzahl",
+            "CAPPL:FA[0].unterdruck_modus",
+            "CAPPL:FA[0].L_unterdruck",
+            "CAPPL:FA[0].L_pe_schnecke_sauganlage",
+            "CAPPL:FA[0].L_saugintervall",
         ]
     
     async def _get_session(self) -> aiohttp.ClientSession:

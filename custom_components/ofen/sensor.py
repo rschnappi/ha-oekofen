@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -81,29 +81,55 @@ async def async_setup_entry(
                 PellematicHeatingCircuitActiveProgramSensor(coordinator, config_entry, device_name, hc['index']),
                 PellematicHeatingCircuitPumpSensor(coordinator, config_entry, device_name, hc['index']),
                 # Heizkurven-Sensoren
-                PellematicHeatingCircuitHeatingCurveSlopeSensor(coordinator, config_entry, device_name, hc['index']),
-                PellematicHeatingCircuitHeatingCurveFootPointSensor(coordinator, config_entry, device_name, hc['index']),
-                PellematicHeatingCircuitHeatingLimitHeatSensor(coordinator, config_entry, device_name, hc['index']),
-                PellematicHeatingCircuitHeatingLimitLowerSensor(coordinator, config_entry, device_name, hc['index']),
-                PellematicHeatingCircuitLeadTimeSensor(coordinator, config_entry, device_name, hc['index']),
-                PellematicHeatingCircuitRoomSensorInfluenceSensor(coordinator, config_entry, device_name, hc['index']),
-                PellematicHeatingCircuitRoomTempPlusSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCurveSteigungSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingCurveFusspunktSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingLimitHeizenSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicHeatingLimitAbsenkenSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicVorhaltezeitSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicRoomSensorInfluenceSensor(coordinator, config_entry, device_name, hc['index']),
+                PellematicRoomTempPlusSensor(coordinator, config_entry, device_name, hc['index']),
             ])
     
     # Add hot water sensors
     if coordinator.data and 'hot_water' in coordinator.data:
         for hw in coordinator.data['hot_water']:
             entities.extend([
-                PellematicHotWaterModeSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterOncePreapreSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterTempHeatingSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterTempLoweringSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterActiveProgramSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterSwitchOnSensorTempSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterTempTargetSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterSwitchOffSensorTempSensor(coordinator, config_entry, device_name, hw['index']),
-                PellematicHotWaterPumpSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterOperatingModeSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterTempHeizenSensor(coordinator, config_entry, device_name, hw['index']),
+                PellematicHotWaterTempAbsenkenSensor(coordinator, config_entry, device_name, hw['index']),
             ])
+    
+    # Add system sensors
+    entities.extend([
+        PellematicSystemErrorCountSensor(coordinator, config_entry, device_name),
+        PellematicKesselStatusSensor(coordinator, config_entry, device_name),
+        PellematicKesselTargetTempDisplaySensor(coordinator, config_entry, device_name),
+        
+        # Ash system sensors  
+        PellematicAshScrewSpeedSensor(coordinator, config_entry, device_name),
+        PellematicAshExternalBoxSensor(coordinator, config_entry, device_name),
+        
+        # Turbine and cleaning sensors
+        PellematicTurbineVacuumCycleSensor(coordinator, config_entry, device_name),
+        PellematicTurbineVacuumPauseSensor(coordinator, config_entry, device_name),
+        PellematicTurbineSuctionIntervalSensor(coordinator, config_entry, device_name),
+        
+        # Extended temperature sensors
+        PellematicExhaustTempAvailableSensor(coordinator, config_entry, device_name),
+        PellematicFireboxTempAvailableSensor(coordinator, config_entry, device_name),
+        PellematicFireboxTargetTempSensor(coordinator, config_entry, device_name),
+        
+        # Fan and operation sensors
+        PellematicFanSpeedSensor(coordinator, config_entry, device_name),
+        PellematicExhaustFanSpeedSensor(coordinator, config_entry, device_name),
+        PellematicUnderpressureModeSensor(coordinator, config_entry, device_name),
+        PellematicUnderpressureSensor(coordinator, config_entry, device_name),
+        
+        # Operation time sensors
+        PellematicFeedRuntimeSensor(coordinator, config_entry, device_name),
+        PellematicPauseTimeSensor(coordinator, config_entry, device_name),
+        PellematicSuctionIntervalSensor(coordinator, config_entry, device_name),
+    ])
     
     # Add additional sensors for all raw data points if in debug mode
     if debug_mode and coordinator.data and 'raw_data' in coordinator.data:
@@ -621,3 +647,618 @@ class PellematicHeatingCircuitPumpSensor(CoordinatorEntity, SensorEntity):
                 if pump_running is not None:
                     return "Running" if pump_running else "Stopped"
         return None
+
+
+class PellematicHeatingCurveSteigungSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating curve slope sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_heizkurve_steigung"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Heizkurve Steigung"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:chart-line"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('heizkurve_steigung')
+        return None
+
+
+class PellematicHeatingCurveFusspunktSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating curve base point sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_heizkurve_fusspunkt"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Heizkurve Fußpunkt"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:chart-line"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('heizkurve_fusspunkt')
+        return None
+
+
+class PellematicHeatingLimitHeizenSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating limit sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_heizgrenze_heizen"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Heizgrenze Heizen"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer-high"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('heizgrenze_heizen')
+        return None
+
+
+class PellematicHeatingLimitAbsenkenSensor(CoordinatorEntity, SensorEntity):
+    """Representation of heating limit lowering sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_heizgrenze_absenken"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Heizgrenze Absenken"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer-low"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('heizgrenze_absenken')
+        return None
+
+
+class PellematicVorhaltezeitSensor(CoordinatorEntity, SensorEntity):
+    """Representation of lead time sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_vorhaltezeit"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Vorhaltezeit"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTime.MINUTES
+        self._attr_icon = "mdi:clock-outline"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('vorhaltezeit')
+        return None
+
+
+class PellematicRoomSensorInfluenceSensor(CoordinatorEntity, SensorEntity):
+    """Representation of room sensor influence sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_raumfuehler_einfluss"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Raumfühler Einfluss"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_icon = "mdi:percent"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('raumfuehler_einfluss')
+        return None
+
+
+class PellematicRoomTempPlusSensor(CoordinatorEntity, SensorEntity):
+    """Representation of room temperature plus adjustment sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hc_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hc_index = hc_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hc_{hc_index}_raumtemp_plus"
+        self._attr_name = f"{device_name} HC {hc_index + 1} Raumtemp Plus"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "K"
+        self._attr_icon = "mdi:thermometer-plus"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        heating_circuits = self.coordinator.data.get("heating_circuits", [])
+        for hc in heating_circuits:
+            if hc['index'] == self._hc_index:
+                return hc.get('raumtemp_plus')
+        return None
+
+
+# Hot Water Sensors
+class PellematicHotWaterOperatingModeSensor(CoordinatorEntity, SensorEntity):
+    """Representation of hot water operating mode sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hw_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hw_index = hw_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hw_{hw_index}_operating_mode"
+        self._attr_name = f"{device_name} HW {hw_index + 1} Betriebsart"
+        self._attr_icon = "mdi:water-thermometer"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        hot_water = self.coordinator.data.get("hot_water", [])
+        for hw in hot_water:
+            if hw['index'] == self._hw_index:
+                return hw.get('betriebsart_text') or str(hw.get('betriebsart_numeric', ''))
+        return None
+
+
+class PellematicHotWaterTempHeizenSensor(CoordinatorEntity, SensorEntity):
+    """Representation of hot water heating temperature sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hw_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hw_index = hw_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hw_{hw_index}_temp_heizen"
+        self._attr_name = f"{device_name} HW {hw_index + 1} Temp Heizen"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        hot_water = self.coordinator.data.get("hot_water", [])
+        for hw in hot_water:
+            if hw['index'] == self._hw_index:
+                return hw.get('temp_heizen')
+        return None
+
+
+class PellematicHotWaterTempAbsenkenSensor(CoordinatorEntity, SensorEntity):
+    """Representation of hot water lowering temperature sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str, hw_index: int) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._hw_index = hw_index
+        self._attr_unique_id = f"{config_entry.entry_id}_hw_{hw_index}_temp_absenken"
+        self._attr_name = f"{device_name} HW {hw_index + 1} Temp Absenken"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        hot_water = self.coordinator.data.get("hot_water", [])
+        for hw in hot_water:
+            if hw['index'] == self._hw_index:
+                return hw.get('temp_absenken')
+        return None
+
+
+# System Status Sensors
+class PellematicSystemErrorCountSensor(CoordinatorEntity, SensorEntity):
+    """Representation of system error count sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_system_error_count"
+        self._attr_name = f"{device_name} System Error Count"
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:alert-circle"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_zaehler_fehler")
+
+
+class PellematicKesselStatusSensor(CoordinatorEntity, SensorEntity):
+    """Representation of boiler status sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_kessel_status"
+        self._attr_name = f"{device_name} Kessel Status"
+        self._attr_icon = "mdi:information"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_kesselstatus")
+
+
+class PellematicKesselTargetTempDisplaySensor(CoordinatorEntity, SensorEntity):
+    """Representation of boiler target temperature display sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_kessel_target_temp_display"
+        self._attr_name = f"{device_name} Kessel Soll Temperatur Anzeige"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_kesseltemperatur_soll_anzeige")
+
+
+# Ash System Sensors
+class PellematicAshScrewSpeedSensor(CoordinatorEntity, SensorEntity):
+    """Representation of ash screw speed sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_ash_screw_speed"
+        self._attr_name = f"{device_name} Ascheschnecke Drehzahl"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "rpm"
+        self._attr_icon = "mdi:rotate-right"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_drehzahl_ascheschnecke_ist")
+
+
+class PellematicAshExternalBoxSensor(CoordinatorEntity, SensorEntity):
+    """Representation of external ash box sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_ash_external_box"
+        self._attr_name = f"{device_name} Externe Aschebox"
+        self._attr_icon = "mdi:delete"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        value = self.coordinator.data.get("asche_externe_aschebox")
+        return "Enabled" if value else "Disabled" if value is not None else None
+
+
+# Turbine and Cleaning Sensors
+class PellematicTurbineVacuumCycleSensor(CoordinatorEntity, SensorEntity):
+    """Representation of turbine vacuum cycle sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_turbine_vacuum_cycle"
+        self._attr_name = f"{device_name} Turbine Vacuum Takt"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
+        self._attr_icon = "mdi:fan"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("turbine_takt_ra_vacuum")
+
+
+class PellematicTurbineVacuumPauseSensor(CoordinatorEntity, SensorEntity):
+    """Representation of turbine vacuum pause sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_turbine_vacuum_pause"
+        self._attr_name = f"{device_name} Turbine Vacuum Pause"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
+        self._attr_icon = "mdi:fan"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("turbine_pause_ra_vacuum")
+
+
+class PellematicTurbineSuctionIntervalSensor(CoordinatorEntity, SensorEntity):
+    """Representation of turbine suction interval sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_turbine_suction_interval"
+        self._attr_name = f"{device_name} Turbine Saugintervall"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
+        self._attr_icon = "mdi:fan"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("turbine_saugintervall")
+
+
+# Extended Temperature Sensors
+class PellematicExhaustTempAvailableSensor(CoordinatorEntity, SensorEntity):
+    """Representation of exhaust temperature availability sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_exhaust_temp_available"
+        self._attr_name = f"{device_name} Abgastemperatur verfügbar"
+        self._attr_icon = "mdi:check-circle"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        value = self.coordinator.data.get("L_abgastemperatur_vorhanden")
+        return "Available" if value else "Not Available" if value is not None else None
+
+
+class PellematicFireboxTempAvailableSensor(CoordinatorEntity, SensorEntity):
+    """Representation of firebox temperature availability sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_firebox_temp_available"
+        self._attr_name = f"{device_name} Feuerraumtemperatur verfügbar"
+        self._attr_icon = "mdi:check-circle"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        value = self.coordinator.data.get("L_feuerraumtemperatur_vorhanden")
+        return "Available" if value else "Not Available" if value is not None else None
+
+
+class PellematicFireboxTargetTempSensor(CoordinatorEntity, SensorEntity):
+    """Representation of firebox target temperature sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_firebox_target_temp"
+        self._attr_name = f"{device_name} Feuerraum Soll Temperatur"
+        self._attr_device_class = SensorDeviceClass.TEMPERATURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        self._attr_icon = "mdi:thermometer"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_feuerraumtemperatur_soll")
+
+
+# Fan and Operation Sensors
+class PellematicFanSpeedSensor(CoordinatorEntity, SensorEntity):
+    """Representation of fan speed sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_fan_speed"
+        self._attr_name = f"{device_name} Lüfter Drehzahl"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "rpm"
+        self._attr_icon = "mdi:fan"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_luefterdrehzahl")
+
+
+class PellematicExhaustFanSpeedSensor(CoordinatorEntity, SensorEntity):
+    """Representation of exhaust fan speed sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_exhaust_fan_speed"
+        self._attr_name = f"{device_name} Saugzug Drehzahl"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "rpm"
+        self._attr_icon = "mdi:fan"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_saugzugdrehzahl")
+
+
+class PellematicUnderpressureModeSensor(CoordinatorEntity, SensorEntity):
+    """Representation of underpressure mode sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_underpressure_mode"
+        self._attr_name = f"{device_name} Unterdruck Modus"
+        self._attr_icon = "mdi:gauge"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("unterdruck_modus")
+
+
+class PellematicUnderpressureSensor(CoordinatorEntity, SensorEntity):
+    """Representation of underpressure sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_underpressure"
+        self._attr_name = f"{device_name} Unterdruck"
+        self._attr_device_class = SensorDeviceClass.PRESSURE
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = "Pa"
+        self._attr_icon = "mdi:gauge"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_unterdruck")
+
+
+# Operation Time Sensors
+class PellematicFeedRuntimeSensor(CoordinatorEntity, SensorEntity):
+    """Representation of feed runtime sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_feed_runtime"
+        self._attr_name = f"{device_name} Einschub Laufzeit"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
+        self._attr_icon = "mdi:clock"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_einschublaufzeit")
+
+
+class PellematicPauseTimeSensor(CoordinatorEntity, SensorEntity):
+    """Representation of pause time sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_pause_time"
+        self._attr_name = f"{device_name} Pausenzeit"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
+        self._attr_icon = "mdi:clock"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_pausenzeit")
+
+
+class PellematicSuctionIntervalSensor(CoordinatorEntity, SensorEntity):
+    """Representation of suction interval sensor."""
+
+    def __init__(self, coordinator: PellematicDataUpdateCoordinator, config_entry: ConfigEntry, device_name: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._device_name = device_name
+        self._attr_unique_id = f"{config_entry.entry_id}_suction_interval"
+        self._attr_name = f"{device_name} Saugintervall"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
+        self._attr_icon = "mdi:clock"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the native value of the sensor."""
+        return self.coordinator.data.get("L_saugintervall")

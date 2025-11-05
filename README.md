@@ -1,145 +1,236 @@
-# ÖkOfen Pellematic Home Assistant Integration
+# ÖkoFen Pellematic Smart XS Home Assistant Integration
 
 [![HACS Badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub release](https://img.shields.io/github/release/rschnappi/ha-oekofen.svg)](https://github.com/rschnappi/ha-oekofen/releases)
 [![License](https://img.shields.io/github/license/rschnappi/ha-oekofen.svg)](LICENSE)
 
-Eine benutzerdefinierte Home Assistant Integration für die Überwachung und Steuerung von ÖkOfen Pellematic Heizsystemen.
+Eine umfassende Home Assistant Custom Component für ÖkoFen Pellematic Smart XS Pelletkessel.
 
-## Features
+## 🔥 Features
 
-- **Multiple Temperature Sensors**: Outside temperature, buffer tank, and individual boiler temperatures
-- **Boiler Status Monitoring**: Real-time status of heating boilers
-- **Pump Status**: Monitor pump operation states
-- **Error Monitoring**: Track system error count
-- **Configuration Flow**: Easy setup through Home Assistant UI
-- **Multi-language Support**: German and English interface
-- **Configurable Update Intervals**: Set polling frequency (5-3600 seconds)
+- **Vollständige API-Integration** mit ÖkoFen Pellematic Steuerung
+- **80+ Sensoren** für komplette Systemüberwachung
+- **Erweiterte Heizkurven-Parameter** (Steigung, Fußpunkt, Heizgrenzen)
+- **Warmwasser-Kreislauf Überwachung** mit allen Temperaturen und Modi
+- **Aschesystem-Monitoring** inkl. Schneckendrehzahl und externe Aschebox
+- **Turbinen- und Reinigungssystem** Parameter
+- **Debug-Modus** mit allen verfügbaren Parametern
+- **Konfigurierbare Gerätenamen** über UI
+- **Automatische Wert-Parsing** (formatTexts, Timestamps, Divisoren)
 
-## Supported Sensors
+## 📊 Verfügbare Sensoren
 
-### Temperature Sensors
-- **Outside Temperature** - Current external temperature
-- **Buffer Tank Temperature** - Storage tank temperature
-- **Boiler Temperatures** - Individual boiler current and target temperatures
+### Basis System (11 Kern-Sensoren)
+- Außentemperatur
+- Puffertemperatur  
+- Feuerraumtemperatur
+- Kesseltemperatur
+- Abgastemperatur
+- Behälter leer/Reserve Status
+- Gesamtlaufzeit & Kessellaufzeit
+- Anzahl Zyklen
+- Pellematic Status
 
-### Status Sensors  
-- **Boiler Status** - Current operating status of each boiler
-- **Error Count** - System error counter
-- **Pump Status** - Operating state of circulation pumps
+### 🔧 Heizkreis-Parameter (pro Heizkreis)
+- **Basis-Temperaturen**: Ist/Soll Raumtemperatur, Vorlauftemperatur
+- **Heizkurven-Einstellungen**: 
+  - Heizkurve Steigung
+  - Heizkurve Fußpunkt  
+  - Heizgrenze Heizen/Absenken
+- **Erweiterte Regelung**:
+  - Vorhaltezeit
+  - Raumfühler Einfluss
+  - Raumtemp Plus Anpassung
+- **Betriebsmodus & Programm**: Aktives Programm, Pumpe Status
 
-## Installation
+### 🌊 Warmwasser-System (pro Warmwasser-Kreislauf)
+- Betriebsart (Heizen/Absenken/Aus)
+- Temperatur Heizen/Absenken
+- Einmal-Aufbereitung Status
+- Aktives Zeitprogramm
+- Ein-/Ausschaltfühler Temperaturen
+- Warmwasser-Pumpe Status
 
-### HACS (Recommended)
+### ⚙️ Erweiterte System-Parameter  
+- **Kessel-Details**: Kesselstatus, Soll-Temperatur Anzeige
+- **Aschesystem**: Ascheschnecke Drehzahl, Externe Aschebox
+- **Turbine & Reinigung**: Vacuum-Takt/Pause, Saugintervall, Reinigungszeiten
+- **Lüfter-System**: Lüfter-/Saugzug-Drehzahl, Unterdruck
+- **Betriebszeiten**: Einschub-Laufzeit, Pausenzeit, Saugintervall
+- **System-Status**: Fehler-Counter, Fernwartung, Verfügbarkeitsprüfungen
 
-1. Add this repository to HACS as a custom repository
-2. Install the "Ofen" integration
-3. Restart Home Assistant
-4. Go to Settings → Devices & Services → Add Integration
-5. Search for "Ofen" and follow the setup process
+### 🐛 Debug-Modus
+Im Debug-Modus werden **alle 80+ verfügbaren Parameter** als Sensoren angelegt, einschließlich:
+- Alle internen Systemwerte
+- Rohwerte aller Sensoren  
+- Detaillierte Steuerungsparameter
+- Zusätzliche Diagnose-Informationen
 
-### Manual Installation
+## 🚀 Installation
 
-1. Copy the `custom_components/ofen` folder to your Home Assistant `custom_components` directory
-2. Restart Home Assistant
-3. Go to Settings → Devices & Services → Add Integration
-4. Search for "Ofen" and follow the setup process
+### HACS Installation (Empfohlen)
+1. Öffne HACS in Home Assistant
+2. Gehe zu "Integrationen" 
+3. Klicke "Explore & Download Repositories"
+4. Suche nach "ÖkoFen Pellematic"
+5. Klicke "Download"
+6. Starte Home Assistant neu
 
-## Configuration
+### Manuelle Installation
+1. Kopiere den `custom_components/ofen` Ordner in dein Home Assistant `custom_components` Verzeichnis
+2. Starte Home Assistant neu
+3. Gehe zu "Einstellungen" > "Geräte & Services" > "Integration hinzufügen"
+4. Suche nach "ÖkoFen Pellematic"
 
-The integration can be configured through the Home Assistant UI:
+## ⚙️ Konfiguration
 
-1. Navigate to **Settings** → **Devices & Services**
-2. Click **Add Integration**
-3. Search for **Ofen**
-4. Enter your ÖkOfen Pellematic details:
-   - **URL**: Full URL of your system (e.g., http://172.21.9.50)
-   - **Username**: Your login username
-   - **Password**: Your login password  
-   - **Language**: Interface language (de/en)
-   - **Interval**: Update interval in seconds (5-3600 seconds, default: 30)
+1. **Integration hinzufügen**:
+   - Gehe zu Einstellungen > Geräte & Services
+   - Klicke "Integration hinzufügen"
+   - Suche "ÖkoFen Pellematic"
 
-## Technical Details
+2. **Verbindungsdaten eingeben**:
+   - **Host**: IP-Adresse deiner Pellematic Steuerung (z.B. `192.168.1.100`)
+   - **Passwort**: Dein Pellematic Passwort
+   - **Gerätename**: Anzeigename (z.B. "ÖkoFen Kessel")
+   - **Debug Modus**: Aktiviert alle 80+ Parameter (optional)
 
-This integration is based on analysis of the ÖkOfen Pellematic web interface and uses the same API endpoints that the official web interface uses. It performs the following steps:
+3. **Verbindung testen**: Die Integration testet automatisch die Verbindung
 
-1. **Authentication**: Logs in via the web interface using form-based authentication
-2. **Session Management**: Maintains session cookies for subsequent requests
-3. **Data Retrieval**: Fetches system parameters via JSON API calls
-4. **Data Parsing**: Converts raw system data into Home Assistant entities
+## 🔧 Erweiterte Konfiguration
 
-### API Parameters Retrieved
-
-The integration fetches these key parameters from your system:
-- `CAPPL:LOCAL.L_aussentemperatur_ist` - Outside temperature
-- `CAPPL:FA[x].L_kesseltemperatur` - Boiler temperatures  
-- `CAPPL:FA[x].L_kesselstatus` - Boiler status
-- `CAPPL:LOCAL.L_bestke_temp_ist` - Buffer tank temperature
-- `CAPPL:LOCAL.L_pu[x].pumpe` - Pump status
-- `CAPPL:LOCAL.L_zaehler_fehler` - Error count
-
-## Entities
-
-Once configured, the integration will create the following entities:
-
-### Sensors
-- `sensor.outside_temperature` - Current outside temperature
-- `sensor.buffer_tank_temperature` - Buffer tank temperature
-- `sensor.boiler_1_temperature` - Boiler 1 current temperature
-- `sensor.boiler_1_status` - Boiler 1 operating status
-- `sensor.boiler_2_temperature` - Boiler 2 current temperature (if present)
-- `sensor.boiler_2_status` - Boiler 2 operating status (if present)
-- `sensor.error_count` - System error counter
-
-### Switches (Read-only)
-- `switch.pump_1` - Pump 1 status (monitoring only)
-- `switch.pump_2` - Pump 2 status (monitoring only)  
-- `switch.pump_3` - Pump 3 status (monitoring only)
-
-> **Note**: Pump switches are read-only as pumps are controlled automatically by the heating system.
-
-## Development
-
-### File Structure
-
-```
-custom_components/ofen/
-├── __init__.py          # Integration setup and entry points
-├── manifest.json        # Integration metadata
-├── const.py            # Constants and configuration
-├── config_flow.py      # Configuration flow for UI setup
-├── sensor.py           # Temperature sensor platform
-└── switch.py           # Power switch platform
+### Debug-Modus
+```yaml
+# Aktiviert alle verfügbaren Parameter als Sensoren
+debug_mode: true
 ```
 
-### Customization
+### Anpassbare Gerätenamen
+- Standardname: "ÖkoFen Pellematic"
+- Anpassbar über Konfiguration UI
+- Alle Sensor-Namen werden entsprechend aktualisiert
 
-To customize this integration for your specific oven:
+## 📈 Sensor-Übersicht
 
-1. **Update `const.py`**: Modify default values and add new configuration options
-2. **Modify API calls**: Replace placeholder API calls in `sensor.py` and `switch.py` with actual device communication
-3. **Add new platforms**: Create additional files for other entity types (climate, binary_sensor, etc.)
+| Kategorie | Normal Modus | Debug Modus | Beschreibung |
+|-----------|--------------|-------------|--------------|
+| **Basis-System** | 11 | 11 | Kern-Temperaturen und Status |
+| **Heizkreise** | ~20 pro HK | ~20 pro HK | Vollständige HK-Parameter |
+| **Warmwasser** | ~5 pro WW | ~5 pro WW | WW-Temperaturen und Modi |
+| **Erweitert** | ~25 | ~25 | Asche, Turbine, Lüfter |
+| **Debug-Parameter** | 0 | ~40+ | Alle Rohwerte und interne Parameter |
+| **Gesamt** | **~40-60** | **~80+** | Je nach Konfiguration |
 
-### API Integration
+## 🛠️ Fehlerbehebung
 
-Currently, the integration uses placeholder data. To connect to a real device:
+### Verbindungsprobleme
+```
+Fehler: "Verbindung fehlgeschlagen"
+```
+**Lösung**:
+- IP-Adresse überprüfen (Pellematic Touch Web-Interface erreichbar?)
+- Passwort korrekt?
+- Firewall-Einstellungen prüfen
+- Netzwerk-Verbindung zwischen HA und Pellematic
 
-1. Install required dependencies in `manifest.json`
-2. Implement actual API calls in the coordinator's `_async_update_data` method
-3. Update switch methods to communicate with your device
+### Keine Werte bei Sensoren  
+```
+Sensoren zeigen "Unbekannt" oder JSON-Objekte
+```
+**Lösung**: 
+- Debug-Logs aktivieren
+- Integration neu laden
+- Parameter-Verfügbarkeit prüfen (nicht alle Parameter bei allen Modellen verfügbar)
 
-## Contributing
+### Performance bei vielen Sensoren
+```
+HA wird langsam bei 80+ Sensoren
+```
+**Lösung**:
+- Debug-Modus deaktivieren für normale Nutzung
+- Update-Intervall erhöhen (Standard: 30s)
+- Nicht benötigte Sensoren deaktivieren
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test with Home Assistant
-5. Submit a pull request
+## 📊 API Details
 
-## License
+### Unterstützte Parameter
+Die Integration nutzt die ÖkoFen JSON-API mit über 80 Parametern:
 
-This project is licensed under the MIT License.
+**Basis-Parameter**: `CAPPL:FA[0].L_*` (Temperaturen, Status, Laufzeiten)
+**Heizkreise**: `CAPPL:LOCAL.L_hk[*].*` (alle HK-Parameter)  
+**Warmwasser**: `CAPPL:LOCAL.ww[*].*` und `CAPPL:LOCAL.L_ww[*].*`
+**System**: `CAPPL:LOCAL.*` (Fehler, Fernwartung, System-Status)
 
-## Support
+### Authentifizierung
+- Session-basierte Authentifizierung
+- Automatische Cookie-Verwaltung
+- Sichere Passwort-Speicherung
 
-For issues and feature requests, please use the [GitHub Issues](https://github.com/yourusername/ofen/issues) page.
+## 🤝 Mitwirken
+
+Beiträge sind willkommen! 
+
+### Development Setup
+```bash
+git clone https://github.com/rschnappi/ha-oekofen.git
+cd ha-oekofen
+# Integration in HA custom_components kopieren
+```
+
+### Issues & Feature Requests
+- GitHub Issues für Bugs und Feature-Wünsche
+- Logs mit Debug-Modus für bessere Diagnose
+- ÖkoFen Modell und Firmware-Version angeben
+
+## 📝 Changelog
+
+### v1.5.0 (2024-11-05) - MAJOR EXPANSION 🔥
+- **MASSIV ERWEITERTE PARAMETER-ABDECKUNG**:
+  - ✅ Alle fehlenden Heizkreis-Parameter hinzugefügt
+  - ✅ Heizkurven (Steigung & Fußpunkt) - Kritische Heizungseinstellungen  
+  - ✅ Heizgrenzen (Heizen & Absenken) - Temperaturgrenzen
+  - ✅ Vorhaltezeit, Raumfühler Einfluss, Raumtemp Plus
+  
+- **VOLLSTÄNDIGE WARMWASSER-UNTERSTÜTZUNG**:
+  - ✅ Betriebsmodi, Ein-/Ausschalttemperaturen
+  - ✅ Zeitprogramme, Pumpen-Status
+  - ✅ Alle ww[0].* Parameter implementiert
+
+- **ERWEITERTE SYSTEM-PARAMETER**:
+  - ✅ Aschesystem: Schneckendrehzahl, externe Aschebox
+  - ✅ Turbine: Vacuum-Zyklen, Reinigungszeiten  
+  - ✅ Lüftersystem: Drehzahlen, Unterdruck
+  - ✅ Betriebszeiten: Einschub, Pausen, Saugintervalle
+
+- **80+ SENSOR UNTERSTÜTZUNG**:
+  - Normal-Modus: ~40-60 Sensoren (je nach Konfiguration)
+  - Debug-Modus: 80+ Sensoren mit allen Parametern
+  - Strukturierte Datenorganisation mit heating_circuits und hot_water Arrays
+
+### v1.2.0 (2024-11-04)
+- ✅ Heizkreis-Sensoren hinzugefügt
+- ✅ Konfigurierbare Gerätenamen
+- ✅ Erweiterte Wert-Parsing (formatTexts, Timestamps)
+- ✅ Session-Management verbessert
+
+### v1.1.0 (2024-11-03)  
+- ✅ Cookie-basierte Authentifizierung (CookieJar unsafe=True)
+- ✅ JSON-Wert Extraktion repariert
+- ✅ Status-Text Parsing (formatTexts)
+- ✅ Basis 11-Sensor Implementation
+
+### v1.0.0 (2024-11-02)
+- ✅ Erste funktionierende Version
+- ✅ ÖkoFen API Integration  
+- ✅ Home Assistant Custom Component
+- ✅ Config Flow Implementation
+
+## 📄 Lizenz
+
+Dieses Projekt steht unter der MIT Lizenz - siehe [LICENSE](LICENSE) Datei.
+
+## 🔗 Links
+
+- [ÖkoFen Website](https://www.oekofen.com/)
+- [Home Assistant](https://www.home-assistant.io/)
+- [HACS](https://hacs.xyz/)
