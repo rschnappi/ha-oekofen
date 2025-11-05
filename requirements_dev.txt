@@ -1,0 +1,20 @@
+# Development requirements for Ofen Home Assistant Integration
+
+# Home Assistant Core (for testing)
+homeassistant>=2024.1.0
+
+# Code quality and linting
+black
+flake8
+isort
+mypy
+pylint
+
+# Testing
+pytest
+pytest-asyncio
+pytest-homeassistant-custom-component
+
+# HTTP client for API calls (example dependency)
+aiohttp
+voluptuous

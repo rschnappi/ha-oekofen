@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ofen einrichten",
+        "description": "Geben Sie die Verbindungsdetails für Ihr Ofengerät ein.",
+        "data": {
+          "url": "URL",
+          "username": "Benutzername",
+          "password": "Passwort",
+          "language": "Sprache",
+          "interval": "Aktualisierungsintervall (Sekunden)",
+          "debug_mode": "Debug-Modus (protokolliert alle Parameter)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen",
+      "invalid_auth": "Ungültige Authentifizierung",
+      "unknown": "Unerwarteter Fehler"
+    },
+    "abort": {
+      "already_configured": "Gerät ist bereits konfiguriert"
+    }
+  }
+}
