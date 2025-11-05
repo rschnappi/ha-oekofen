@@ -162,22 +162,31 @@ class PellematicAPI:
                     response.raise_for_status()
                     data_array = await response.json()
                     
-                    # Map parameters to values - extract actual values from JSON objects
+                    # Map parameters to values - extract and format values correctly
                     result = {}
                     for i, param in enumerate(parameters_to_fetch):
                         if i < len(data_array):
                             api_object = data_array[i]
                             if isinstance(api_object, dict) and 'value' in api_object:
-                                # Extract numeric value and apply divisor
+                                # Extract value and metadata
                                 value = api_object['value']
-                                divisor = api_object.get('divisor', '1')
-                                try:
-                                    if divisor and divisor != '' and divisor != '1':
-                                        result[param] = float(value) / float(divisor)
-                                    else:
-                                        result[param] = float(value)
-                                except (ValueError, TypeError):
-                                    result[param] = value  # Fallback to string value
+                                divisor = api_object.get('divisor', '')
+                                format_texts = api_object.get('formatTexts', '')
+                                
+                                # Handle different value types
+                                processed_value = self._process_api_value(value, divisor, format_texts, param)
+                                result[param] = processed_value
+                                
+                                # Store additional metadata for complex values
+                                if format_texts or api_object.get('shortText'):
+                                    result[f"{param}_meta"] = {
+                                        'raw_value': value,
+                                        'format_texts': format_texts,
+                                        'short_text': api_object.get('shortText', ''),
+                                        'unit_text': api_object.get('unitText', ''),
+                                        'status': api_object.get('status', ''),
+                                        'processed_value': processed_value
+                                    }
                             else:
                                 # Fallback for non-dict responses
                                 result[param] = api_object
@@ -218,6 +227,60 @@ class PellematicAPI:
         # Normal mode - return only parsed key data
         return self._parse_key_data(raw_data)
     
+    def _process_api_value(self, value: str, divisor: str, format_texts: str, param_name: str) -> Any:
+        """Process API value based on type and formatting."""
+        try:
+            # Handle status values with formatTexts (like boiler status)
+            if format_texts and format_texts.strip():
+                try:
+                    # Split formatTexts by | and get the text for this value
+                    text_options = format_texts.split('|')
+                    value_index = int(value)
+                    if 0 <= value_index < len(text_options):
+                        status_text = text_options[value_index].strip()
+                        return {
+                            'numeric_value': value_index,
+                            'text_value': status_text,
+                            'raw_value': value
+                        }
+                except (ValueError, IndexError):
+                    pass
+            
+            # Handle timestamp values (very large numbers that look like unix timestamps)
+            if '.' in value and len(value.split('.')[0]) >= 10:  # Unix timestamp detection
+                try:
+                    timestamp = float(value)
+                    if timestamp > 1000000000:  # Valid unix timestamp range
+                        import datetime
+                        dt = datetime.datetime.fromtimestamp(timestamp)
+                        return {
+                            'timestamp': timestamp,
+                            'datetime': dt.isoformat(),
+                            'readable': dt.strftime('%Y-%m-%d %H:%M:%S')
+                        }
+                except (ValueError, OSError):
+                    pass
+            
+            # Handle numeric values with divisor
+            if divisor and divisor.strip() and divisor != '1':
+                try:
+                    return float(value) / float(divisor)
+                except (ValueError, TypeError, ZeroDivisionError):
+                    pass
+            
+            # Try to convert to float for simple numeric values
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                pass
+            
+            # Return as string if nothing else works
+            return value
+            
+        except Exception as e:
+            _LOGGER.warning(f"Error processing value for {param_name}: {e}")
+            return value
+
     def _parse_key_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the key data points from raw data."""
         parsed = {
@@ -236,9 +299,20 @@ class PellematicAPI:
             temp_target = raw_data.get(f"CAPPL:FA[{i}].L_kesseltemperatur_soll_anzeige")
             
             if status is not None or temp is not None:
+                # Extract meaningful status text if available
+                status_text = None
+                status_numeric = None
+                if isinstance(status, dict) and 'text_value' in status:
+                    status_text = status['text_value']
+                    status_numeric = status['numeric_value']
+                elif status is not None:
+                    status_numeric = status
+                
                 parsed['boilers'].append({
                     'index': i,
-                    'status': status,
+                    'status_numeric': status_numeric,
+                    'status_text': status_text,
+                    'status_raw': status,
                     'temperature': temp,
                     'target_temperature': temp_target
                 })

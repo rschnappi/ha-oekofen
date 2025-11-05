@@ -1,7 +1,7 @@
 {
   "domain": "ofen",
   "name": "ÖkOfen Integration",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "documentation": "https://github.com/rschnappi/ha-oekofen",
   "issue_tracker": "https://github.com/rschnappi/ha-oekofen/issues",
   "dependencies": [],
