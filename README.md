@@ -4,10 +4,11 @@
 [![GitHub release](https://img.shields.io/github/release/rschnappi/ha-oekofen.svg)](https://github.com/rschnappi/ha-oekofen/releases)
 [![License](https://img.shields.io/github/license/rschnappi/ha-oekofen.svg)](LICENSE)
 
-Eine umfassende Home Assistant Custom Component für ÖkoFen Pellematic Smart XS Pelletkessel.
+Eine umfassende Home Assistant Custom Component für ÖkoFen Pellematic Smart XS Pelletkessel mit robustem Session-Management und erweiterten Systemparametern.
 
 ## 🔥 Features
 
+- **🔐 Robustes Session-Management** mit automatischer Timeout-Erkennung und Re-Authentication
 - **Vollständige API-Integration** mit ÖkoFen Pellematic Steuerung
 - **80+ Sensoren** für komplette Systemüberwachung
 - **Erweiterte Heizkurven-Parameter** (Steigung, Fußpunkt, Heizgrenzen)
@@ -20,6 +21,27 @@ Eine umfassende Home Assistant Custom Component für ÖkoFen Pellematic Smart XS
 - **🆕 STEUERUNG & AUTOMATION** - Änderungen an ÖkOfen senden
 - **🆕 HOME ASSISTANT SERVICES** - 5 Services für komplette Kontrolle
 - **🆕 SWITCH ENTITÄTEN** - Warmwasser Auto-Modus, Einmal-Aufbereitung
+
+## 🔒 Session-Management (v1.8.2)
+
+Die Integration verfügt über ein robustes Session-Management System:
+
+### ✅ **Automatische Session-Verwaltung:**
+- **Session-Timeout-Erkennung**: Automatische Erkennung abgelaufener Sessions
+- **Auto-Re-Authentication**: Transparente Neu-Anmeldung bei Session-Verlust
+- **Retry-Mechanismus**: Intelligente Wiederholung bei temporären Fehlern
+- **Error-Handling**: Robuste Behandlung von 403/401 HTTP-Codes und Redirects
+
+### 🔧 **Technische Details:**
+```python
+# Session-Validierung
+async def _check_session_valid() -> bool
+# Automatische Re-Authentication  
+async def _ensure_authenticated() -> bool
+# Verbesserte Retry-Logic in fetch_data() und set_parameter()
+```
+
+**Vorteile**: Keine manuellen Neustarts bei Session-Problemen, stabilere Datenerfassung, bessere Zuverlässigkeit
 
 ## 📊 Verfügbare Sensoren
 
@@ -273,6 +295,25 @@ cd ha-oekofen
 - ÖkoFen Modell und Firmware-Version angeben
 
 ## 📝 Changelog
+
+### v1.8.2 (2024-11-06) - ROBUSTES SESSION-MANAGEMENT 🔒
+- **🔐 ENHANCED SESSION MANAGEMENT**:
+  - ✅ Automatische Session-Timeout-Erkennung
+  - ✅ Transparente Re-Authentication bei Session-Verlust
+  - ✅ Robuste Retry-Logic mit HTTP 403/401 Behandlung
+  - ✅ Verbesserte Error-Handling für Redirect-Erkennung
+  
+- **🛡️ STABILITY IMPROVEMENTS**:
+  - ✅ Session-Validierung vor allen API-Calls
+  - ✅ Intelligente Session-Status-Checks
+  - ✅ Reduzierten Session-Ausfälle durch proaktive Re-Auth
+  - ✅ Bessere Fehlerbehandlung bei Netzwerkproblemen
+
+- **📊 MAINTAINED FEATURES**:
+  - ✅ Alle 80+ Parameter weiterhin verfügbar
+  - ✅ Debug-Modus mit vollständiger Systemübersicht
+  - ✅ Steuerung & Services funktional
+  - ✅ Switch-Entitäten für Warmwasser-Kontrolle
 
 ### v1.6.0 (2024-11-05) - MAJOR CONTROL FEATURES 🎛️
 - **🎯 VOLLSTÄNDIGE STEUERUNG**: ÖkOfen-Parameter über Home Assistant ändern

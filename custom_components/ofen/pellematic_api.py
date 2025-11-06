@@ -237,6 +237,38 @@ class PellematicAPI:
             self._authenticated = False
             return False
     
+    async def _check_session_valid(self) -> bool:
+        """Check if the current session is still valid."""
+        if not self._authenticated:
+            return False
+            
+        session = await self._get_session()
+        try:
+            # Try a simple request to see if session is still valid
+            async with async_timeout.timeout(5):
+                async with session.get(f"{self.url}/config.cgi") as response:
+                    # If we get redirected to login page, session expired
+                    if response.url.path == "/" or "login" in str(response.url):
+                        _LOGGER.warning("Session expired - need to re-authenticate")
+                        self._authenticated = False
+                        return False
+                    return response.status == 200
+        except Exception as e:
+            _LOGGER.debug(f"Session validation failed: {e}")
+            self._authenticated = False
+            return False
+    
+    async def _ensure_authenticated(self) -> bool:
+        """Ensure we have a valid authenticated session."""
+        # Check if current session is valid
+        if await self._check_session_valid():
+            return True
+            
+        # Try to re-authenticate
+        _LOGGER.info("Re-authenticating due to session timeout")
+        self._authenticated = False
+        return await self.authenticate()
+    
     async def _visit_contexts(self) -> None:
         """Visit different contexts to ensure all parameters are loaded."""
         session = await self._get_session()
@@ -322,9 +354,10 @@ class PellematicAPI:
     
     async def fetch_data(self) -> Optional[Dict[str, Any]]:
         """Fetch data from the Pellematic system."""
-        if not self._authenticated:
-            if not await self.authenticate():
-                return None
+        # Ensure we have a valid authenticated session
+        if not await self._ensure_authenticated():
+            _LOGGER.error("Could not establish authenticated session")
+            return None
         
         session = await self._get_session()
         
@@ -351,10 +384,23 @@ class PellematicAPI:
                     headers=headers
                 ) as response:
                     
-                    if response.status == 403:
-                        _LOGGER.warning("Access forbidden - re-authenticating")
+                    # Enhanced session validation
+                    if response.status == 403 or response.status == 401:
+                        _LOGGER.warning(f"Authentication failed (HTTP {response.status}) - re-authenticating")
                         self._authenticated = False
-                        if await self.authenticate():
+                        if await self._ensure_authenticated():
+                            # Retry once after re-authentication
+                            _LOGGER.info("Retrying data fetch after re-authentication")
+                            return await self.fetch_data()
+                        else:
+                            _LOGGER.error("Re-authentication failed")
+                            return None
+                    
+                    # Check if we got redirected to login page
+                    if response.url.path == "/" or "login" in str(response.url):
+                        _LOGGER.warning("Session expired - got redirected to login")
+                        self._authenticated = False
+                        if await self._ensure_authenticated():
                             return await self.fetch_data()
                         return None
                     
@@ -414,14 +460,18 @@ class PellematicAPI:
                     
         except Exception as e:
             _LOGGER.error(f"Failed to fetch data: {e}")
-            self._authenticated = False
+            # Don't immediately invalidate session on general errors
+            # Only invalidate on authentication-specific errors
+            if "authentication" in str(e).lower() or "login" in str(e).lower():
+                self._authenticated = False
             return None
     
     async def set_parameter(self, parameter: str, value: str) -> bool:
         """Set a parameter value on the Pellematic system."""
-        if not self._authenticated:
-            if not await self.authenticate():
-                return False
+        # Ensure we have a valid authenticated session
+        if not await self._ensure_authenticated():
+            _LOGGER.error("Could not establish authenticated session for parameter setting")
+            return False
         
         session = await self._get_session()
         

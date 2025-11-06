@@ -2,7 +2,7 @@
 
 DOMAIN = "ofen"
 NAME = "ÖkOfen"
-VERSION = "1.2.0"
+VERSION = "1.8.2"
 
 # Configuration and options
 CONF_URL = "url"
