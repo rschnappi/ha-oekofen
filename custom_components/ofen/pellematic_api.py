@@ -233,7 +233,7 @@ class PellematicAPI:
                     return True
                     
         except Exception as e:
-            _LOGGER.error(f"Authentication failed: {e}")
+            _LOGGER.error(f"Authentication failed: {e}", exc_info=True)
             self._authenticated = False
             return False
     
@@ -459,7 +459,7 @@ class PellematicAPI:
                     return result
                     
         except Exception as e:
-            _LOGGER.error(f"Failed to fetch data: {e}")
+            _LOGGER.error(f"Failed to fetch data: {e}", exc_info=True)
             # Don't immediately invalidate session on general errors
             # Only invalidate on authentication-specific errors
             if "authentication" in str(e).lower() or "login" in str(e).lower():
@@ -520,7 +520,7 @@ class PellematicAPI:
                             return False
                     
         except Exception as e:
-            _LOGGER.error(f"Failed to set parameter {parameter} = {value}: {e}")
+            _LOGGER.error(f"Failed to set parameter {parameter} = {value}: {e}", exc_info=True)
             return False
     
     async def set_hot_water_mode(self, hw_index: int, mode: str) -> bool:
