@@ -94,7 +94,7 @@ class PellematicAPI:
                     f"{self.url}/index.cgi",
                     data=login_data,  # aiohttp will auto-encode as application/x-www-form-urlencoded
                     headers=headers,
-                    allow_redirects=True
+                    allow_redirects=False  # DON'T follow redirects - we need the 303 response with cookies!
                 ) as response:
                     
                     response_text = await response.text()
