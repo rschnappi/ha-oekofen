@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ÖkOfen Pellematic",
+        "description": "Verbindung zu Ihrem ÖkOfen Pellematic Heizsystem konfigurieren",
+        "data": {
+          "host": "IP-Adresse oder Hostname",
+          "username": "Benutzername",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte IP-Adresse und Netzwerkverbindung prüfen.",
+      "invalid_auth": "Ungültiger Benutzername oder Passwort.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten. Bitte Logs prüfen."
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits konfiguriert."
+    }
+  }
+}

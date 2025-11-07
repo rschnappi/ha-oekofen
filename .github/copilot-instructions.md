@@ -3,23 +3,36 @@
 ## Project Overview
 This is a custom Home Assistant integration for ÖkOfen Pellematic heating systems, specifically optimized for the Pellematic 2012 model based on extensive real-world testing and analysis.
 
-## Key Technical Insights (From Direct Server Analysis)
-- **Critical**: ÖkOfen requires `Content-Type: application/json` headers for all API requests
-- **Authentication**: Uses index.cgi endpoint with form-based login
-- **Data Retrieval**: `/?action=get&attr=1` endpoint with POST requests
-- **Session Management**: Cookie-based with pksession parameter
-- **Web Interface**: jQuery-based with 5-second AJAX polling intervals
-- **Headers**: Must include User-Agent and XMLHttpRequest headers for compatibility
+## VERIFIED Working Configuration (Nov 2025 - Real Device Testing)
 
-## Proven Working Configuration
-Based on successful curl testing:
+### Authentication (TESTED ✓)
 ```bash
-# Login
-curl -X POST "/index.cgi" -d "user=<username>&pass=<password>&submit=Anmelden"
-
-# Data retrieval  
-curl -X POST "/?action=get&attr=1" -H "Content-Type: application/json" -d '["CAPPL:LOCAL.L_aussentemperatur_ist"]'
+curl -i -c cookies.txt "http://IP/index.cgi" \
+  -d "username=USER&password=PASS&language=de&submit=Anmelden"
 ```
+- **Method**: POST to `/index.cgi`
+- **Content-Type**: `application/x-www-form-urlencoded`
+- **Fields**: `username`, `password`, `language`, `submit`
+- **Success**: HTTP 303 + `Set-Cookie: pksession=XXXXX` + `LoginError=0`
+- **Important**: Newer firmware uses `username`/`password` (NOT `user`/`pass`)
+
+### Data Retrieval (TESTED ✓)
+```bash
+curl -b cookies.txt -X POST "http://IP/?action=get&attr=1" \
+  -H "Content-Type: application/json" \
+  -H "X-Requested-With: XMLHttpRequest" \
+  -d '["CAPPL:LOCAL.L_aussentemperatur_ist"]'
+```
+- **Method**: POST to `/?action=get&attr=1`
+- **Content-Type**: `application/json`
+- **Body**: JSON array of parameter names
+- **Cookie**: Session cookie from login required
+- **Header**: `X-Requested-With: XMLHttpRequest` required
+
+### Key Insights
+- Session timeout: 600 seconds (10 minutes)
+- Unauthenticated requests redirect to `/login.cgi`
+- Login page shows correct field names in HTML form
 
 ## Project Structure
 ```

@@ -6,28 +6,27 @@ Eine custom Home Assistant Integration für ÖkOfen Pellematic Heizsysteme, die 
 
 Diese Version wurde von Grund auf neu entwickelt und basiert auf den gewonnenen Erkenntnissen aus direkter Serveranalyse und erfolgreichen curl-Tests.
 
-## ✅ Kritische Erkenntnisse (Bewährt getestet)
+## ✅ Getestete und funktionierende Konfiguration (November 2025)
 
-### HTTP-Headers (KRITISCH!)
-- **MUSS** `Content-Type: application/json` für alle API-Requests verwenden
-- **NICHT** `application/x-www-form-urlencoded` verwenden
-- User-Agent Header für Kompatibilität erforderlich
-- XMLHttpRequest Header für AJAX-Simulation
-
-### Authentifizierung
-- Login über `/index.cgi` endpoint
-- Form-basierte Anmeldung mit JSON-Content-Type
-- Cookie-basierte Session-Verwaltung (`pksession`)
-- Erfolgreiche Anmeldung: `LoginError=0` oder HTTP 303 Redirect
+### Authentifizierung (VERIFIZIERT ✓)
+- **Endpoint**: `POST /index.cgi`
+- **Content-Type**: `application/x-www-form-urlencoded`
+- **Parameter**: `username`, `password`, `language=de`, `submit=Anmelden`
+- **Erfolg**: HTTP 303 Redirect + `Set-Cookie: pksession=XXXXX` + `LoginError=0`
+- **Session**: Cookie-basiert (`pksession`)
 
 ### Datenabfrage
-- Endpoint: `/?action=get&attr=1` 
-- POST-Request mit JSON-Array der Parameter
-- Erfolgreiche Antwort: `[{"name":"PARAMETER","value":"WERT","status":"OK"}]`
+- **Endpoint**: `POST /?action=get&attr=1`
+- **Content-Type**: `application/json`
+- **Body**: JSON-Array der Parameter, z.B. `["CAPPL:LOCAL.L_aussentemperatur_ist"]`
+- **Headers**: `X-Requested-With: XMLHttpRequest` erforderlich
+- **Cookie**: Session-Cookie von Login muss mitgesendet werden
 
-### Web-Interface Pattern
-- jQuery-basierte AJAX-Calls alle 5 Sekunden
-- Minimale 30-Sekunden Intervalle für Home Assistant (konservativer)
+### Wichtige Erkenntnisse
+- ✅ Neuere Firmware verwendet `username`/`password` (nicht `user`/`pass`)
+- ✅ Login verwendet Form-Daten, Datenabfrage verwendet JSON
+- ✅ Ohne Authentication leitet das Gerät auf `/login.cgi` um
+- ✅ Session-Cookie hat 600 Sekunden Timeout
 
 ## 🚀 Installation
 
