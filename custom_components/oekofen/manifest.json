@@ -1,0 +1,12 @@
+{
+  "domain": "oekofen",
+  "name": "ÖkOfen Pellematic Integration",
+  "version": "0.0.1",
+  "documentation": "https://github.com/rschnappi/ha-oekofen",
+  "issue_tracker": "https://github.com/rschnappi/ha-oekofen/issues",
+  "dependencies": [],
+  "codeowners": ["@rschnappi"],
+  "requirements": ["aiohttp>=3.8.0"],
+  "config_flow": true,
+  "iot_class": "local_polling"
+}
