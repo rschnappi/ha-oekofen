@@ -197,16 +197,59 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
         if parameter in self.coordinator.data:
             data_point = self.coordinator.data[parameter]
             value = data_point.get("value")
+            divisor = data_point.get("divisor", "")
+            format_texts = data_point.get("formatTexts", "")
             
-            # Convert numeric values
-            if value is not None and value != "":
+            if value is None or value == "":
+                return None
+            
+            try:
+                # Check if this is an enum value (has formatTexts)
+                if format_texts and format_texts != "":
+                    # Split formatTexts by pipe
+                    text_options = format_texts.split("|")
+                    value_int = int(value)
+                    
+                    # Get the text at the index (value)
+                    if 0 <= value_int < len(text_options):
+                        return text_options[value_int]
+                    else:
+                        _LOGGER.warning(f"Value {value_int} out of range for formatTexts (0-{len(text_options)-1})")
+                        return value
+                
+                # Check if this is a numeric value with divisor
+                if divisor and divisor != "" and divisor != "0":
+                    try:
+                        divisor_float = float(divisor)
+                        value_float = float(value)
+                        result = value_float / divisor_float
+                        
+                        # Round to appropriate decimal places
+                        if result.is_integer():
+                            return int(result)
+                        else:
+                            return round(result, 1)
+                    except (ValueError, ZeroDivisionError):
+                        pass
+                
+                # For temperature sensors, convert to float
+                if self._attr_device_class == SensorDeviceClass.TEMPERATURE:
+                    return float(value)
+                
+                # Try to return as number if possible
                 try:
-                    # Try to convert to float for temperature sensors
-                    if self._attr_device_class == SensorDeviceClass.TEMPERATURE:
-                        return float(value)
-                    return value
-                except (ValueError, TypeError):
-                    return value
+                    value_float = float(value)
+                    if value_float.is_integer():
+                        return int(value_float)
+                    return value_float
+                except ValueError:
+                    pass
+                
+                return value
+                
+            except (ValueError, TypeError) as e:
+                _LOGGER.warning(f"Error processing value for {parameter}: {e}")
+                return value
         
         return None
 
@@ -234,5 +277,29 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
             data_point = self.coordinator.data[parameter]
             attributes["parameter"] = parameter
             attributes["status"] = data_point.get("status", "unknown")
+            
+            # Add original raw value
+            raw_value = data_point.get("value")
+            if raw_value:
+                attributes["raw_value"] = raw_value
+            
+            # Add divisor if present
+            divisor = data_point.get("divisor")
+            if divisor and divisor != "":
+                attributes["divisor"] = divisor
+            
+            # Add unit text
+            unit_text = data_point.get("unitText")
+            if unit_text and unit_text not in ["???", ""]:
+                attributes["unit_from_device"] = unit_text
+            
+            # Add limits if present
+            lower_limit = data_point.get("lowerLimit")
+            if lower_limit and lower_limit != "":
+                attributes["lower_limit"] = lower_limit
+                
+            upper_limit = data_point.get("upperLimit")
+            if upper_limit and upper_limit != "":
+                attributes["upper_limit"] = upper_limit
             
         return attributes

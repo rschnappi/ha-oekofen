@@ -193,14 +193,21 @@ class PellematicAPI:
                     if response.status == 200:
                         response_data = await response.json()
                         
-                        # Parse response into dictionary
+                        # Parse response into dictionary - keep ALL fields from response
                         result = {}
                         if isinstance(response_data, list):
                             for item in response_data:
-                                if isinstance(item, dict) and 'name' in item and 'value' in item:
+                                if isinstance(item, dict) and 'name' in item:
+                                    # Store all fields from the response
                                     result[item['name']] = {
-                                        'value': item['value'],
-                                        'status': item.get('status', 'OK')
+                                        'value': item.get('value'),
+                                        'status': item.get('status', 'OK'),
+                                        'divisor': item.get('divisor', ''),
+                                        'formatTexts': item.get('formatTexts', ''),
+                                        'shortText': item.get('shortText', ''),
+                                        'unitText': item.get('unitText', ''),
+                                        'lowerLimit': item.get('lowerLimit', ''),
+                                        'upperLimit': item.get('upperLimit', ''),
                                     }
                         
                         _LOGGER.debug(f"Successfully retrieved {len(result)} parameters")
