@@ -102,18 +102,7 @@ class PellematicAPI:
                     _LOGGER.debug(f"Response URL: {response.url}")
                     _LOGGER.debug(f"Response headers: {dict(response.headers)}")
                     
-                    # Check for session cookie (most reliable indicator)
-                    has_session_cookie = False
-                    all_cookies = []
-                    for cookie in session.cookie_jar:
-                        all_cookies.append(f"{cookie.key}={cookie.value}")
-                        if cookie.key == 'pksession':
-                            has_session_cookie = True
-                            _LOGGER.info(f"✓ Session cookie found: pksession={cookie.value}")
-                    
-                    _LOGGER.debug(f"All cookies: {', '.join(all_cookies) if all_cookies else 'None'}")
-                    
-                    # Check response cookies
+                    # Check response cookies FIRST (these are set by the server in this response)
                     response_cookies = {}
                     for key, cookie in response.cookies.items():
                         response_cookies[key] = cookie.value
@@ -121,23 +110,31 @@ class PellematicAPI:
                     
                     # Check for LoginError in response
                     login_error = response_cookies.get('LoginError', '')
-                    if login_error:
-                        _LOGGER.debug(f"LoginError cookie value: {login_error}")
-                        if login_error == '1':
-                            _LOGGER.error("Invalid credentials (LoginError=1) - check username/password")
-                            _LOGGER.debug(f"Response text (first 500 chars): {response_text[:500]}")
-                            return False
+                    if login_error == '1':
+                        _LOGGER.error("Invalid credentials (LoginError=1) - check username/password")
+                        _LOGGER.debug(f"Response text (first 500 chars): {response_text[:500]}")
+                        return False
                     
-                    # Success conditions (based on real testing):
-                    # HTTP 303 redirect + pksession cookie + LoginError=0
-                    if has_session_cookie:
+                    # Check for pksession in response cookies (most reliable)
+                    pksession = response_cookies.get('pksession', '')
+                    if pksession:
+                        _LOGGER.info(f"✓ Session cookie found in response: pksession={pksession}")
                         _LOGGER.info(f"✓ Authentication successful (Status: {response.status})")
                         self._authenticated = True
                         return True
-                    else:
-                        _LOGGER.error(f"✗ Authentication failed - Status: {response.status}, No session cookie received")
-                        _LOGGER.debug(f"Response text (first 1000 chars): {response_text[:1000]}")
-                        return False
+                    
+                    # Fallback: Check session.cookie_jar (in case cookies were already stored)
+                    for cookie in session.cookie_jar:
+                        if cookie.key == 'pksession':
+                            _LOGGER.info(f"✓ Session cookie found in jar: pksession={cookie.value}")
+                            _LOGGER.info(f"✓ Authentication successful (Status: {response.status})")
+                            self._authenticated = True
+                            return True
+                    
+                    # No session cookie found
+                    _LOGGER.error(f"✗ Authentication failed - Status: {response.status}, No pksession cookie")
+                    _LOGGER.debug(f"Response text (first 1000 chars): {response_text[:1000]}")
+                    return False
                         
         except Exception as e:
             _LOGGER.error(f"Authentication error: {e}")
