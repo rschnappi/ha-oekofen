@@ -119,6 +119,15 @@ class PellematicAPI:
                     pksession = response_cookies.get('pksession', '')
                     if pksession:
                         _LOGGER.info(f"✓ Session cookie found in response: pksession={pksession}")
+                        
+                        # Manually update the cookie jar with all cookies from response
+                        # This ensures cookies are available for subsequent requests
+                        session.cookie_jar.update_cookies(response.cookies)
+                        
+                        # Verify cookies are in jar
+                        jar_cookies = [f"{c.key}={c.value}" for c in session.cookie_jar]
+                        _LOGGER.debug(f"Cookie jar updated: {', '.join(jar_cookies)}")
+                        
                         _LOGGER.info(f"✓ Authentication successful (Status: {response.status})")
                         self._authenticated = True
                         return True
@@ -168,12 +177,18 @@ class PellematicAPI:
             
             _LOGGER.debug(f"Fetching data for {len(params_to_fetch)} parameters")
             
+            # Debug: Check cookies before request
+            jar_cookies = [f"{c.key}={c.value}" for c in session.cookie_jar]
+            _LOGGER.debug(f"Cookies for data request: {', '.join(jar_cookies) if jar_cookies else 'None'}")
+            
             async with async_timeout.timeout(15):
                 async with session.post(
                     f"{self.url}/?action=get&attr=1",
                     data=json.dumps(params_to_fetch),  # Send parameters as JSON array
                     headers=headers
                 ) as response:
+                    
+                    _LOGGER.debug(f"Data request response status: {response.status}")
                     
                     if response.status == 200:
                         response_data = await response.json()
