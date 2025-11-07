@@ -77,59 +77,66 @@ class PellematicAPI:
                 'submit': 'Anmelden'
             }
             
-            # FIXED: Login uses form-encoded, NOT JSON!
+            # Headers - NO Content-Type header! Let aiohttp set it correctly for form data
             headers = {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': f'{self.language},en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'Content-Type': 'application/x-www-form-urlencoded',  # FIXED: Form-encoded for login!
                 'Origin': self.url,
                 'Referer': f'{self.url}/',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
             
             _LOGGER.debug(f"Authenticating with {self.url}/index.cgi")
+            _LOGGER.debug(f"Login data: username={self.username}, language={self.language}")
             
             async with async_timeout.timeout(15):
                 async with session.post(
                     f"{self.url}/index.cgi",
-                    data=login_data,  # FIXED: Send as form data, NOT JSON!
+                    data=login_data,  # aiohttp will auto-encode as application/x-www-form-urlencoded
                     headers=headers,
                     allow_redirects=True
                 ) as response:
                     
                     response_text = await response.text()
                     _LOGGER.debug(f"Login response status: {response.status}")
+                    _LOGGER.debug(f"Response URL: {response.url}")
+                    _LOGGER.debug(f"Response headers: {dict(response.headers)}")
                     
                     # Check for session cookie (most reliable indicator)
                     has_session_cookie = False
+                    all_cookies = []
                     for cookie in session.cookie_jar:
+                        all_cookies.append(f"{cookie.key}={cookie.value}")
                         if cookie.key == 'pksession':
                             has_session_cookie = True
-                            _LOGGER.debug(f"Session cookie found: pksession={cookie.value}")
-                            break
+                            _LOGGER.info(f"✓ Session cookie found: pksession={cookie.value}")
                     
-                    # Check response headers for LoginError
-                    login_error_cookie = response.cookies.get('LoginError', None)
-                    if login_error_cookie:
-                        _LOGGER.debug(f"LoginError cookie: {login_error_cookie.value}")
+                    _LOGGER.debug(f"All cookies: {', '.join(all_cookies) if all_cookies else 'None'}")
+                    
+                    # Check response cookies
+                    response_cookies = {}
+                    for key, cookie in response.cookies.items():
+                        response_cookies[key] = cookie.value
+                    _LOGGER.debug(f"Response cookies: {response_cookies}")
+                    
+                    # Check for LoginError in response
+                    login_error = response_cookies.get('LoginError', '')
+                    if login_error:
+                        _LOGGER.debug(f"LoginError cookie value: {login_error}")
+                        if login_error == '1':
+                            _LOGGER.error("Invalid credentials (LoginError=1) - check username/password")
+                            _LOGGER.debug(f"Response text (first 500 chars): {response_text[:500]}")
+                            return False
                     
                     # Success conditions (based on real testing):
-                    # 1. HTTP 303 redirect + pksession cookie
-                    # 2. LoginError=0 cookie + pksession cookie
-                    if has_session_cookie and (response.status == 303 or login_error_cookie and login_error_cookie.value == '0'):
-                        _LOGGER.info("Authentication successful - session established")
-                        self._authenticated = True
-                        return True
-                    elif has_session_cookie:
-                        # Have cookie but uncertain about login status
-                        _LOGGER.info("Session cookie received - assuming authentication successful")
+                    # HTTP 303 redirect + pksession cookie + LoginError=0
+                    if has_session_cookie:
+                        _LOGGER.info(f"✓ Authentication successful (Status: {response.status})")
                         self._authenticated = True
                         return True
                     else:
-                        _LOGGER.error(f"Authentication failed - Status: {response.status}, No session cookie")
-                        if login_error_cookie and login_error_cookie.value == '1':
-                            _LOGGER.error("Invalid credentials (LoginError=1)")
+                        _LOGGER.error(f"✗ Authentication failed - Status: {response.status}, No session cookie received")
+                        _LOGGER.debug(f"Response text (first 1000 chars): {response_text[:1000]}")
                         return False
                         
         except Exception as e:
