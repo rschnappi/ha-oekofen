@@ -1,12 +1,12 @@
 """
-ÖkOfen Pellematic API Client
+ÖkOfen Pellematic API Client - FIXED VERSION
 
 Based on real-world analysis and successful curl testing.
 Key insights:
-- REQUIRES Content-Type: application/json for all requests
-- Uses cookie-based session management (pksession)
+- LOGIN: Uses application/x-www-form-urlencoded (form data)
+- DATA REQUESTS: Uses application/json 
 - Authentication via index.cgi with form data
-- Data retrieval via /?action=get&attr=1 endpoint
+- Data retrieval via /?action=get&attr=1 endpoint with JSON
 - Must include User-Agent and XMLHttpRequest headers
 """
 import logging
@@ -56,7 +56,7 @@ class PellematicAPI:
     async def authenticate(self) -> bool:
         """
         Authenticate with the ÖkOfen device.
-        Based on successful curl testing pattern.
+        FIXED: Uses form-encoded data for login (like successful curl test).
         """
         session = await self._get_session()
         
@@ -68,12 +68,12 @@ class PellematicAPI:
                 'submit': 'Anmelden'
             }
             
-            # Critical headers (based on successful testing)
+            # FIXED: Login uses form-encoded, NOT JSON!
             headers = {
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': f'{self.language},en;q=0.5',
                 'Accept-Encoding': 'gzip, deflate',
-                'Content-Type': 'application/json',  # CRITICAL: Must be JSON
+                'Content-Type': 'application/x-www-form-urlencoded',  # FIXED: Form-encoded for login!
                 'Origin': self.url,
                 'Referer': f'{self.url}/',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -84,12 +84,13 @@ class PellematicAPI:
             async with async_timeout.timeout(15):
                 async with session.post(
                     f"{self.url}/index.cgi",
-                    data=json.dumps(login_data),  # Send as JSON
+                    data=login_data,  # FIXED: Send as form data, NOT JSON!
                     headers=headers,
                     allow_redirects=True
                 ) as response:
                     
                     response_text = await response.text()
+                    _LOGGER.debug(f"Login response status: {response.status}")
                     
                     # Check for successful authentication
                     if "LoginError=0" in response_text or response.status == 303:
@@ -104,6 +105,8 @@ class PellematicAPI:
                         return False
                     else:
                         _LOGGER.error(f"Authentication failed - response: {response.status}")
+                        if "LoginError" in response_text:
+                            _LOGGER.error("Invalid credentials - check username and password")
                         return False
                         
         except Exception as e:
@@ -113,7 +116,7 @@ class PellematicAPI:
     async def get_data(self, parameters: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Get data from the ÖkOfen device.
-        Uses the proven working endpoint and headers.
+        Uses JSON for data requests (based on successful curl testing).
         """
         if not self._authenticated:
             if not await self.authenticate():
@@ -125,11 +128,11 @@ class PellematicAPI:
         params_to_fetch = parameters or self.core_parameters
         
         try:
-            # Critical headers for data requests (based on jQuery analysis)
+            # Data requests use JSON (based on jQuery analysis and successful curl)
             headers = {
                 'Accept': 'application/json, text/javascript, */*; q=0.01',
                 'Accept-Language': self.language,
-                'Content-Type': 'application/json',  # CRITICAL: Must be JSON
+                'Content-Type': 'application/json',  # JSON for data requests
                 'X-Requested-With': 'XMLHttpRequest',
                 'Referer': f'{self.url}/',
                 'Origin': self.url,
