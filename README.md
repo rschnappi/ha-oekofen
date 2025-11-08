@@ -2,9 +2,9 @@
 
 Eine custom Home Assistant Integration für ÖkOfen Pellematic Heizsysteme, die auf umfangreichen Tests und Analysen basiert.
 
-## 🔥 Version 0.0.1 - Neubeginn mit gewonnenen Erkenntnissen
+## 🔥 Version 0.3.0 - Mit Sprachunterstützung und Services
 
-Diese Version wurde von Grund auf neu entwickelt und basiert auf den gewonnenen Erkenntnissen aus direkter Serveranalyse und erfolgreichen curl-Tests.
+Diese Integration bietet vollständige Kontrolle über Ihr ÖkOfen Heizsystem mit über 80 Sensoren, Services zum Ändern der Betriebsarten und mehrsprachiger Unterstützung.
 
 ## ✅ Getestete und funktionierende Konfiguration (November 2025)
 
@@ -52,27 +52,119 @@ Diese Version wurde von Grund auf neu entwickelt und basiert auf den gewonnenen 
    - **Host**: IP-Adresse oder Hostname Ihres ÖkOfen-Geräts (z.B. `192.168.1.100`)
    - **Benutzername**: Ihr ÖkOfen Web-Interface Benutzername
    - **Passwort**: Ihr ÖkOfen Web-Interface Passwort
+   - **Sprache**: Deutsch, Englisch, Französisch oder Italienisch (Standard: Deutsch)
 
-### Manuelle Konfiguration (configuration.yaml)
-```yaml
-# Nicht empfohlen - Verwenden Sie die UI-Konfiguration
-```
+Die gewählte Sprache bestimmt die Sensornamen und Werte, die von der API zurückgegeben werden.
 
 ## 📊 Verfügbare Sensoren
 
-Die Integration stellt folgende Sensoren zur Verfügung:
+Die Integration stellt über 80 Sensoren zur Verfügung, organisiert nach Kategorien:
 
-### Temperatursensoren
-- **Außentemperatur** (`outside_temperature`)
-- **Kesseltemperatur** (`boiler_temperature`)
-- **Kessel-Solltemperatur** (`boiler_target_temperature`)
-- **Abgastemperatur** (`exhaust_temperature`)
-- **Raumtemperatur** (`room_temperature`)
-- **Vorlauftemperatur** (`flow_temperature`)
-- **Warmwassertemperatur** (`hot_water_temperature`)
+### 🔧 Betriebsarten
+- Anlage Betriebsart (Aus/Auto/Warmwasser)
+- Heizkreis Betriebsart (Aus/Auto/Heizen/Absenken)
+- Warmwasser Betriebsart (Aus/Auto/Ein)
+- Pellematic Betriebsart (Aus/Auto/Ein)
 
-### Statussensoren
-- **Kesselstatus** (`boiler_status`)
+### 🌡️ Allgemein
+- Außentemperatur
+- Software Version
+
+### 🔥 Pellematic (Kessel)
+- Kesselstatus
+- Kesseltemperatur & Solltemperatur
+- Abgastemperatur
+- Feuerraumtemperatur & Solltemperatur
+- Pelletverbrauch (heute, gestern, gesamt)
+- Pelletvorrat
+- Aschelade Status
+- Störungsnummer & Störungsmeldung
+- Betriebsstunden (gesamt, Heizen, Warmwasser)
+- Starts (gesamt, erfolglos)
+
+### 🏠 Heizkreis
+- Raumtemperatur
+- Vorlauftemperatur & Solltemperatur
+- Heizkreispumpe Status
+- Einstellungen (Raumtemp Heizen/Absenken, Heizkennlinie, Heizgrenze)
+- Aktives Zeitprogramm
+
+### 💧 Warmwasser
+- Warmwassertemperatur & Solltemperatur
+- Warmwasserpumpe Status
+- Einstellungen (Solltemperatur, Zeitprogramm)
+- Einmal Aufbereiten
+
+### 🗄️ Puffer & Pumpen
+- Puffertemperaturen (Oben, Mitte, Unten)
+- Pufferpumpen Status
+- Zubringerpumpe Modus & Status
+
+## 🎛️ Services
+
+Die Integration bietet folgende Services zum Steuern des Heizsystems:
+
+### `oekofen.set_system_mode`
+Setzt den Betriebsmodus der Anlage.
+```yaml
+service: oekofen.set_system_mode
+data:
+  mode: auto  # aus, auto, warmwasser
+```
+
+### `oekofen.set_heating_mode`
+Setzt den Betriebsmodus eines Heizkreises.
+```yaml
+service: oekofen.set_heating_mode
+data:
+  circuit: 0  # 0-5
+  mode: auto  # aus, auto, heizen, absenken
+```
+
+### `oekofen.set_hot_water_mode`
+Setzt den Betriebsmodus für Warmwasser.
+```yaml
+service: oekofen.set_hot_water_mode
+data:
+  circuit: 0  # 0-2
+  mode: auto  # aus, auto, ein
+```
+
+### `oekofen.set_pellematic_mode`
+Setzt den Betriebsmodus des Pellematic Kessels.
+```yaml
+service: oekofen.set_pellematic_mode
+data:
+  unit: 0  # 0-3
+  mode: auto  # aus, auto, ein
+```
+
+### `oekofen.set_parameter`
+Setzt einen rohen Parameter-Wert (für Experten).
+```yaml
+service: oekofen.set_parameter
+data:
+  parameter: "CAPPL:LOCAL.hk[0].raumtemp_heizen"
+  value: 20.0
+  divisor: 10  # optional
+```
+
+## 📱 Dashboard
+
+Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashboard_example.yaml).
+
+### Installation des Dashboards
+1. Gehen Sie zu **Einstellungen** → **Dashboards**
+2. Klicken Sie auf **+ Dashboard hinzufügen**
+3. Wählen Sie **Neue Ansicht aus YAML erstellen**
+4. Kopieren Sie den Inhalt aus `dashboard_example.yaml`
+5. Das Dashboard zeigt:
+   - **Übersicht**: Betriebsarten und wichtigste Sensoren
+   - **Pellematic**: Kessel, Pellets, Störungen
+   - **Heizkreis**: Temperaturen und Einstellungen
+   - **Warmwasser**: Status und Einstellungen
+   - **Puffer & Pumpen**: Pufferspeicher und Pumpen
+   - **Statistiken**: Betriebsstunden, Verbrauch, Verlaufsgraphen
 
 ## 🔧 Erweiterte Konfiguration
 
