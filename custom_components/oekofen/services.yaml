@@ -29,3 +29,107 @@ set_parameter:
           min: 1
           max: 1000
           step: 1
+
+set_system_mode:
+  name: Set System Mode
+  description: Set the operating mode of the entire system (Anlage)
+  fields:
+    mode:
+      name: Mode
+      description: The operating mode to set
+      required: true
+      selector:
+        select:
+          options:
+            - label: Aus
+              value: aus
+            - label: Auto
+              value: auto
+            - label: Warmwasser
+              value: warmwasser
+
+set_heating_mode:
+  name: Set Heating Circuit Mode
+  description: Set the operating mode of a heating circuit (Heizkreis)
+  fields:
+    circuit:
+      name: Circuit
+      description: The heating circuit number (0-5)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 1
+    mode:
+      name: Mode
+      description: The operating mode to set
+      required: true
+      selector:
+        select:
+          options:
+            - label: Aus
+              value: aus
+            - label: Auto
+              value: auto
+            - label: Heizen
+              value: heizen
+            - label: Absenken
+              value: absenken
+
+set_hot_water_mode:
+  name: Set Hot Water Mode
+  description: Set the operating mode of a hot water circuit (Warmwasser)
+  fields:
+    circuit:
+      name: Circuit
+      description: The hot water circuit number (0-2)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 2
+          step: 1
+    mode:
+      name: Mode
+      description: The operating mode to set
+      required: true
+      selector:
+        select:
+          options:
+            - label: Aus
+              value: aus
+            - label: Auto
+              value: auto
+            - label: Ein
+              value: ein
+
+set_pellematic_mode:
+  name: Set Pellematic Mode
+  description: Set the operating mode of a Pellematic unit
+  fields:
+    unit:
+      name: Unit
+      description: The Pellematic unit number (0-3)
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 1
+    mode:
+      name: Mode
+      description: The operating mode to set
+      required: true
+      selector:
+        select:
+          options:
+            - label: Aus
+              value: aus
+            - label: Auto
+              value: auto
+            - label: Ein
+              value: ein
