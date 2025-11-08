@@ -45,6 +45,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
+    # Register update listener for options flow (enables reload button)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    
     _LOGGER.info(f"ÖkOfen integration setup complete for {host}")
     return True
 
