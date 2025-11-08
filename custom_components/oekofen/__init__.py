@@ -1,8 +1,10 @@
 """The ÖkOfen Pellematic integration."""
 import logging
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
 
 from .pellematic_api import PellematicAPI
 
@@ -10,6 +12,14 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "oekofen"
 PLATFORMS = [Platform.SENSOR]
+
+# Service schema
+SERVICE_SET_PARAMETER = "set_parameter"
+SERVICE_SET_PARAMETER_SCHEMA = vol.Schema({
+    vol.Required("parameter"): cv.string,
+    vol.Required("value"): vol.Any(vol.Coerce(float), vol.Coerce(int), cv.string),
+    vol.Optional("divisor"): vol.Coerce(int),
+})
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -44,6 +54,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    
+    # Register services
+    async def handle_set_parameter(call: ServiceCall) -> None:
+        """Handle the set_parameter service call."""
+        parameter = call.data["parameter"]
+        value = call.data["value"]
+        divisor = call.data.get("divisor")
+        
+        try:
+            result = await api.set_data(parameter, value, divisor)
+            _LOGGER.info(f"Service call successful: {result}")
+        except Exception as e:
+            _LOGGER.error(f"Service call failed: {e}")
+            raise
+    
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_PARAMETER,
+        handle_set_parameter,
+        schema=SERVICE_SET_PARAMETER_SCHEMA,
+    )
     
     # Register update listener for options flow (enables reload button)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))

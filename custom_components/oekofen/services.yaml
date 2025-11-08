@@ -1,0 +1,31 @@
+set_parameter:
+  name: Set Parameter
+  description: Set a parameter value on the ÖkOfen device
+  fields:
+    parameter:
+      name: Parameter
+      description: The parameter name (e.g., CAPPL:LOCAL.hk[0].raumtemp_heizen)
+      required: true
+      example: "CAPPL:LOCAL.hk[0].raumtemp_heizen"
+      selector:
+        text:
+    value:
+      name: Value
+      description: The value to set
+      required: true
+      example: 20.5
+      selector:
+        number:
+          min: -100
+          max: 1000
+          step: 0.1
+    divisor:
+      name: Divisor
+      description: Optional divisor (e.g., 10 for temperatures). Value will be multiplied by this before sending.
+      required: false
+      example: 10
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 1

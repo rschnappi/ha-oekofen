@@ -230,6 +230,105 @@ class PellematicAPI:
             _LOGGER.error(f"Data retrieval error: {e}")
             raise
     
+    async def set_data(self, parameter: str, value: Any, divisor: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Set a parameter value on the ÖkOfen device.
+        
+        Args:
+            parameter: Parameter name (e.g., "CAPPL:LOCAL.hk[0].raumtemp_heizen")
+            value: Value to set (will be multiplied by divisor if provided)
+            divisor: Optional divisor to apply (e.g., 10 for temperatures)
+        
+        Returns:
+            Dict with status and actual set value
+            
+        Example:
+            await api.set_data("CAPPL:LOCAL.hk[0].raumtemp_heizen", 20.0, divisor=10)
+            # Sends 200 to device (20.0 * 10)
+        """
+        if not self._authenticated:
+            if not await self.authenticate():
+                raise Exception("Authentication required")
+        
+        session = await self._get_session()
+        
+        try:
+            # Apply divisor if provided
+            api_value = value
+            if divisor and divisor != 1:
+                api_value = int(value * divisor)
+                _LOGGER.debug(f"Applying divisor {divisor}: {value} * {divisor} = {api_value}")
+            
+            # Prepare request
+            url = f"{self.url}/?action=set"
+            headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+            payload = {parameter: api_value}
+            
+            _LOGGER.info(f"Setting parameter: {parameter} = {api_value} (user value: {value})")
+            _LOGGER.debug(f"Cookies for set request: {', '.join([f'{c.key}={c.value}' for c in session.cookie_jar])}")
+            
+            async with async_timeout.timeout(10):
+                async with session.post(url, json=payload, headers=headers) as response:
+                    response_text = await response.text()
+                    
+                    _LOGGER.debug(f"Set request response status: {response.status}")
+                    
+                    if response.status == 200:
+                        try:
+                            response_data = json.loads(response_text)
+                            _LOGGER.debug(f"Set response data: {response_data}")
+                            
+                            # Parse response
+                            if isinstance(response_data, list) and len(response_data) > 0:
+                                item = response_data[0]
+                                if item.get('status') == 'OK':
+                                    actual_value = item.get('value')
+                                    # Convert back with divisor for logging
+                                    if divisor and divisor != 1:
+                                        display_value = float(actual_value) / divisor
+                                        _LOGGER.info(f"✓ Parameter set successfully: {parameter} = {display_value} (raw: {actual_value})")
+                                    else:
+                                        _LOGGER.info(f"✓ Parameter set successfully: {parameter} = {actual_value}")
+                                    
+                                    return {
+                                        'status': 'OK',
+                                        'parameter': parameter,
+                                        'raw_value': actual_value,
+                                        'display_value': float(actual_value) / divisor if divisor and divisor != 1 else actual_value
+                                    }
+                                else:
+                                    _LOGGER.error(f"Set failed: {item}")
+                                    raise Exception(f"Set failed: {item.get('status', 'UNKNOWN')}")
+                            else:
+                                _LOGGER.error(f"Unexpected response format: {response_data}")
+                                raise Exception("Unexpected response format")
+                                
+                        except json.JSONDecodeError as e:
+                            _LOGGER.error(f"Failed to parse set response: {e}")
+                            _LOGGER.debug(f"Response text: {response_text}")
+                            raise Exception("Invalid JSON response")
+                    
+                    elif response.status == 401:
+                        # Re-authentication needed
+                        _LOGGER.warning("Session expired, re-authenticating")
+                        self._authenticated = False
+                        if await self.authenticate():
+                            return await self.set_data(parameter, value, divisor)
+                        else:
+                            raise Exception("Re-authentication failed")
+                    
+                    else:
+                        _LOGGER.error(f"Set request failed with status {response.status}")
+                        _LOGGER.debug(f"Response: {response_text}")
+                        raise Exception(f"HTTP {response.status}")
+                        
+        except Exception as e:
+            _LOGGER.error(f"Set data error: {e}")
+            raise
+    
     async def close(self):
         """Close the session."""
         if self._session and not self._session.closed:
