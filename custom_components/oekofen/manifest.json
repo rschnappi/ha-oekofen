@@ -1,7 +1,7 @@
 {
   "domain": "oekofen",
   "name": "ÖkOfen Pellematic Integration",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "documentation": "https://github.com/rschnappi/ha-oekofen",
   "issue_tracker": "https://github.com/rschnappi/ha-oekofen/issues",
   "dependencies": [],

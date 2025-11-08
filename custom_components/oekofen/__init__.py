@@ -46,19 +46,20 @@ SERVICE_SET_PELLEMATIC_MODE_SCHEMA = vol.Schema({
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up ÖkOfen Pellematic from a config entry."""
+    """Set up ÖkOfen from a config entry."""
     
     # Extract configuration
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
+    language = entry.data.get("language", "de")
     
     # Ensure URL format
     if not host.startswith(('http://', 'https://')):
         host = f"http://{host}"
     
     # Create API instance
-    api = PellematicAPI(host, username, password)
+    api = PellematicAPI(host, username, password, language)
     
     # Test connection
     try:

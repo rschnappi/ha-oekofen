@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     UnitOfTemperature,
     CONF_HOST,
+    PERCENTAGE,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -834,13 +835,13 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
         self._sensor_config = sensor_config
         self._device_name = device_name
         
-        # Entity properties
-        self._attr_name = sensor_config["name"]
+        # Entity properties - will use shortText from API if available
         self._attr_unique_id = f"oekofen_{sensor_key}"
         self._attr_device_class = sensor_config.get("device_class")
         self._attr_state_class = sensor_config.get("state_class")
         self._attr_native_unit_of_measurement = sensor_config.get("unit")
         self._attr_icon = sensor_config.get("icon")
+        self._fallback_name = sensor_config["name"]
         
         # Device info
         self._attr_device_info = {
@@ -849,6 +850,38 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
             "manufacturer": "ÖkOfen",
             "model": "Pellematic",
         }
+
+    @property
+    def name(self) -> str:
+        """Return the name of the sensor, using shortText from API if available."""
+        parameter = self._sensor_config["parameter"]
+        
+        if parameter in self.coordinator.data:
+            data_point = self.coordinator.data[parameter]
+            short_text = data_point.get("shortText", "")
+            if short_text and short_text.strip():
+                return short_text.strip()
+        
+        return self._fallback_name
+
+    @property
+    def native_unit_of_measurement(self) -> Optional[str]:
+        """Return the unit from API if available, otherwise fallback to configured unit."""
+        parameter = self._sensor_config["parameter"]
+        
+        if parameter in self.coordinator.data:
+            data_point = self.coordinator.data[parameter]
+            unit_text = data_point.get("unitText", "")
+            if unit_text and unit_text not in ["", "???", "??"]:
+                # Map common unit texts to Home Assistant units
+                unit_map = {
+                    "°C": UnitOfTemperature.CELSIUS,
+                    "°F": UnitOfTemperature.FAHRENHEIT,
+                    "%": PERCENTAGE,
+                }
+                return unit_map.get(unit_text, unit_text)
+        
+        return self._attr_native_unit_of_measurement
 
     @property
     def native_value(self) -> Optional[str]:
