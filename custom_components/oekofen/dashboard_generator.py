@@ -1,26 +1,47 @@
+# Updated dashboard_generator.py
+
+import os
 import yaml
+from sensor import SENSOR_DEFINITIONS
 
-# Sample SENSOR_DEFINITIONS for demonstration purposes
-SENSOR_DEFINITIONS = {
-    'sensor1': {'name': 'Temperature', 'unit': '°C', 'icon': 'mdi:thermometer'},
-    'sensor2': {'name': 'Humidity', 'unit': '%', 'icon': 'mdi:water-percent'},
-    # Add more sensors as needed
-}
-
-def generate_dashboard_yaml(sensor_definitions):
-    dashboard = {'type': 'custom:dashboard', 'cards': []}
-    
-    for sensor_id, sensor_info in sensor_definitions.items():
-        card = {
-            'type': 'sensor',
-            'entity': f'sensor.{sensor_id}',
-            'name': sensor_info['name'],
-            'unit': sensor_info['unit'],
-            'icon': sensor_info['icon'],
+class DashboardGenerator:
+    def __init__(self):
+        self.dashboard = {
+            'tabs': [],
         }
-        dashboard['cards'].append(card)
-    
-    return yaml.dump(dashboard)
+
+    def generate_dashboard(self):
+        self.organize_sensors()  
+        return yaml.dump(self.dashboard)
+
+    def organize_sensors(self):
+        # Organize sensors by categories
+        categories = {}
+        for sensor in SENSOR_DEFINITIONS:
+            category = sensor.get('category', 'Uncategorized')
+            if category not in categories:
+                categories[category] = []
+            categories[category].append(sensor)
+
+        for category, sensors in categories.items():
+            self.dashboard['tabs'].append({
+                'title': category,
+                'sensors': [self.create_sensor_widget(sensor) for sensor in sensors],
+            })
+
+    def create_sensor_widget(self, sensor):
+        return {
+            'id': sensor['id'],
+            'type': sensor['type'],
+            'editable': True,
+            'name': sensor['name'],
+            'control': {
+                'min': sensor.get('min', 0),
+                'max': sensor.get('max', 100),
+                'unit_of_measure': sensor.get('unit', 'N/A'),
+            }
+        }
 
 if __name__ == '__main__':
-    print(generate_dashboard_yaml(SENSOR_DEFINITIONS))
+    generator = DashboardGenerator()
+    print(generator.generate_dashboard())
