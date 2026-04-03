@@ -1,47 +1,20 @@
-# Updated dashboard_generator.py
+import re
 
-import os
-import yaml
-from sensor import SENSOR_DEFINITIONS
+# Define a function to extract sensor definitions from sensor.py
 
-class DashboardGenerator:
-    def __init__(self):
-        self.dashboard = {
-            'tabs': [],
-        }
+def extract_sensor_definitions(sensor_file_path):
+    with open(sensor_file_path, 'r') as file:
+        content = file.read()
 
-    def generate_dashboard(self):
-        self.organize_sensors()  
-        return yaml.dump(self.dashboard)
-
-    def organize_sensors(self):
-        # Organize sensors by categories
-        categories = {}
-        for sensor in SENSOR_DEFINITIONS:
-            category = sensor.get('category', 'Uncategorized')
-            if category not in categories:
-                categories[category] = []
-            categories[category].append(sensor)
-
-        for category, sensors in categories.items():
-            self.dashboard['tabs'].append({
-                'title': category,
-                'sensors': [self.create_sensor_widget(sensor) for sensor in sensors],
-            })
-
-    def create_sensor_widget(self, sensor):
-        return {
-            'id': sensor['id'],
-            'type': sensor['type'],
-            'editable': True,
-            'name': sensor['name'],
-            'control': {
-                'min': sensor.get('min', 0),
-                'max': sensor.get('max', 100),
-                'unit_of_measure': sensor.get('unit', 'N/A'),
-            }
-        }
+    # Use regex to find all SENSOR_DEFINITIONS
+    sensor_definitions = re.findall(r'SENSOR_DEFINITION\s*:\s*\{(.*?)\}', content, re.DOTALL)
+    return sensor_definitions
 
 if __name__ == '__main__':
-    generator = DashboardGenerator()
-    print(generator.generate_dashboard())
+    # Specify the path to the sensor.py file
+    sensor_file_path = 'path/to/sensor.py'  # Update this path accordingly
+    sensor_definitions = extract_sensor_definitions(sensor_file_path)
+
+    # Print or further process the extracted sensor definitions
+    for definition in sensor_definitions:
+        print(definition)
