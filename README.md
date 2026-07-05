@@ -177,6 +177,12 @@ Die Integration liefert nur lesbare Sensoren. Um Sollwerte (Raumtemperatur, Heiz
 
 Beide Dateien enthalten ausführliche Kommentare zur Einrichtung. **Achtung**: Diese Automatisierungen greifen unmittelbar in den laufenden Heizungsbetrieb ein – nach dem Einrichten zunächst mit einem unkritischen Wert testen.
 
+### Langzeitstatistik
+
+Sensoren mit numerischem Wert haben bereits die passende `state_class` (measurement bzw. total_increasing), wodurch Home Assistant automatisch **Langzeitstatistiken** führt (im Gegensatz zur normalen Historie verfallen diese nicht nach ein paar Tagen). Für echte Langzeit-Trends (z.B. Temperaturverlauf über Monate, oder Brennerstarts pro Tag zur Kurztakt-Analyse) nutzt `dashboard_example.yaml` dafür `statistics-graph`-Karten statt `history-graph`.
+
+⚠️ **Wichtig bei einem Update von Version < 0.4.0**: Diese Version hat das `unique_id`-Schema der Sensoren geändert (siehe Changelog), wodurch sich auch die Entity-IDs ändern. Das **unterbricht die Kontinuität bereits gesammelter Langzeitstatistiken** – die alten Sensoren behalten ihre Historie, werden aber nicht mehr aktualisiert; die neuen Sensoren starten bei null. Um die Historie zu erhalten, kannst du nach dem Update die alte, verwaiste Entity löschen und die neue Entity in **Einstellungen → Entitäten → [Entity] → Einstellungen → Entity-ID** auf die alte ID umbenennen – Home Assistant führt die Statistik dann unter derselben Statistik-ID (die am Entity-ID-String hängt) nahtlos weiter.
+
 ## 🔧 Erweiterte Konfiguration
 
 ### Update-Intervall
