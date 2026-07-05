@@ -784,6 +784,7 @@ async def async_setup_entry(
                 sensor_key=sensor_key,
                 sensor_config=sensor_config,
                 device_name=f"ÖkOfen {config_entry.data[CONF_HOST]}",
+                entry_id=config_entry.entry_id,
             )
         )
     
@@ -827,25 +828,29 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
         sensor_key: str,
         sensor_config: Dict[str, Any],
         device_name: str,
+        entry_id: str,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        
+
         self._sensor_key = sensor_key
         self._sensor_config = sensor_config
         self._device_name = device_name
-        
-        # Entity properties - will use shortText from API if available
-        self._attr_unique_id = f"oekofen_{sensor_key}"
+
+        # Entity properties - will use shortText from API if available.
+        # unique_id is scoped to the config entry so that multiple ÖkOfen
+        # devices configured in the same HA instance don't collide.
+        self._attr_unique_id = f"{entry_id}_{sensor_key}"
         self._attr_device_class = sensor_config.get("device_class")
         self._attr_state_class = sensor_config.get("state_class")
         self._attr_native_unit_of_measurement = sensor_config.get("unit")
         self._attr_icon = sensor_config.get("icon")
         self._fallback_name = sensor_config["name"]
-        
-        # Device info
+
+        # Device info - identifiers use the stable config entry id so the
+        # device registry entry survives a host/IP change.
         self._attr_device_info = {
-            "identifiers": {("oekofen", device_name)},
+            "identifiers": {("oekofen", entry_id)},
             "name": device_name,
             "manufacturer": "ÖkOfen",
             "model": "Pellematic",

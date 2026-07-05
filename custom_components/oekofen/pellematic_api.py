@@ -16,6 +16,7 @@ DATA REQUESTS (POST to /?action=get&attr=1):
 - Must include session cookie from login
 - X-Requested-With: XMLHttpRequest header required
 """
+import asyncio
 import logging
 import json
 import aiohttp
@@ -35,7 +36,8 @@ class PellematicAPI:
         self.language = language
         self._session: Optional[aiohttp.ClientSession] = None
         self._authenticated = False
-        
+        self._auth_lock = asyncio.Lock()
+
         # Core parameters for monitoring (based on successful testing)
         self.core_parameters = [
             "CAPPL:LOCAL.L_aussentemperatur_ist",           # Outside temperature
@@ -63,6 +65,19 @@ class PellematicAPI:
     async def authenticate(self) -> bool:
         """
         Authenticate with the ÖkOfen device.
+
+        Guarded by a lock so that concurrent callers (e.g. the polling
+        coordinator and a service call happening at the same time after the
+        session expired) don't trigger multiple simultaneous logins.
+        """
+        async with self._auth_lock:
+            if self._authenticated:
+                return True
+            return await self._do_authenticate()
+
+    async def _do_authenticate(self) -> bool:
+        """
+        Perform the actual login request.
         FIXED: Uses form-encoded data for login (like successful curl test).
         """
         session = await self._get_session()
@@ -191,25 +206,41 @@ class PellematicAPI:
                     _LOGGER.debug(f"Data request response status: {response.status}")
                     
                     if response.status == 200:
-                        response_data = await response.json()
-                        
+                        try:
+                            response_data = await response.json(content_type=None)
+                        except (json.JSONDecodeError, aiohttp.ContentTypeError):
+                            response_data = None
+
+                        if not isinstance(response_data, list):
+                            # The device answers HTTP 200 with the login page
+                            # (HTML) instead of JSON when the session has
+                            # expired - treat this the same as a 401.
+                            _LOGGER.warning(
+                                "Received non-JSON/unexpected response, "
+                                "session likely expired - re-authenticating"
+                            )
+                            self._authenticated = False
+                            if await self.authenticate():
+                                return await self.get_data(parameters)
+                            else:
+                                raise Exception("Re-authentication failed")
+
                         # Parse response into dictionary - keep ALL fields from response
                         result = {}
-                        if isinstance(response_data, list):
-                            for item in response_data:
-                                if isinstance(item, dict) and 'name' in item:
-                                    # Store all fields from the response
-                                    result[item['name']] = {
-                                        'value': item.get('value'),
-                                        'status': item.get('status', 'OK'),
-                                        'divisor': item.get('divisor', ''),
-                                        'formatTexts': item.get('formatTexts', ''),
-                                        'shortText': item.get('shortText', ''),
-                                        'unitText': item.get('unitText', ''),
-                                        'lowerLimit': item.get('lowerLimit', ''),
-                                        'upperLimit': item.get('upperLimit', ''),
-                                    }
-                        
+                        for item in response_data:
+                            if isinstance(item, dict) and 'name' in item:
+                                # Store all fields from the response
+                                result[item['name']] = {
+                                    'value': item.get('value'),
+                                    'status': item.get('status', 'OK'),
+                                    'divisor': item.get('divisor', ''),
+                                    'formatTexts': item.get('formatTexts', ''),
+                                    'shortText': item.get('shortText', ''),
+                                    'unitText': item.get('unitText', ''),
+                                    'lowerLimit': item.get('lowerLimit', ''),
+                                    'upperLimit': item.get('upperLimit', ''),
+                                }
+
                         _LOGGER.debug(f"Successfully retrieved {len(result)} parameters")
                         return result
                     
@@ -307,9 +338,19 @@ class PellematicAPI:
                                 raise Exception("Unexpected response format")
                                 
                         except json.JSONDecodeError as e:
-                            _LOGGER.error(f"Failed to parse set response: {e}")
+                            # The device answers HTTP 200 with the login page
+                            # (HTML) instead of JSON when the session has
+                            # expired - treat this the same as a 401.
+                            _LOGGER.warning(
+                                f"Failed to parse set response, session likely "
+                                f"expired - re-authenticating: {e}"
+                            )
                             _LOGGER.debug(f"Response text: {response_text}")
-                            raise Exception("Invalid JSON response")
+                            self._authenticated = False
+                            if await self.authenticate():
+                                return await self.set_data(parameter, value, divisor)
+                            else:
+                                raise Exception("Re-authentication failed")
                     
                     elif response.status == 401:
                         # Re-authentication needed
