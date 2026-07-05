@@ -1,0 +1,131 @@
+# ÖkOfen Pellematic - Helfer für editierbare Dashboard-Werte
+#
+# Diese Integration liefert nur SENSOR-Entities (nur lesbar). Um Werte direkt
+# im Dashboard verändern zu können, braucht es zusätzliche "input_number" /
+# "input_select" Helfer, die über Automatisierungen mit dem Gerät
+# synchronisiert werden (siehe automations_example.yaml).
+#
+# Du kannst diese Helfer entweder:
+#   a) über die UI anlegen (Einstellungen → Geräte & Dienste → Helfer →
+#      Helfer erstellen), mit den unten stehenden Werten für Min/Max/Step, oder
+#   b) diese Datei als "helpers.yaml" einbinden und in der configuration.yaml
+#      mit "input_number: !include helpers.yaml" bzw. per Package einbinden.
+#
+# Die Min/Max/Step-Werte unten stammen von einem realen Pellematic-System als
+# Beispiel (lower_limit/upper_limit/divisor aus den Sensor-Attributen) -
+# prüfe bei dir in Entwicklertools → Zustand die Attribute deiner
+# entsprechenden Sensoren (parameter/divisor/lower_limit/upper_limit), falls
+# deine Werte abweichen.
+
+input_number:
+  okofen_raumtemperatur_heizen:
+    name: ÖkOfen Raumtemperatur Heizen
+    min: 5
+    max: 40
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermostat
+
+  okofen_absenktemp_soll:
+    name: ÖkOfen Raumtemperatur Absenken
+    min: 10
+    max: 40
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-low
+
+  okofen_wassertemp_soll:
+    name: ÖkOfen Warmwassertemperatur Soll
+    min: 0
+    max: 80
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:water-thermometer
+
+  okofen_heizkurve:
+    name: ÖkOfen Heizkurve
+    min: 0
+    max: 4
+    step: 0.1
+    icon: mdi:chart-line
+
+  okofen_fusspunkt:
+    name: ÖkOfen Fußpunkt
+    min: 20
+    max: 45
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:chart-line-variant
+
+  okofen_heizgrenze_heizen:
+    name: ÖkOfen Heizgrenze Heizen
+    min: -40
+    max: 60
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-alert
+
+  okofen_heizgrenze_absenken:
+    name: ÖkOfen Heizgrenze Absenken
+    min: -40
+    max: 60
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-alert
+
+  okofen_vorlauf_max:
+    name: ÖkOfen Vorlauf Max
+    min: 0
+    max: 80
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-chevron-up
+
+  okofen_vorlauf_min:
+    name: ÖkOfen Vorlauf Min
+    min: 0
+    max: 80
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-chevron-down
+
+  # Achtung: Hysterese/Überhöhung/Nachlaufzeit gehören zum Warmwasser-Kreis
+  # (ww[0]), nicht zum allgemeinen Kesselbetrieb!
+  okofen_hysterese_ww:
+    name: ÖkOfen Hysterese Warmwasser
+    min: 0
+    max: 25
+    step: 0.5
+    unit_of_measurement: "K"
+    icon: mdi:sine-wave
+
+  okofen_ueberhohung_ww:
+    name: ÖkOfen Überhöhung Warmwasser
+    min: 0
+    max: 20
+    step: 0.5
+    unit_of_measurement: "K"
+    icon: mdi:altimeter
+
+  okofen_nachlaufzeit_ww:
+    name: ÖkOfen Nachlaufzeit Warmwasser
+    min: 0
+    max: 60
+    step: 1
+    unit_of_measurement: "min"
+    icon: mdi:timer
+
+input_select:
+  okofen_zeitprogramm_heizkreis:
+    name: ÖkOfen Zeitprogramm Heizkreis
+    options:
+      - "Zeit 1"
+      - "Zeit 2"
+    icon: mdi:clock-time-eight
+
+  okofen_zeitprogramm_warmwasser:
+    name: ÖkOfen Zeitprogramm Warmwasser
+    options:
+      - "Zeit 1"
+      - "Zeit 2"
+    icon: mdi:clock-time-eight

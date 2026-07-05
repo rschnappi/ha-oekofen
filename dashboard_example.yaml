@@ -1,6 +1,21 @@
 # ÖkOfen Pellematic Dashboard
 # Copy this to your Home Assistant dashboards
 # or create a new dashboard and paste this YAML
+#
+# WICHTIG ZU DEN ENTITY-IDs:
+# Die Integration übernimmt Sensor-Namen und Einheiten direkt vom Gerät
+# (shortText/unitText aus der API), in der Sprache, die du beim Einrichten
+# gewählt hast. Home Assistant leitet die Entity-ID daraus automatisch ab.
+# Das bedeutet: Die tatsächlichen Entity-IDs sind NICHT z.B. "sensor.okofen_system_mode",
+# sondern hängen von Host/Gerätename und der Gerätesprache ab, z.B.
+# "sensor.okofen_192_168_1_50_betriebsart" oder "sensor.okofen_192_168_1_50_kesseltemperatur".
+#
+# So findest du deine echten Entity-IDs:
+#   Einstellungen → Geräte & Dienste → Entitäten → nach "okofen" suchen
+#
+# In dieser Vorlage steht überall der Platzhalter DEINHOST für den
+# host-abhängigen Teil der Entity-ID. Ersetze ihn (z.B. per Suchen & Ersetzen)
+# durch das, was du in deiner Entitätenliste tatsächlich siehst.
 
 title: ÖkOfen Heizung
 views:
@@ -14,27 +29,23 @@ views:
           - type: markdown
             content: |
               ## 🔧 Betriebsarten
-          
+
           - type: entities
             entities:
-              - entity: sensor.okofen_system_mode
+              - entity: sensor.okofen_DEINHOST_betriebsart
                 name: Anlage
-                secondary_info: last-changed
-              - entity: sensor.okofen_hk1_mode
-                name: Heizkreis 1
-                secondary_info: last-changed
-              - entity: sensor.okofen_ww1_mode
+              - entity: sensor.okofen_DEINHOST_heizkreis_betriebsart
+                name: Heizkreis
+              - entity: sensor.okofen_DEINHOST_betriebsart_2
                 name: Warmwasser
-                secondary_info: last-changed
-              - entity: sensor.okofen_pellematic_mode
-                name: Pellematic
-                secondary_info: last-changed
-          
+              - entity: sensor.okofen_DEINHOST_betriebsart_fa
+                name: Pellematic (Kessel)
+
           # Services zum Ändern der Modi
           - type: horizontal-stack
             cards:
               - type: button
-                name: Anlage Modus
+                name: Anlage Auto
                 icon: mdi:cog-outline
                 tap_action:
                   action: call-service
@@ -42,7 +53,7 @@ views:
                   service_data:
                     mode: auto
               - type: button
-                name: Heizung Modus
+                name: Heizung Auto
                 icon: mdi:radiator
                 tap_action:
                   action: call-service
@@ -51,13 +62,22 @@ views:
                     circuit: 0
                     mode: auto
               - type: button
-                name: Warmwasser Modus
+                name: Warmwasser Auto
                 icon: mdi:water-boiler
                 tap_action:
                   action: call-service
                   service: oekofen.set_hot_water_mode
                   service_data:
                     circuit: 0
+                    mode: auto
+              - type: button
+                name: Kessel Auto
+                icon: mdi:fire
+                tap_action:
+                  action: call-service
+                  service: oekofen.set_pellematic_mode
+                  service_data:
+                    unit: 0
                     mode: auto
 
       # Allgemein (General)
@@ -66,327 +86,335 @@ views:
           - type: markdown
             content: |
               ## 🌡️ Allgemein
-          
+
           - type: entities
             entities:
-              - entity: sensor.okofen_outside_temperature
+              - entity: sensor.okofen_DEINHOST_aussentemp_ist
                 name: Außentemperatur
-                icon: mdi:thermometer
-              - entity: sensor.okofen_software_version
+              - entity: sensor.okofen_DEINHOST_software_version
                 name: Software Version
-                icon: mdi:information
+              - entity: update.ofen_integration_update
+                name: Integration Update
+
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ## 📊 Kessel & Heizkreis auf einen Blick
+          - type: glance
+            entities:
+              - entity: sensor.okofen_DEINHOST_kesselstatus
+                name: Kessel
+              - entity: sensor.okofen_DEINHOST_kesseltemperatur
+                name: Kessel °C
+              - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
+                name: Raum °C
+              - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
+                name: Vorlauf °C
 
   - title: Pellematic
     path: pellematic
     icon: mdi:fire
     cards:
-      # Pellematic Status
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
-              ## 🔥 Pellematic Kessel
-          
+              ## 🔥 Kessel
           - type: glance
             entities:
-              - entity: sensor.okofen_boiler_status
+              - entity: sensor.okofen_DEINHOST_kesselstatus
                 name: Status
-              - entity: sensor.okofen_pellematic_mode
+              - entity: sensor.okofen_DEINHOST_betriebsart_fa
                 name: Betriebsart
-              - entity: sensor.okofen_boiler_temperature
-                name: Kessel Temp
-              - entity: sensor.okofen_boiler_target_temperature
-                name: Kessel Soll
-          
+              - entity: sensor.okofen_DEINHOST_kesseltemperatur
+                name: Temp
+              - entity: sensor.okofen_DEINHOST_kesselsolltemperatur
+                name: Soll
           - type: entities
             entities:
-              - entity: sensor.okofen_boiler_temperature
+              - entity: sensor.okofen_DEINHOST_kesseltemperatur
                 name: Kesseltemperatur
                 icon: mdi:thermometer-high
-              - entity: sensor.okofen_boiler_target_temperature
+              - entity: sensor.okofen_DEINHOST_kesselsolltemperatur
                 name: Kesseltemperatur Soll
                 icon: mdi:thermometer-high
-              - entity: sensor.okofen_exhaust_temperature
+              - entity: sensor.okofen_DEINHOST_abgastemperatur
                 name: Abgastemperatur
                 icon: mdi:thermometer-chevron-up
-              - entity: sensor.okofen_firebox_temperature
+              - entity: sensor.okofen_DEINHOST_feuerraumtemperatur
                 name: Feuerraumtemperatur
                 icon: mdi:fire
-              - entity: sensor.okofen_firebox_target_temperature
+              - entity: sensor.okofen_DEINHOST_feuerraumtemperatur_soll
                 name: Feuerraum Soll
                 icon: mdi:fire
+              - entity: sensor.okofen_DEINHOST_unterdruck
+                name: Unterdruck
+                icon: mdi:gauge
+              - entity: sensor.okofen_DEINHOST_lufterdrehzahl
+                name: Lüfterdrehzahl
+                icon: mdi:fan
+              - entity: sensor.okofen_DEINHOST_abgasgeblasedrehzahl
+                name: Abgasgebläsedrehzahl
+                icon: mdi:fan
+              - entity: sensor.okofen_DEINHOST_drehzahl_umwalzpumpe
+                name: Drehzahl Umwälzpumpe
+                icon: mdi:pump
+              - entity: sensor.okofen_DEINHOST_brenneranforderung
+                name: Brenneranforderung
+                icon: mdi:fire-alert
 
       # Pellet System
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
-              ## 🌾 Pellet System
-          
+              ## 🌾 Pellet-System & Förderung
           - type: entities
             entities:
-              - entity: sensor.okofen_pellet_consumption_today
-                name: Verbrauch Heute
-                icon: mdi:counter
-              - entity: sensor.okofen_pellet_consumption_yesterday
-                name: Verbrauch Gestern
-                icon: mdi:counter
-              - entity: sensor.okofen_pellet_consumption_total
-                name: Gesamtverbrauch
-                icon: mdi:counter
-              - entity: sensor.okofen_pellet_stock
-                name: Pelletvorrat
+              - entity: sensor.okofen_DEINHOST_pelletsfullstand
+                name: Pelletsfüllstand
                 icon: mdi:sack
-              - entity: sensor.okofen_ash_box_full
-                name: Aschelade voll
-                icon: mdi:delete-alert
-              - entity: sensor.okofen_auger_motor
-                name: Schneckenmotor
-                icon: mdi:engine
-              - entity: sensor.okofen_fan_speed
-                name: Saugzuggebläse
-                icon: mdi:fan
+              - entity: sensor.okofen_DEINHOST_aktueller_fullstand
+                name: Aktueller Füllstand
+                icon: mdi:gauge
+              - entity: sensor.okofen_DEINHOST_fullstand_zwischenbehalter
+                name: Füllstand Zwischenbehälter
+                icon: mdi:gauge
+              - entity: sensor.okofen_DEINHOST_drehzahl_schnecke_aschebox
+                name: Drehzahl Schnecke Aschebox
+                icon: mdi:cog-clockwise
+              - entity: sensor.okofen_DEINHOST_saugintervall
+                name: Saugintervall
+                icon: mdi:timer-sand
 
       # Störungen
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
-              ## ⚠️ Status & Störungen
-          
+              ## ⚠️ Störungen
           - type: entities
             entities:
-              - entity: sensor.okofen_fault_number
-                name: Störungsnummer
+              - entity: sensor.okofen_DEINHOST_stormelderelais
+                name: Störmelderelais
                 icon: mdi:alert-circle
-              - entity: sensor.okofen_fault_message
-                name: Störungsmeldung
-                icon: mdi:message-alert
 
   - title: Heizkreis
-    path: heating
+    path: heizkreis
     icon: mdi:radiator
     cards:
-      # Heizkreis 1
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
               ## 🏠 Heizkreis 1
-          
           - type: glance
             entities:
-              - entity: sensor.okofen_hk1_mode
+              - entity: sensor.okofen_DEINHOST_heizkreis_betriebsart
                 name: Modus
-              - entity: sensor.okofen_hk1_room_temperature
-                name: Raum Temp
-              - entity: sensor.okofen_hk1_flow_temperature
-                name: Vorlauf Temp
-              - entity: sensor.okofen_hk1_pump
+              - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
+                name: Raum
+              - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
+                name: Vorlauf
+              - entity: sensor.okofen_DEINHOST_pumpe
                 name: Pumpe
-          
           - type: entities
             entities:
-              - entity: sensor.okofen_hk1_room_temperature
+              - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
                 name: Raumtemperatur
                 icon: mdi:home-thermometer
-              - entity: sensor.okofen_hk1_flow_temperature
+              - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
                 name: Vorlauftemperatur
                 icon: mdi:thermometer-lines
-              - entity: sensor.okofen_hk1_flow_target_temperature
-                name: Vorlauf Soll
-                icon: mdi:thermometer-lines
-              - entity: sensor.okofen_hk1_pump
+              - entity: sensor.okofen_DEINHOST_pumpe
                 name: Heizkreispumpe
                 icon: mdi:pump
+              # Zeit1/2-Umschalter - siehe automations_example.yaml + helpers_example.yaml
+              - entity: input_select.okofen_zeitprogramm_heizkreis
+                name: Aktives Zeitprogramm
+                icon: mdi:clock-outline
 
-      # Einstellungen Heizkreis
+      # Einstellungen Heizkreis - editierbar über input_number-Helfer,
+      # siehe helpers_example.yaml und automations_example.yaml
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
               ## ⚙️ Einstellungen Heizkreis 1
-          
+              *Editierbare Felder - erfordern die Helfer/Automatisierungen aus
+              helpers_example.yaml und automations_example.yaml*
           - type: entities
             entities:
-              - entity: sensor.okofen_hk1_heating_temp
-                name: Raumtemperatur Heizen
+              - entity: input_number.okofen_raumtemperatur_heizen
+                name: Raumtemperatur Heizen (Soll)
                 icon: mdi:thermometer-high
-              - entity: sensor.okofen_hk1_lowering_temp
-                name: Raumtemperatur Absenken
+                mode: box
+              - entity: input_number.okofen_absenktemp_soll
+                name: Raumtemperatur Absenken (Soll)
                 icon: mdi:thermometer-low
-              - entity: sensor.okofen_hk1_heating_curve
+                mode: box
+              - entity: input_number.okofen_heizkurve
                 name: Heizkennlinie
                 icon: mdi:chart-line
-              - entity: sensor.okofen_hk1_heating_limit
-                name: Heizgrenze
+                mode: box
+              - entity: input_number.okofen_fusspunkt
+                name: Fußpunkt
+                icon: mdi:chart-line-variant
+                mode: box
+              - entity: input_number.okofen_heizgrenze_heizen
+                name: Heizgrenze Heizen
                 icon: mdi:thermometer-alert
-              - entity: sensor.okofen_hk1_active_time_program
-                name: Aktives Zeitprogramm
-                icon: mdi:clock-outline
+                mode: box
+              - entity: input_number.okofen_heizgrenze_absenken
+                name: Heizgrenze Absenken
+                icon: mdi:thermometer-alert
+                mode: box
+              - entity: input_number.okofen_vorlauf_max
+                name: Vorlauf Max
+                icon: mdi:thermometer-chevron-up
+                mode: box
+              - entity: input_number.okofen_vorlauf_min
+                name: Vorlauf Min
+                icon: mdi:thermometer-chevron-down
+                mode: box
 
   - title: Warmwasser
-    path: hot_water
+    path: warmwasser
     icon: mdi:water-boiler
     cards:
-      # Warmwasser Status
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
               ## 💧 Warmwasser
-          
           - type: glance
             entities:
-              - entity: sensor.okofen_ww1_mode
+              - entity: sensor.okofen_DEINHOST_betriebsart_2
                 name: Modus
-              - entity: sensor.okofen_ww1_temperature
-                name: Temperatur
-              - entity: sensor.okofen_ww1_target_temperature
-                name: Soll
-              - entity: sensor.okofen_ww1_pump
+              - entity: input_number.okofen_wassertemp_soll
+                name: Solltemp
+              - entity: sensor.okofen_DEINHOST_temp_soll
+                name: Aktuelles Ziel
+              - entity: sensor.okofen_DEINHOST_pumpe_2
                 name: Pumpe
-          
           - type: entities
             entities:
-              - entity: sensor.okofen_ww1_temperature
-                name: Wassertemperatur
-                icon: mdi:thermometer
-              - entity: sensor.okofen_ww1_target_temperature
+              # Editierbar, siehe helpers_example.yaml / automations_example.yaml
+              - entity: input_number.okofen_wassertemp_soll
                 name: Wassertemperatur Soll
                 icon: mdi:thermometer
-              - entity: sensor.okofen_ww1_pump
+                mode: box
+              - entity: sensor.okofen_DEINHOST_wassertemp_min
+                name: Wassertemperatur Min
+                icon: mdi:thermometer-low
+              - entity: sensor.okofen_DEINHOST_pumpe_2
                 name: Warmwasserpumpe
                 icon: mdi:pump
-
-      # Einstellungen Warmwasser
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## ⚙️ Einstellungen Warmwasser
-          
-          - type: entities
-            entities:
-              - entity: sensor.okofen_ww1_heating_temp
-                name: Solltemperatur Heizen
-                icon: mdi:thermometer-high
-              - entity: sensor.okofen_ww1_active_time_program
+              - entity: input_select.okofen_zeitprogramm_warmwasser
                 name: Aktives Zeitprogramm
                 icon: mdi:clock-outline
-              - entity: sensor.okofen_ww1_once_process
+              - entity: sensor.okofen_DEINHOST_einmal_aufbereiten
                 name: Einmal Aufbereiten
                 icon: mdi:water-boiler-auto
+              - entity: sensor.okofen_DEINHOST_legionellenschutz
+                name: Legionellenschutz
+                icon: mdi:shield-check
 
   - title: Puffer & Pumpen
-    path: buffer_pumps
+    path: puffer
     icon: mdi:water-pump
     cards:
-      # Pufferspeicher
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
               ## 🗄️ Pufferspeicher
-          
           - type: entities
             entities:
-              - entity: sensor.okofen_buffer_top_temperature
-                name: Puffer Oben
+              - entity: sensor.okofen_DEINHOST_einschaltfuhler_ist
+                name: Einschaltfühler (oben)
                 icon: mdi:thermometer-chevron-up
-              - entity: sensor.okofen_buffer_middle_temperature
-                name: Puffer Mitte
-                icon: mdi:thermometer
-              - entity: sensor.okofen_buffer_bottom_temperature
-                name: Puffer Unten
+              - entity: sensor.okofen_DEINHOST_ausschaltfuhler_ist
+                name: Ausschaltfühler (unten)
                 icon: mdi:thermometer-chevron-down
-              - entity: sensor.okofen_buffer_pump_top
-                name: Pufferpumpe Oben
-                icon: mdi:pump
-              - entity: sensor.okofen_buffer_pump_bottom
-                name: Pufferpumpe Unten
-                icon: mdi:pump
+              # Editierbar - gehören zum Warmwasser-Kreis (ww[0]), nicht zum
+              # allgemeinen Kesselbetrieb! Siehe helpers_example.yaml
+              - entity: input_number.okofen_ueberhohung_ww
+                name: Überhöhung (Warmwasser)
+                icon: mdi:altimeter
+                mode: box
+              - entity: input_number.okofen_nachlaufzeit_ww
+                name: Nachlaufzeit (Warmwasser)
+                icon: mdi:timer-outline
+                mode: box
+              - entity: input_number.okofen_hysterese_ww
+                name: Hysterese (Warmwasser)
+                icon: mdi:sine-wave
+                mode: box
 
-      # Zubringerpumpe
+      # Zubringer-/Pufferpumpen
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
-              ## 🔄 Zubringerpumpe
-          
+              ## 🔄 Pumpen
+              *Hinweis: Das Gerät liefert für mehrere Pumpen denselben Namen
+              "Pumpe" - welche Entity zu welchem Kreis gehört, musst du bei dir
+              über Entity-ID-Nummerierung (pumpe, pumpe_2, pumpe_3, ...) und
+              Beobachtung zuordnen.*
           - type: entities
             entities:
-              - entity: sensor.okofen_supply_pump_mode
-                name: Modus
-                icon: mdi:cog
-              - entity: sensor.okofen_supply_pump_state
-                name: Status
+              - entity: sensor.okofen_DEINHOST_pumpe
+                name: Pumpe 1
+                icon: mdi:pump
+              - entity: sensor.okofen_DEINHOST_pumpe_2
+                name: Pumpe 2
+                icon: mdi:pump
+              - entity: sensor.okofen_DEINHOST_pumpe_3
+                name: Pumpe 3
+                icon: mdi:pump
+              - entity: sensor.okofen_DEINHOST_pumpe_4
+                name: Pumpe 4
                 icon: mdi:pump
 
-  - title: Statistiken
-    path: statistics
+  - title: Statistik
+    path: statistik
     icon: mdi:chart-line
     cards:
-      # Betriebsstunden
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
-              ## ⏱️ Betriebsstunden
-          
+              ## ⏱️ Betriebsstunden & Zyklen
           - type: entities
             entities:
-              - entity: sensor.okofen_operating_hours_total
-                name: Gesamt
+              - entity: sensor.okofen_DEINHOST_brennerlaufzeit
+                name: Brennerlaufzeit gesamt
                 icon: mdi:clock-outline
-              - entity: sensor.okofen_operating_hours_heating
-                name: Heizen
-                icon: mdi:radiator
-              - entity: sensor.okofen_operating_hours_hot_water
-                name: Warmwasser
-                icon: mdi:water-boiler
-
-      # Starts & Zyklen
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🔄 Starts & Zyklen
-          
-          - type: entities
-            entities:
-              - entity: sensor.okofen_starts_total
-                name: Starts Gesamt
+              - entity: sensor.okofen_DEINHOST_mitllere_brennerlaufzeit
+                name: Mittlere Brennerlaufzeit
+                icon: mdi:clock-outline
+              - entity: sensor.okofen_DEINHOST_stillstandszeit
+                name: Stillstandszeit
+                icon: mdi:clock-alert-outline
+              - entity: sensor.okofen_DEINHOST_brennerstarts
+                name: Brennerstarts
                 icon: mdi:restart
-              - entity: sensor.okofen_starts_unsuccessful
-                name: Starts Erfolglos
-                icon: mdi:alert-circle
-              - entity: sensor.okofen_cleaning_cycles
-                name: Reinigungszyklen
-                icon: mdi:broom
+              - entity: sensor.okofen_DEINHOST_anzahl_zuendungen
+                name: Anzahl Zündungen
+                icon: mdi:fire
 
-      # Pellet Verbrauch Trend
-      - type: history-graph
-        title: Pelletverbrauch Verlauf
-        hours_to_show: 168
-        refresh_interval: 300
-        entities:
-          - entity: sensor.okofen_pellet_consumption_today
-            name: Tagesverbrauch
-          - entity: sensor.okofen_pellet_consumption_total
-            name: Gesamtverbrauch
-
-      # Temperatur Verlauf
       - type: history-graph
         title: Temperaturverlauf
         hours_to_show: 24
         refresh_interval: 60
         entities:
-          - entity: sensor.okofen_outside_temperature
-            name: Außen
-          - entity: sensor.okofen_hk1_room_temperature
+          - entity: sensor.okofen_DEINHOST_aussentemp_ist
+            name: Außentemperatur
+          - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
             name: Raum
-          - entity: sensor.okofen_hk1_flow_temperature
+          - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
             name: Vorlauf
-          - entity: sensor.okofen_boiler_temperature
+          - entity: sensor.okofen_DEINHOST_kesseltemperatur
             name: Kessel
