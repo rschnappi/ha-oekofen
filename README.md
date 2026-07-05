@@ -2,7 +2,7 @@
 
 Eine custom Home Assistant Integration für ÖkOfen Pellematic Heizsysteme, die auf umfangreichen Tests und Analysen basiert.
 
-## 🔥 Version 0.3.0 - Mit Sprachunterstützung und Services
+## 🔥 Version 0.4.0 - Mit Sprachunterstützung und Services
 
 Diese Integration bietet vollständige Kontrolle über Ihr ÖkOfen Heizsystem mit über 80 Sensoren, Services zum Ändern der Betriebsarten und mehrsprachiger Unterstützung.
 
@@ -242,6 +242,13 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.4.0
+- ⚠️ **Breaking**: `unique_id` der Sensoren ist jetzt pro Config-Entry eindeutig (`<entry_id>_<sensor_key>` statt `oekofen_<sensor_key>`), damit mehrere ÖkOfen-Geräte in derselben Home-Assistant-Instanz nicht kollidieren. Nach dem Update legt Home Assistant die Entities neu an; alte, verwaiste Entities können unter **Einstellungen → Geräte & Dienste → Entitäten** entfernt werden, falls nötig.
+- ✅ Geräte-Identität (Device Registry) verwendet jetzt die stabile Config-Entry-ID statt der Host/IP-Adresse, damit ein IP-Wechsel keinen doppelten Geräteeintrag mehr erzeugt.
+- ✅ Login gegen Race Conditions abgesichert: gleichzeitige Anfragen (Polling + Service-Aufruf) lösen bei abgelaufener Session nicht mehr mehrere parallele Logins aus.
+- ✅ Robustere Erkennung abgelaufener Sessions: Antwortet das Gerät mit HTTP 200 und der Login-Seite (HTML) statt JSON, wird das jetzt wie eine abgelaufene Session behandelt (automatische Re-Authentifizierung) statt mit einem Fehler abzubrechen.
+- 🧹 Unfertige/kaputte `dashboard_generator.py`-Skripte entfernt.
+
 ### Version 0.0.1 (Neubeginn)
 - ✅ Komplette Neuentwicklung basierend auf gewonnenen Erkenntnissen
 - ✅ Korrekte Content-Type: application/json Header implementiert
@@ -275,6 +282,6 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.0.1  
+**Version**: 0.4.0  
 **Letzte Aktualisierung**: November 2025  
 **Status**: Stabil - Basierend auf umfangreichen Tests
