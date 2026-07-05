@@ -18,6 +18,7 @@
 # durch das, was du in deiner Entitätenliste tatsächlich siehst.
 
 title: ÖkOfen Heizung
+icon: mdi:pine-tree-fire
 views:
   - title: Übersicht
     path: overview
@@ -418,3 +419,50 @@ views:
             name: Vorlauf
           - entity: sensor.okofen_DEINHOST_kesseltemperatur
             name: Kessel
+
+      # Langzeitstatistik (nutzt Home Assistants Long-Term-Statistics-Tabelle,
+      # die - anders als history-graph oben - nicht nach ~10 Tagen verfällt).
+      # Voraussetzung: die Sensoren haben bereits die passende state_class
+      # (measurement/total_increasing) - das ist in dieser Integration
+      # bereits der Fall, siehe sensor.py.
+      - type: statistics-graph
+        title: Temperaturverlauf (Langzeit, 90 Tage)
+        period: day
+        days_to_show: 90
+        stat_types:
+          - mean
+          - min
+          - max
+        entities:
+          - entity: sensor.okofen_DEINHOST_aussentemp_ist
+            name: Außentemperatur
+          - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
+            name: Raum
+          - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
+            name: Vorlauf
+          - entity: sensor.okofen_DEINHOST_kesseltemperatur
+            name: Kessel
+
+      - type: statistics-graph
+        title: Brennerstarts & Zündungen pro Tag (Kurztakt-Trend)
+        period: day
+        days_to_show: 60
+        chart_type: bar
+        stat_types:
+          - change
+        entities:
+          - entity: sensor.okofen_DEINHOST_brennerstarts
+            name: Brennerstarts
+          - entity: sensor.okofen_DEINHOST_anzahl_zuendungen
+            name: Zündungen
+
+      - type: statistics-graph
+        title: Brennerlaufzeit pro Tag (Stunden)
+        period: day
+        days_to_show: 60
+        chart_type: bar
+        stat_types:
+          - change
+        entities:
+          - entity: sensor.okofen_DEINHOST_brennerlaufzeit
+            name: Laufzeit
