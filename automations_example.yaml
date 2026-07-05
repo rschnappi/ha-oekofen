@@ -1,0 +1,353 @@
+# ÖkOfen Pellematic - Automatisierungen für editierbare Dashboard-Werte
+#
+# Zusammen mit helpers_example.yaml ermöglichen diese Automatisierungen, die
+# sonst rein lesbaren Sensor-Werte über input_number/input_select-Helfer im
+# Dashboard zu verändern:
+#   - "Sync"-Automatisierungen übernehmen den aktuellen Gerätewert in den Helfer
+#   - "Push"-Automatisierungen senden Änderungen am Helfer per
+#     oekofen.set_parameter zurück ans Gerät
+#
+# WICHTIG:
+#   - Ersetze DEINHOST in den sensor.-Entity-IDs durch deinen tatsächlichen
+#     Entity-ID-Teil (siehe Hinweis in dashboard_example.yaml).
+#   - Die Parameter-Pfade (z.B. "CAPPL:LOCAL.hk[0].raumtemp_heizen") und
+#     Divisoren stammen von einem realen Pellematic-System. Prüfe bei dir in
+#     Entwicklertools → Zustand die Attribute "parameter" und "divisor" der
+#     jeweiligen Sensoren, falls dein Gerät andere Werte liefert.
+#   - Diese Automatisierungen greifen unmittelbar in den laufenden
+#     Heizungsbetrieb ein. Teste nach dem Einrichten zunächst mit einem
+#     unkritischen Wert (z.B. Raumtemperatur Heizen um 0,5°C ändern).
+#
+# Einbinden z.B. über configuration.yaml:
+#   automation: !include_dir_merge_list automations/
+# oder einzeln über die UI kopieren (Einstellungen → Automatisierungen →
+# Automatisierung erstellen → oben rechts "..." → In YAML bearbeiten).
+
+- alias: "ÖkOfen: Sollwerte zu Eingabefeldern synchronisieren"
+  description: >
+    Übernimmt aktuelle Werte vom ÖkOfen-Gerät in die editierbaren
+    input_number-Helfer, sobald sich der Gerätewert ändert.
+  trigger:
+    - platform: state
+      entity_id:
+        - sensor.okofen_DEINHOST_raumtemperatur_heizen
+        - sensor.okofen_DEINHOST_absenktemp_soll
+        - sensor.okofen_DEINHOST_wassertemp_soll
+        - sensor.okofen_DEINHOST_heizkurve
+        - sensor.okofen_DEINHOST_fusspunkt
+        - sensor.okofen_DEINHOST_heizgrenze_heizen
+        - sensor.okofen_DEINHOST_heizgrenze_absenken
+        - sensor.okofen_DEINHOST_vorlauf_max
+        - sensor.okofen_DEINHOST_vorlauf_min
+        - sensor.okofen_DEINHOST_hysterese
+        - sensor.okofen_DEINHOST_uberhohung
+        - sensor.okofen_DEINHOST_nachlaufzeit
+  condition:
+    - condition: template
+      value_template: "{{ trigger.to_state.state not in ['unknown', 'unavailable', None] }}"
+  action:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_raumtemperatur_heizen' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_raumtemperatur_heizen
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_absenktemp_soll' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_absenktemp_soll
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_wassertemp_soll' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_wassertemp_soll
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_heizkurve' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_heizkurve
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_fusspunkt' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_fusspunkt
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_heizgrenze_heizen' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_heizgrenze_heizen
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_heizgrenze_absenken' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_heizgrenze_absenken
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_vorlauf_max' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_vorlauf_max
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_vorlauf_min' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_vorlauf_min
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_hysterese' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_hysterese_ww
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_uberhohung' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_ueberhohung_ww
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_nachlaufzeit' }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.okofen_nachlaufzeit_ww
+              data:
+                value: "{{ trigger.to_state.state | float }}"
+  mode: queued
+
+- alias: "ÖkOfen: Eingabefelder ans Gerät senden"
+  description: >
+    Sendet Änderungen an den input_number-Helfern per oekofen.set_parameter
+    an das ÖkOfen-Gerät.
+  trigger:
+    - platform: state
+      entity_id:
+        - input_number.okofen_raumtemperatur_heizen
+        - input_number.okofen_absenktemp_soll
+        - input_number.okofen_wassertemp_soll
+        - input_number.okofen_heizkurve
+        - input_number.okofen_fusspunkt
+        - input_number.okofen_heizgrenze_heizen
+        - input_number.okofen_heizgrenze_absenken
+        - input_number.okofen_vorlauf_max
+        - input_number.okofen_vorlauf_min
+        - input_number.okofen_hysterese_ww
+        - input_number.okofen_ueberhohung_ww
+        - input_number.okofen_nachlaufzeit_ww
+  condition:
+    - condition: template
+      value_template: "{{ trigger.from_state is not none }}"
+  action:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_raumtemperatur_heizen' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].raumtemp_heizen"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_absenktemp_soll' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].raumtemp_absenken"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_wassertemp_soll' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.ww[0].temp_heizen"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_heizkurve' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].heizkurve_steigung"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_fusspunkt' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].heizkurve_fusspunkt"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_heizgrenze_heizen' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].heizgrenze_heizen"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_heizgrenze_absenken' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].heizgrenze_absenken"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_vorlauf_max' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].vorlauftemp_max"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_vorlauf_min' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].vorlauftemp_min"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_hysterese_ww' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.ww[0].hysterese"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_ueberhohung_ww' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.ww[0].ueberhoehung"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 10
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_number.okofen_nachlaufzeit_ww' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.ww[0].nachlaufzeit"
+                value: "{{ trigger.to_state.state }}"
+                divisor: 60000
+  mode: queued
+
+- alias: "ÖkOfen: Zeitprogramm-Auswahl synchronisieren"
+  description: >
+    Übernimmt das aktive Zeitprogramm (Zeit 1/2) vom Gerät in die
+    Auswahlfelder.
+  trigger:
+    - platform: state
+      entity_id:
+        - sensor.okofen_DEINHOST_aktives_zeitprogramm
+        - sensor.okofen_DEINHOST_aktives_zeitprogramm_2
+  action:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_aktives_zeitprogramm' }}"
+          sequence:
+            - service: input_select.select_option
+              target:
+                entity_id: input_select.okofen_zeitprogramm_heizkreis
+              data:
+                option: "{{ trigger.to_state.state | trim }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'sensor.okofen_DEINHOST_aktives_zeitprogramm_2' }}"
+          sequence:
+            - service: input_select.select_option
+              target:
+                entity_id: input_select.okofen_zeitprogramm_warmwasser
+              data:
+                option: "{{ trigger.to_state.state | trim }}"
+  mode: queued
+
+- alias: "ÖkOfen: Zeitprogramm-Auswahl ans Gerät senden"
+  description: "Schaltet Zeit 1/Zeit 2 für Heizkreis/Warmwasser am Gerät um."
+  trigger:
+    - platform: state
+      entity_id:
+        - input_select.okofen_zeitprogramm_heizkreis
+        - input_select.okofen_zeitprogramm_warmwasser
+  condition:
+    - condition: template
+      value_template: "{{ trigger.from_state is not none }}"
+  action:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_select.okofen_zeitprogramm_heizkreis' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.hk[0].aktives_zeitprogramm"
+                value: "{{ 0 if trigger.to_state.state == 'Zeit 1' else 1 }}"
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_select.okofen_zeitprogramm_warmwasser' }}"
+          sequence:
+            - service: oekofen.set_parameter
+              data:
+                parameter: "CAPPL:LOCAL.ww[0].aktives_zeitprogramm"
+                value: "{{ 0 if trigger.to_state.state == 'Zeit 1' else 1 }}"
+  mode: queued

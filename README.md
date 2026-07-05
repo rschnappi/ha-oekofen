@@ -153,18 +153,29 @@ data:
 
 Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashboard_example.yaml).
 
+⚠️ **Wichtig zu den Entity-IDs**: Diese Integration übernimmt Sensor-Namen direkt vom Gerät (in der Sprache, die du beim Einrichten gewählt hast), und Home Assistant leitet die Entity-ID daraus automatisch ab. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `sensor.okofen_192_168_1_50_betriebsart` statt eines festen Namens) und hängen von deinem Host und deiner Gerätesprache ab. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen", um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `DEINHOST` in der YAML-Datei entsprechend.
+
 ### Installation des Dashboards
 1. Gehen Sie zu **Einstellungen** → **Dashboards**
 2. Klicken Sie auf **+ Dashboard hinzufügen**
 3. Wählen Sie **Neue Ansicht aus YAML erstellen**
-4. Kopieren Sie den Inhalt aus `dashboard_example.yaml`
+4. Kopieren Sie den Inhalt aus `dashboard_example.yaml` und ersetzen Sie `DEINHOST` durch Ihre echten Entity-IDs
 5. Das Dashboard zeigt:
    - **Übersicht**: Betriebsarten und wichtigste Sensoren
    - **Pellematic**: Kessel, Pellets, Störungen
    - **Heizkreis**: Temperaturen und Einstellungen
    - **Warmwasser**: Status und Einstellungen
    - **Puffer & Pumpen**: Pufferspeicher und Pumpen
-   - **Statistiken**: Betriebsstunden, Verbrauch, Verlaufsgraphen
+   - **Statistik**: Betriebsstunden, Verbrauch, Verlaufsgraphen
+
+### Werte direkt im Dashboard verändern (optional)
+
+Die Integration liefert nur lesbare Sensoren. Um Sollwerte (Raumtemperatur, Heizkurve, Warmwassertemperatur, Zeitprogramm-Auswahl, …) direkt im Dashboard zu verändern, gibt es zwei zusätzliche Vorlagen:
+
+- [`helpers_example.yaml`](helpers_example.yaml) – `input_number`/`input_select`-Helfer, die im Dashboard editierbare Felder darstellen
+- [`automations_example.yaml`](automations_example.yaml) – Automatisierungen, die diese Helfer mit dem Gerät synchronisieren (lesen über den Sensor, schreiben über `oekofen.set_parameter`)
+
+Beide Dateien enthalten ausführliche Kommentare zur Einrichtung. **Achtung**: Diese Automatisierungen greifen unmittelbar in den laufenden Heizungsbetrieb ein – nach dem Einrichten zunächst mit einem unkritischen Wert testen.
 
 ## 🔧 Erweiterte Konfiguration
 
