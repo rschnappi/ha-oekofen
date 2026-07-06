@@ -1,11 +1,26 @@
 """Tests for the ÖkOfen Pellematic API client (session handling, auth, data I/O)."""
 import asyncio
+import importlib.util
+import pathlib
 
 import pytest
 from aioresponses import aioresponses
 from multidict import CIMultiDict
 
-from custom_components.oekofen.pellematic_api import PellematicAPI
+# Load pellematic_api.py directly by file path instead of via the
+# custom_components.oekofen package. pellematic_api.py itself has no
+# Home Assistant dependency, but importing it as a package submodule would
+# execute custom_components/oekofen/__init__.py first (Python always runs a
+# parent package's __init__.py on submodule import), which pulls in
+# voluptuous/homeassistant - dependencies these tests intentionally avoid.
+_MODULE_PATH = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "custom_components" / "oekofen" / "pellematic_api.py"
+)
+_spec = importlib.util.spec_from_file_location("pellematic_api", _MODULE_PATH)
+_pellematic_api = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_pellematic_api)
+PellematicAPI = _pellematic_api.PellematicAPI
 
 BASE_URL = "http://device.local"
 INDEX_URL = f"{BASE_URL}/index.cgi"

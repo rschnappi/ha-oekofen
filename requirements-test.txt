@@ -1,5 +1,7 @@
 pytest>=7.4
 pytest-asyncio>=0.21
-aiohttp>=3.8.0
+# aioresponses 0.7.9 (latest on PyPI) is incompatible with aiohttp>=3.10's
+# ClientResponse signature change - pin below that until aioresponses catches up.
+aiohttp>=3.8.0,<3.10
 aioresponses>=0.7.4
 async-timeout>=4.0
