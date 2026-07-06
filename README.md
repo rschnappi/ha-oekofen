@@ -233,6 +233,17 @@ logger:
 
 ## 🛠️ Entwicklung
 
+### Tests
+
+Es gibt automatisierte Tests für `pellematic_api.py` (Login, Session-Handling, Re-Authentifizierung), die bei jedem Push/PR per GitHub Actions laufen. Lokal ausführen:
+
+```bash
+pip install -r requirements-test.txt
+pytest tests/ -v
+```
+
+Die Tests brauchen kein Home Assistant und keine echte Verbindung zum Gerät (HTTP wird mit `aioresponses` gemockt).
+
 ### Getestete Konfiguration
 - **ÖkOfen Pellematic 2012** - Vollständig getestet
 - **Home Assistant 2024.x** - Kompatibel
