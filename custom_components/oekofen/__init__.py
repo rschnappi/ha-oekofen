@@ -6,12 +6,19 @@ from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platfor
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
+from .discovery import async_discover_circuits
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "oekofen"
-PLATFORMS = [Platform.SENSOR]
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SWITCH,
+    Platform.TIME,
+]
 
 # Service schemas
 SERVICE_SET_PARAMETER = "set_parameter"
@@ -70,10 +77,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error(f"Failed to connect to ÖkOfen device: {e}")
         return False
     
+    # Discover which heating circuits, hot-water circuits, circulation
+    # pumps and Pellematic units actually exist on this device, so the
+    # schedule/number/select platforms only create entities for hardware
+    # that is really there.
+    circuits = await async_discover_circuits(api)
+
     # Store API instance
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
+        "circuits": circuits,
     }
     
     # Set up platforms

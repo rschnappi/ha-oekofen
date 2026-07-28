@@ -1,0 +1,117 @@
+"""Switch platform for ÖkOfen weekly time-program day toggles."""
+import logging
+from typing import Any, Dict, Optional
+
+from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
+
+from .pellematic_api import PellematicAPI
+from .schedule_common import SCAN_INTERVAL, build_schedule_slots
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the weekday-active switches for a config entry."""
+    entry_data = hass.data["oekofen"][config_entry.entry_id]
+    api: PellematicAPI = entry_data["api"]
+    circuits = entry_data["circuits"]
+    slots = build_schedule_slots(circuits)
+
+    if not slots:
+        return
+
+    parameters = [f"{slot['base']}.block" for slot in slots]
+    coordinator = OekofenScheduleBlockCoordinator(hass, api, parameters)
+    await coordinator.async_config_entry_first_refresh()
+
+    device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
+    entities = [
+        OekofenDayActiveSwitch(coordinator, api, slot, config_entry.entry_id, device_name)
+        for slot in slots
+    ]
+    async_add_entities(entities)
+
+
+class OekofenScheduleBlockCoordinator(DataUpdateCoordinator):
+    """Coordinator polling the "block" (day-active) values."""
+
+    def __init__(self, hass: HomeAssistant, api: PellematicAPI, parameters: list) -> None:
+        self.api = api
+        self._parameters = parameters
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="ÖkOfen Zeitprogramm (Tage)",
+            update_interval=SCAN_INTERVAL,
+        )
+
+    async def _async_update_data(self) -> Dict[str, Any]:
+        try:
+            return await self.api.get_data(self._parameters)
+        except Exception as err:  # noqa: BLE001
+            raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}") from err
+
+
+class OekofenDayActiveSwitch(CoordinatorEntity, SwitchEntity):
+    """Enable/disable a weekday within an ÖkOfen weekly time program."""
+
+    _attr_icon = "mdi:calendar-clock"
+    _attr_has_entity_name = False
+
+    def __init__(
+        self,
+        coordinator: OekofenScheduleBlockCoordinator,
+        api: PellematicAPI,
+        slot: Dict[str, Any],
+        entry_id: str,
+        device_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self.api = api
+        self._slot = slot
+        self._parameter = f"{slot['base']}.block"
+        self._attr_unique_id = f"{entry_id}_{slot['key']}_active"
+        self._attr_name = f"{slot['label']} Aktiv"
+        self._attr_device_info = {
+            "identifiers": {("oekofen", entry_id)},
+            "name": device_name,
+            "manufacturer": "ÖkOfen",
+            "model": "Pellematic",
+        }
+
+    @property
+    def is_on(self) -> Optional[bool]:
+        data_point = self.coordinator.data.get(self._parameter)
+        if not data_point or data_point.get("value") in (None, ""):
+            return None
+        try:
+            return int(float(data_point["value"])) != -1
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Activate this weekday (block group 0 - matches how the device UI assigns a fresh day)."""
+        await self.api.set_data(self._parameter, 0)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Deactivate this weekday."""
+        await self.api.set_data(self._parameter, -1)
+        await self.coordinator.async_request_refresh()
