@@ -270,6 +270,26 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.6.0
+
+- ✅ **Party- und Urlaubsprogramm** pro Heizkreis als native Entities:
+  `switch.<heizkreis>_partyprogramm`, `datetime.<heizkreis>_party_endzeit`,
+  `switch.<heizkreis>_urlaubsprogramm`, `number.<heizkreis>_raumtemp_urlaub`,
+  `datetime.<heizkreis>_urlaub_start`, `datetime.<heizkreis>_urlaub_ende`.
+  Neue `datetime`-Plattform (`datetime.py` + `datetime_common.py`) rechnet
+  zwischen dem gerätespezifischen Zeitstempelformat (lokale Uhrzeit,
+  gespeichert als wäre sie UTC) und HA's zeitzonenbewussten Datetimes um.
+- ✅ **Warmwasser** zusätzlich editierbar: Überhöhung, Nachlaufzeit,
+  Einschalthysterese (`number.*`), Vorrang und Legionellenschutz (`select.*`).
+- ✅ **Pellematic** zusätzlich editierbar: Regeltemperatur, Abschalttemperatur,
+  Abgastemp-Minimum, Leistungsstufe (klassisch & Smart) (`number.*`).
+- ✅ **Heizkreis** zusätzlich editierbar: Raumtemperatur Urlaub (`number.*`).
+- 🧹 Alle neuen Entities sind namensbasiert (nicht host-abhängig) und
+  benötigen keine `input_number`/`input_select`-Helfer mehr - die
+  entsprechenden Abschnitte in `dashboard_example.yaml` wurden auf die
+  nativen Entities umgestellt. `helpers_example.yaml`/`automations_example.yaml`
+  bleiben nur noch für Felder relevant, die (noch) nicht nativ abgedeckt sind.
+
 ### Version 0.4.0
 - ⚠️ **Breaking**: `unique_id` der Sensoren ist jetzt pro Config-Entry eindeutig (`<entry_id>_<sensor_key>` statt `oekofen_<sensor_key>`), damit mehrere ÖkOfen-Geräte in derselben Home-Assistant-Instanz nicht kollidieren. Nach dem Update legt Home Assistant die Entities neu an; alte, verwaiste Entities können unter **Einstellungen → Geräte & Dienste → Entitäten** entfernt werden, falls nötig.
 - ✅ Geräte-Identität (Device Registry) verwendet jetzt die stabile Config-Entry-ID statt der Host/IP-Adresse, damit ein IP-Wechsel keinen doppelten Geräteeintrag mehr erzeugt.

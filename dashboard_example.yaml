@@ -189,6 +189,36 @@ views:
                 name: Saugintervall
                 icon: mdi:timer-sand
 
+      # Einstellungen - native number Entities seit v0.6.0. "Leistungsstufe"
+      # existiert je nach Kessel-Firmware nur unter einem der beiden
+      # Entity-Namen (klassisch vs. "Smart") - die jeweils nicht zutreffende
+      # bleibt "nicht verfügbar", das ist normal.
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ## ⚙️ Einstellungen
+          - type: entities
+            entities:
+              - entity: number.pellematic_1_regeltemperatur
+                name: Regeltemperatur
+                icon: mdi:thermometer
+              - entity: number.pellematic_1_abschalttemperatur
+                name: Abschalttemperatur
+                icon: mdi:thermometer-high
+              - entity: number.pellematic_1_abgastemp_minimum
+                name: Abgastemp Minimum
+                icon: mdi:thermometer-low
+              - entity: number.pellematic_1_leistungsstufe
+                name: Leistungsstufe
+                icon: mdi:fire
+              - entity: number.pellematic_1_leistungsstufe_smart
+                name: Leistungsstufe (Smart)
+                icon: mdi:fire
+              - entity: select.pellematic_1_betriebsart
+                name: Betriebsart
+                icon: mdi:fire
+
       # Störungen
       - type: vertical-stack
         cards:
@@ -236,49 +266,69 @@ views:
                 name: Aktives Zeitprogramm
                 icon: mdi:clock-outline
 
-      # Einstellungen Heizkreis - editierbar über input_number-Helfer,
-      # siehe helpers_example.yaml und automations_example.yaml
+      # Einstellungen Heizkreis - seit v0.6.0 native number/select Entities,
+      # keine input_number-Helfer/Automatisierungen mehr nötig. Entity-IDs
+      # sind namensbasiert (nicht host-abhängig) - prüfe unter Einstellungen →
+      # Geräte & Dienste → Entitäten → "heizkreis", falls Umlaute (ß, ü, ö)
+      # bei dir anders transliteriert werden als hier angenommen.
       - type: vertical-stack
         cards:
           - type: markdown
             content: |
               ## ⚙️ Einstellungen Heizkreis 1
-              *Editierbare Felder - erfordern die Helfer/Automatisierungen aus
-              helpers_example.yaml und automations_example.yaml*
           - type: entities
             entities:
-              - entity: input_number.okofen_raumtemperatur_heizen
+              - entity: number.heizkreis_1_raumtemp_heizen
                 name: Raumtemperatur Heizen (Soll)
                 icon: mdi:thermometer-high
-                mode: box
-              - entity: input_number.okofen_absenktemp_soll
+              - entity: number.heizkreis_1_raumtemp_absenken
                 name: Raumtemperatur Absenken (Soll)
                 icon: mdi:thermometer-low
-                mode: box
-              - entity: input_number.okofen_heizkurve
+              - entity: number.heizkreis_1_heizkurve_steigung
                 name: Heizkennlinie
                 icon: mdi:chart-line
-                mode: box
-              - entity: input_number.okofen_fusspunkt
+              - entity: number.heizkreis_1_heizkurve_fusspunkt
                 name: Fußpunkt
                 icon: mdi:chart-line-variant
-                mode: box
-              - entity: input_number.okofen_heizgrenze_heizen
+              - entity: number.heizkreis_1_heizgrenze_heizen
                 name: Heizgrenze Heizen
                 icon: mdi:thermometer-alert
-                mode: box
-              - entity: input_number.okofen_heizgrenze_absenken
+              - entity: number.heizkreis_1_heizgrenze_absenken
                 name: Heizgrenze Absenken
                 icon: mdi:thermometer-alert
-                mode: box
-              - entity: input_number.okofen_vorlauf_max
-                name: Vorlauf Max
-                icon: mdi:thermometer-chevron-up
-                mode: box
-              - entity: input_number.okofen_vorlauf_min
-                name: Vorlauf Min
-                icon: mdi:thermometer-chevron-down
-                mode: box
+              - entity: select.heizkreis_1_betriebsart
+                name: Betriebsart
+                icon: mdi:radiator
+              - entity: select.heizkreis_1_aktives_zeitprogramm
+                name: Aktives Zeitprogramm
+                icon: mdi:clock-outline
+
+      # Party- & Urlaubsprogramm - neu seit v0.6.0
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              ## 🎉 Party & 🛫 Urlaub
+          - type: entities
+            entities:
+              - entity: switch.heizkreis_1_partyprogramm
+                name: Partyprogramm aktiv
+                icon: mdi:party-popper
+              - entity: datetime.heizkreis_1_party_endzeit
+                name: Party Endzeit
+                icon: mdi:clock-end
+              - entity: switch.heizkreis_1_urlaubsprogramm
+                name: Urlaubsprogramm aktiv
+                icon: mdi:airplane
+              - entity: number.heizkreis_1_raumtemp_urlaub
+                name: Raumtemperatur Urlaub
+                icon: mdi:thermometer
+              - entity: datetime.heizkreis_1_urlaub_start
+                name: Urlaub Start
+                icon: mdi:airplane-takeoff
+              - entity: datetime.heizkreis_1_urlaub_ende
+                name: Urlaub Ende
+                icon: mdi:airplane-landing
 
   - title: Warmwasser
     path: warmwasser
@@ -293,7 +343,7 @@ views:
             entities:
               - entity: sensor.okofen_DEINHOST_betriebsart_2
                 name: Modus
-              - entity: input_number.okofen_wassertemp_soll
+              - entity: number.warmwasser_1_solltemperatur
                 name: Solltemp
               - entity: sensor.okofen_DEINHOST_temp_soll
                 name: Aktuelles Ziel
@@ -301,24 +351,30 @@ views:
                 name: Pumpe
           - type: entities
             entities:
-              # Editierbar, siehe helpers_example.yaml / automations_example.yaml
-              - entity: input_number.okofen_wassertemp_soll
+              # Native number/select Entities seit v0.6.0 - direkt editierbar,
+              # keine Helfer/Automatisierungen mehr nötig.
+              - entity: number.warmwasser_1_solltemperatur
                 name: Wassertemperatur Soll
                 icon: mdi:thermometer
-                mode: box
-              - entity: sensor.okofen_DEINHOST_wassertemp_min
+              - entity: number.warmwasser_1_minimaltemperatur
                 name: Wassertemperatur Min
                 icon: mdi:thermometer-low
               - entity: sensor.okofen_DEINHOST_pumpe_2
                 name: Warmwasserpumpe
                 icon: mdi:pump
-              - entity: input_select.okofen_zeitprogramm_warmwasser
+              - entity: select.warmwasser_1_betriebsart
+                name: Betriebsart
+                icon: mdi:water-boiler
+              - entity: select.warmwasser_1_aktives_zeitprogramm
                 name: Aktives Zeitprogramm
                 icon: mdi:clock-outline
               - entity: sensor.okofen_DEINHOST_einmal_aufbereiten
                 name: Einmal Aufbereiten
                 icon: mdi:water-boiler-auto
-              - entity: sensor.okofen_DEINHOST_legionellenschutz
+              - entity: select.warmwasser_1_vorrang
+                name: Vorrang
+                icon: mdi:priority-high
+              - entity: select.warmwasser_1_legionellenschutz
                 name: Legionellenschutz
                 icon: mdi:shield-check
 
@@ -339,20 +395,17 @@ views:
               - entity: sensor.okofen_DEINHOST_ausschaltfuhler_ist
                 name: Ausschaltfühler (unten)
                 icon: mdi:thermometer-chevron-down
-              # Editierbar - gehören zum Warmwasser-Kreis (ww[0]), nicht zum
-              # allgemeinen Kesselbetrieb! Siehe helpers_example.yaml
-              - entity: input_number.okofen_ueberhohung_ww
+              # Native number Entities seit v0.6.0 - gehören zum
+              # Warmwasser-Kreis (ww[0]), nicht zum allgemeinen Kesselbetrieb.
+              - entity: number.warmwasser_1_uberhohung
                 name: Überhöhung (Warmwasser)
                 icon: mdi:altimeter
-                mode: box
-              - entity: input_number.okofen_nachlaufzeit_ww
+              - entity: number.warmwasser_1_nachlaufzeit
                 name: Nachlaufzeit (Warmwasser)
                 icon: mdi:timer-outline
-                mode: box
-              - entity: input_number.okofen_hysterese_ww
+              - entity: number.warmwasser_1_einschalthysterese
                 name: Hysterese (Warmwasser)
                 icon: mdi:sine-wave
-                mode: box
 
       # Zubringer-/Pufferpumpen
       - type: vertical-stack
