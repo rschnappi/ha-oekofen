@@ -70,6 +70,18 @@ def build_select_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "icon": "mdi:calendar-clock",
             "fallback_options": ["Zeit 1", "Zeit 2"],
         }
+        defs[f"ww{idx}_vorrang"] = {
+            "parameter": f"{base}.prioritaet",
+            "name": f"{label} Vorrang",
+            "icon": "mdi:priority-high",
+            "fallback_options": ["Ein", "Aus"],
+        }
+        defs[f"ww{idx}_legionellenschutz"] = {
+            "parameter": f"{base}.legionellen_wochentag",
+            "name": f"{label} Legionellenschutz",
+            "icon": "mdi:shield-check",
+            "fallback_options": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So", "Aus"],
+        }
 
     for idx in circuits.get("zirkp", []):
         base = f"CAPPL:LOCAL.zirkp[{idx}]"

@@ -19,30 +19,60 @@ from .schedule_common import SCAN_INTERVAL, build_schedule_slots
 _LOGGER = logging.getLogger(__name__)
 
 
+def build_mode_switch_definitions(circuits: Dict[str, list]) -> Dict[str, Dict[str, Any]]:
+    """Build the Party-/Urlaubsprogramm on-off switch definitions."""
+    defs: Dict[str, Dict[str, Any]] = {}
+    for idx in circuits.get("hk", []):
+        base = f"CAPPL:LOCAL.hk[{idx}]"
+        label = f"Heizkreis {idx + 1}"
+        defs[f"hk{idx}_party_aktiviert"] = {
+            "parameter": f"{base}.partyprg_aktiviert",
+            "name": f"{label} Partyprogramm",
+            "icon": "mdi:party-popper",
+        }
+        defs[f"hk{idx}_urlaub_aktiviert"] = {
+            "parameter": f"{base}.urlaubsprg_aktiviert",
+            "name": f"{label} Urlaubsprogramm",
+            "icon": "mdi:airplane",
+        }
+    return defs
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the weekday-active switches for a config entry."""
+    """Set up the weekday-active switches plus Party-/Urlaubsprogramm switches."""
     entry_data = hass.data["oekofen"][config_entry.entry_id]
     api: PellematicAPI = entry_data["api"]
     circuits = entry_data["circuits"]
     slots = build_schedule_slots(circuits)
+    mode_defs = build_mode_switch_definitions(circuits)
 
-    if not slots:
-        return
-
-    parameters = [f"{slot['base']}.block" for slot in slots]
-    coordinator = OekofenScheduleBlockCoordinator(hass, api, parameters)
-    await coordinator.async_config_entry_first_refresh()
-
+    entities = []
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
-    entities = [
-        OekofenDayActiveSwitch(coordinator, api, slot, config_entry.entry_id, device_name)
-        for slot in slots
-    ]
-    async_add_entities(entities)
+
+    if slots:
+        parameters = [f"{slot['base']}.block" for slot in slots]
+        coordinator = OekofenScheduleBlockCoordinator(hass, api, parameters)
+        await coordinator.async_config_entry_first_refresh()
+        entities += [
+            OekofenDayActiveSwitch(coordinator, api, slot, config_entry.entry_id, device_name)
+            for slot in slots
+        ]
+
+    if mode_defs:
+        mode_parameters = [config["parameter"] for config in mode_defs.values()]
+        mode_coordinator = OekofenModeSwitchCoordinator(hass, api, mode_parameters)
+        await mode_coordinator.async_config_entry_first_refresh()
+        entities += [
+            OekofenModeSwitch(mode_coordinator, api, key, config, config_entry.entry_id, device_name)
+            for key, config in mode_defs.items()
+        ]
+
+    if entities:
+        async_add_entities(entities)
 
 
 class OekofenScheduleBlockCoordinator(DataUpdateCoordinator):
@@ -114,4 +144,72 @@ class OekofenDayActiveSwitch(CoordinatorEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Deactivate this weekday."""
         await self.api.set_data(self._parameter, -1)
+        await self.coordinator.async_request_refresh()
+
+
+class OekofenModeSwitchCoordinator(DataUpdateCoordinator):
+    """Coordinator polling the Party-/Urlaubsprogramm on-off values."""
+
+    def __init__(self, hass: HomeAssistant, api: PellematicAPI, parameters: list) -> None:
+        self.api = api
+        self._parameters = parameters
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="ÖkOfen Party/Urlaub Status",
+            update_interval=SCAN_INTERVAL,
+        )
+
+    async def _async_update_data(self) -> Dict[str, Any]:
+        try:
+            return await self.api.get_data(self._parameters)
+        except Exception as err:  # noqa: BLE001
+            raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}") from err
+
+
+class OekofenModeSwitch(CoordinatorEntity, SwitchEntity):
+    """Enable/disable ÖkOfen's Party- or Urlaubsprogramm for a heating circuit."""
+
+    def __init__(
+        self,
+        coordinator: OekofenModeSwitchCoordinator,
+        api: PellematicAPI,
+        key: str,
+        config: Dict[str, Any],
+        entry_id: str,
+        device_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self.api = api
+        self._parameter = config["parameter"]
+        self._attr_unique_id = f"{entry_id}_{key}"
+        self._attr_name = config["name"]
+        self._attr_icon = config.get("icon")
+        self._attr_device_info = {
+            "identifiers": {("oekofen", entry_id)},
+            "name": device_name,
+            "manufacturer": "ÖkOfen",
+            "model": "Pellematic",
+        }
+
+    @property
+    def is_on(self) -> Optional[bool]:
+        point = self.coordinator.data.get(self._parameter)
+        if not point or point.get("value") in (None, ""):
+            return None
+        try:
+            return int(float(point["value"])) == 1
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self.api.set_data(self._parameter, 1)
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self.api.set_data(self._parameter, 0)
         await self.coordinator.async_request_refresh()

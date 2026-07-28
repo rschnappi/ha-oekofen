@@ -18,6 +18,7 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.SWITCH,
     Platform.TIME,
+    Platform.DATETIME,
 ]
 
 # Service schemas

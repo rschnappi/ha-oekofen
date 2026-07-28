@@ -87,6 +87,12 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "name": f"{label} Raumtemp Hysterese",
             "icon": "mdi:thermometer",
         }
+        defs[f"hk{idx}_raumtemp_urlaub"] = {
+            "parameter": f"{base}.raumtemp_urlaub",
+            "name": f"{label} Raumtemp Urlaub",
+            "icon": "mdi:airplane",
+            "temperature": True,
+        }
 
     for idx in circuits.get("ww", []):
         base = f"CAPPL:LOCAL.ww[{idx}]"
@@ -102,6 +108,59 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "name": f"{label} Minimaltemperatur",
             "icon": "mdi:water-thermometer-outline",
             "temperature": True,
+        }
+        defs[f"ww{idx}_ueberhoehung"] = {
+            "parameter": f"{base}.ueberhoehung",
+            "name": f"{label} Überhöhung",
+            "icon": "mdi:thermometer-plus",
+        }
+        defs[f"ww{idx}_nachlaufzeit"] = {
+            "parameter": f"{base}.nachlaufzeit",
+            "name": f"{label} Nachlaufzeit",
+            "icon": "mdi:timer-outline",
+        }
+        defs[f"ww{idx}_einschalthysterese"] = {
+            "parameter": f"{base}.hysterese",
+            "name": f"{label} Einschalthysterese",
+            "icon": "mdi:thermometer",
+        }
+
+    for idx in circuits.get("pellematic", []):
+        base = f"CAPPL:FA[{idx}]"
+        label = f"Pellematic {idx + 1}"
+        defs[f"pe{idx}_kesseltemperatur_soll"] = {
+            "parameter": f"{base}.pe_kesseltemperatur_soll",
+            "name": f"{label} Regeltemperatur",
+            "icon": "mdi:thermometer",
+            "temperature": True,
+        }
+        defs[f"pe{idx}_abschalttemperatur"] = {
+            "parameter": f"{base}.pe_abschalttemperatur",
+            "name": f"{label} Abschalttemperatur",
+            "icon": "mdi:thermometer-high",
+            "temperature": True,
+        }
+        defs[f"pe{idx}_agt_min"] = {
+            "parameter": f"{base}.pe_agt_min",
+            "name": f"{label} Abgastemp Minimum",
+            "icon": "mdi:thermometer-low",
+            "temperature": True,
+        }
+        # "Leistungsstufe" is stored under one of two different parameter
+        # names depending on whether the boiler runs classic or "Smart"
+        # firmware (config.min.js switches on L_pe_schnecke_sauganlage==4).
+        # Both entities are created; whichever doesn't apply to this
+        # specific boiler simply stays unavailable (device never returns
+        # that parameter for it), same as any other hardware-dependent field.
+        defs[f"pe{idx}_leistungsstufe"] = {
+            "parameter": f"{base}.pe_kesselleistung",
+            "name": f"{label} Leistungsstufe",
+            "icon": "mdi:fire",
+        }
+        defs[f"pe{idx}_leistungsstufe_smart"] = {
+            "parameter": f"{base}.pe_kesselleistung_smart",
+            "name": f"{label} Leistungsstufe (Smart)",
+            "icon": "mdi:fire",
         }
 
     for idx in circuits.get("zirkp", []):
