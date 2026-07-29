@@ -20,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def build_mode_switch_definitions(circuits: Dict[str, list]) -> Dict[str, Dict[str, Any]]:
-    """Build the Party-/Urlaubsprogramm on-off switch definitions."""
+    """Build the Party-/Urlaubsprogramm and Warmwasser one-off switch definitions."""
     defs: Dict[str, Dict[str, Any]] = {}
     for idx in circuits.get("hk", []):
         base = f"CAPPL:LOCAL.hk[{idx}]"
@@ -34,6 +34,14 @@ def build_mode_switch_definitions(circuits: Dict[str, list]) -> Dict[str, Dict[s
             "parameter": f"{base}.urlaubsprg_aktiviert",
             "name": f"{label} Urlaubsprogramm",
             "icon": "mdi:airplane",
+        }
+    for idx in circuits.get("ww", []):
+        base = f"CAPPL:LOCAL.ww[{idx}]"
+        label = f"Warmwasser {idx + 1}"
+        defs[f"ww{idx}_einmal_aufbereiten"] = {
+            "parameter": f"{base}.einmal_aufbereiten",
+            "name": f"{label} Einmal Aufbereiten",
+            "icon": "mdi:water-plus",
         }
     return defs
 
