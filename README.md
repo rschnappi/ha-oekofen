@@ -100,6 +100,34 @@ Die Integration stellt über 80 Sensoren zur Verfügung, organisiert nach Katego
 - Pufferpumpen Status
 - Zubringerpumpe Modus & Status
 
+## 🎚️ Steuerbare Entities (number/select/switch/datetime/time/climate)
+
+Neben den reinen Sensoren stellt die Integration seit v0.6.0 zunehmend
+**schreibbare** Standard-HA-Entities bereit, die direkt in Dashboards,
+Automatisierungen und Skripten nutzbar sind - keine `input_number`/
+`input_select`-Helfer mehr nötig:
+
+- **`number.*`** – Sollwerte (Raumtemp Heizen/Absenken/Urlaub, Heizkennlinie,
+  Fußpunkt, Heizgrenzen, Vorhaltezeit, Raumfühlereinfluss, Hysterese;
+  Warmwasser-Solltemp/Min/Überhöhung/Nachlaufzeit/Hysterese; Pellematic
+  Regel-/Abschalttemperatur, Abgastemp-Minimum, Leistungsstufe)
+- **`select.*`** – Betriebsarten (Anlage/Heizkreis/Warmwasser/Pellematic),
+  aktives Zeitprogramm, Warmwasser-Vorrang & Legionellenschutz
+- **`switch.*`** – Party-/Urlaubsprogramm, Warmwasser "Einmal Aufbereiten",
+  sowie je ein Schalter pro Wochentag und Zeitprogramm-Block
+  (`<kreis>_zeit_<1|2>_<wochentag>_aktiv`)
+- **`datetime.*`** – Party-Endzeit, Urlaub-Start/-Ende
+- **`time.*`** – Von-/Bis-Uhrzeiten der Zeitprogramme (3 Blöcke × 7 Tage ×
+  2 Zeitprogramme × Heizkreis/Warmwasser)
+- **`climate.*`** *(neu in v0.8.0)* – Ein Climate-Entity pro Heizkreis und
+  pro Warmwasser-Kreis, kompatibel mit HA's Standard-Thermostat-Karte:
+  - Heizkreis: `off` / `auto` / `heat`, plus Preset **"Absenken"**
+  - Warmwasser: `off` / `auto` / `heat` (kein Preset, da keine
+    Absenken-Stufe am Gerät vorhanden ist)
+
+  Ist-/Solltemperatur und Min/Max stammen aus denselben Parametern wie die
+  zugehörigen `sensor.*`/`number.*`-Entities - keine doppelte Datenquelle.
+
 ## 🎛️ Services
 
 Die Integration bietet folgende Services zum Steuern des Heizsystems:
@@ -153,29 +181,32 @@ data:
 
 Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashboard_example.yaml).
 
-⚠️ **Wichtig zu den Entity-IDs**: Diese Integration übernimmt Sensor-Namen direkt vom Gerät (in der Sprache, die du beim Einrichten gewählt hast), und Home Assistant leitet die Entity-ID daraus automatisch ab. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `sensor.okofen_192_168_1_50_betriebsart` statt eines festen Namens) und hängen von deinem Host und deiner Gerätesprache ab. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen", um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `DEINHOST` in der YAML-Datei entsprechend.
+⚠️ **Wichtig zu den Entity-IDs**: Diese Integration übernimmt Sensor-Namen direkt vom Gerät (in der Sprache, die du beim Einrichten gewählt hast), und Home Assistant leitet die Entity-ID daraus automatisch ab. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `sensor.okofen_192_168_1_50_betriebsart` statt eines festen Namens) und hängen von deinem Host, deiner Gerätesprache und ggf. dem zugewiesenen Bereich (Area) ab. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen", um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `DEINHOST` in der YAML-Datei entsprechend. Die neueren `number.*`/`select.*`/`switch.*`/`datetime.*`/`time.*`/`climate.*`-Entities sind dagegen **namensbasiert** (z.B. `climate.heizraum_okofen_pellematic_heizkreis_1`), nicht host-abhängig.
 
 ### Installation des Dashboards
 1. Gehen Sie zu **Einstellungen** → **Dashboards**
 2. Klicken Sie auf **+ Dashboard hinzufügen**
 3. Wählen Sie **Neue Ansicht aus YAML erstellen**
 4. Kopieren Sie den Inhalt aus `dashboard_example.yaml` und ersetzen Sie `DEINHOST` durch Ihre echten Entity-IDs
-5. Das Dashboard zeigt:
-   - **Übersicht**: Betriebsarten und wichtigste Sensoren
-   - **Pellematic**: Kessel, Pellets, Störungen
-   - **Heizkreis**: Temperaturen und Einstellungen
-   - **Warmwasser**: Status und Einstellungen
-   - **Puffer & Pumpen**: Pufferspeicher und Pumpen
-   - **Statistik**: Betriebsstunden, Verbrauch, Verlaufsgraphen
+5. Das Dashboard zeigt (Kacheln-Layout, 2 pro Reihe für lesbare Beschriftungen):
+   - **Übersicht**: Betriebsarten (als Dropdown-Kacheln), wichtigste Sensoren, Party/Urlaub-Kurzstatus
+   - **Pellematic**: Kessel, Einstellungen (Sollwerte editierbar), Pellets, Störungen
+   - **Heizkreis**: `thermostat`-Karte (Aus/Auto/Heizen + Preset "Absenken") oben, darunter Einstellungen und Party/Urlaub
+   - **Warmwasser**: `thermostat`-Karte (Aus/Auto/Ein) oben, darunter Einstellungen
+   - **Puffer & Pumpen**: Pufferspeicher und Pumpen (Pumpen-Zuordnung ist eine Vermutung, siehe Hinweis im Dashboard)
+   - **Statistik**: Betriebsstunden, Verlaufs- und Langzeitgraphen
+   - **Zeitprogramme**: Wochentage als antippbare Kacheln je Zeitprogramm, Von-/Bis-Zeiten als Liste (Block 1; Block 2/3 sind bei Bedarf leicht ergänzbar)
 
-### Werte direkt im Dashboard verändern (optional)
+### Werte direkt im Dashboard verändern
 
-Die Integration liefert nur lesbare Sensoren. Um Sollwerte (Raumtemperatur, Heizkurve, Warmwassertemperatur, Zeitprogramm-Auswahl, …) direkt im Dashboard zu verändern, gibt es zwei zusätzliche Vorlagen:
+Seit v0.6.0/v0.8.0 liefert die Integration native, direkt editierbare `number.*`/`select.*`/`switch.*`/`datetime.*`/`time.*`/`climate.*`-Entities für praktisch alle Sollwerte (Raumtemperatur, Heizkurve, Warmwassertemperatur, Zeitprogramm-Auswahl, Zeitprogramm-Zeiten und -Wochentage, Party-/Urlaubsprogramm, Betriebsarten als Thermostat-Karte, …). Ein Umweg über `input_number`/`input_select`-Helfer ist dafür **nicht mehr nötig**.
+
+Für die wenigen Felder, die (noch) nicht nativ abgedeckt sind, liegen zwei optionale Vorlagen bei:
 
 - [`helpers_example.yaml`](helpers_example.yaml) – `input_number`/`input_select`-Helfer, die im Dashboard editierbare Felder darstellen
 - [`automations_example.yaml`](automations_example.yaml) – Automatisierungen, die diese Helfer mit dem Gerät synchronisieren (lesen über den Sensor, schreiben über `oekofen.set_parameter`)
 
-Beide Dateien enthalten ausführliche Kommentare zur Einrichtung. **Achtung**: Diese Automatisierungen greifen unmittelbar in den laufenden Heizungsbetrieb ein – nach dem Einrichten zunächst mit einem unkritischen Wert testen.
+**Achtung** bei allen schreibbaren Entities gleichermaßen: Sie greifen unmittelbar in den laufenden Heizungsbetrieb ein – nach Änderungen zunächst mit einem unkritischen Wert testen.
 
 ### Langzeitstatistik
 
@@ -269,6 +300,44 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 - `CAPPL:FA[0].L_kesselstatus` - Kesselstatus ✅
 
 ## 📝 Changelog
+
+### Version 0.8.0
+
+- ✅ **Climate-Plattform** (`climate.py`, neu): Heizkreis und Warmwasser
+  bekommen echte `climate.*`-Entities für Thermostat-Karten in HA, statt nur
+  Sensoren/Number-Feldern. Mode-Mapping ist pro Kreistyp konfigurierbar
+  (`mode_map`), da Heizkreis und Warmwasser unterschiedliche Betriebsarten
+  am Gerät haben:
+  - **Heizkreis:** Aus → `off`, Auto → `auto`, Heizen → `heat`,
+    Absenken → `heat` + Preset "Absenken" (kein HA-Standardmodus, daher als
+    Preset statt als eigener hvac_mode).
+  - **Warmwasser:** Aus → `off`, Auto → `auto`, Ein → `heat` (kein Preset,
+    dieser Kreis hat keine Absenken-Stufe am Gerät).
+  - Ist-/Solltemperatur und Min/Max-Grenzen kommen aus denselben
+    CAPPL-Parametern wie die bestehenden Sensor-/Number-Entities für den
+    jeweiligen Kreis - keine Doppelquelle für dieselben Werte.
+- 🐛 Korrektur: Preset heißt jetzt wörtlich **"Absenken"** statt des
+  irreführenden generischen HA-Begriffs "Eco".
+
+### Version 0.6.2 – 0.6.3
+
+- 🐛 **`sensor.py`**: Sensoren mit numerischer `state_class`/`unit`
+  (z. B. Pelletsfüllstand) crashten, wenn das Gerät statt einer Zahl einen
+  Text wie `" leer"` lieferte. `state_class`, `device_class` **und**
+  `native_unit_of_measurement` werden jetzt dynamisch unterdrückt, sobald
+  der aktuelle Wert nicht numerisch ist - der Sensor zeigt den Text dann
+  einfach an, statt die Entity-Registrierung zum Absturz zu bringen.
+- ℹ️ Ein Versuch, ein Thermostat-Widget über die Core-`template:`-Integration
+  abzubilden, wurde wieder verworfen: HA unterstützt dort **keine**
+  Climate-Entities (weder alte noch neue Syntax) - siehe stattdessen
+  Version 0.8.0 für die native Lösung direkt in dieser Integration.
+
+### Version 0.6.1
+
+- ✅ **Warmwasser "Einmal Aufbereiten"** ist jetzt ein Schalter
+  (`switch.<warmwasser>_einmal_aufbereiten`) statt nur ein Lese-Sensor -
+  löst einen einmaligen Warmwasser-Aufbereitungszyklus aus, analog zu
+  Party-/Urlaubsprogramm.
 
 ### Version 0.6.0
 
