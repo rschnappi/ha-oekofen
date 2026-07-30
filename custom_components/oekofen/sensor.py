@@ -953,6 +953,30 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
         return None
 
     @property
+    def state_class(self) -> Optional[str]:
+        """Return the state class, suppressed when the current value isn't numeric.
+
+        The device occasionally reports a text status instead of a number for
+        an otherwise-numeric sensor (e.g. pellet fill level returning the
+        German text "leer" / empty instead of a percentage while a level
+        sensor is absent/uncalibrated). Home Assistant requires state_class
+        MEASUREMENT values to be numeric, so we drop it for that update
+        rather than crashing entity registration.
+        """
+        configured = self._sensor_config.get("state_class")
+        if configured is None:
+            return None
+        return configured if isinstance(self.native_value, (int, float)) else None
+
+    @property
+    def device_class(self) -> Optional[str]:
+        """Return the device class, suppressed when the current value isn't numeric (see state_class)."""
+        configured = self._sensor_config.get("device_class")
+        if configured is None:
+            return None
+        return configured if isinstance(self.native_value, (int, float)) else None
+
+    @property
     def available(self) -> bool:
         """Return if entity is available."""
         parameter = self._sensor_config["parameter"]
