@@ -27,7 +27,6 @@ from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
-    PRESET_ECO,
     PRESET_NONE,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -50,6 +49,11 @@ SCAN_INTERVAL = timedelta(seconds=30)
 # device doesn't provide formatTexts for betriebsart[0] on older firmware;
 # matches the fallback_options already used in select.py for this parameter.
 MODE_FALLBACK = ["Aus", "Auto", "Heizen", "Absenken"]
+
+# Custom preset label matching the device's own wording exactly, instead of
+# HA's generic built-in PRESET_ECO ("Eco") which would be a translation
+# mismatch for what the device itself calls "Absenken".
+PRESET_ABSENKEN = "Absenken"
 
 
 def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
@@ -121,7 +125,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
 
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.AUTO, HVACMode.HEAT]
-    _attr_preset_modes = [PRESET_NONE, PRESET_ECO]
+    _attr_preset_modes = [PRESET_NONE, PRESET_ABSENKEN]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.PRESET_MODE
@@ -245,7 +249,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         index = self._mode_index()
         if index is None or not (0 <= index < len(options)):
             return PRESET_NONE
-        return PRESET_ECO if options[index] == "Absenken" else PRESET_NONE
+        return PRESET_ABSENKEN if options[index] == "Absenken" else PRESET_NONE
 
     @property
     def available(self) -> bool:
@@ -268,7 +272,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
             await self._write_mode("Heizen")
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        if preset_mode == PRESET_ECO:
+        if preset_mode == PRESET_ABSENKEN:
             await self._write_mode("Absenken")
         else:
             await self._write_mode("Heizen")
