@@ -1,27 +1,32 @@
-"""Climate platform for ÖkOfen heating circuits.
+"""Climate platform for ÖkOfen heating circuits and warm-water circuits.
 
-Maps the heating circuit's real Betriebsart enum (Aus / Auto / Heizen /
-Absenken, read live from the device via formatTexts, same as select.py)
-onto Home Assistant's climate model:
+Maps each circuit's real Betriebsart enum (read live from the device via
+formatTexts, same as select.py) onto Home Assistant's climate model via a
+per-circuit mode_map: {device label: (hvac_mode, preset_mode)}.
 
+Heizkreis (hk):  Aus / Auto / Heizen / Absenken
     Aus      -> HVACMode.OFF
     Auto     -> HVACMode.AUTO
     Heizen   -> HVACMode.HEAT,  preset_mode = PRESET_NONE
-    Absenken -> HVACMode.HEAT,  preset_mode = PRESET_ECO
+    Absenken -> HVACMode.HEAT,  preset_mode = "Absenken"
 
 "Absenken" (setback/reduced temperature) isn't itself a distinct HVAC
 mode, so it's represented as a preset on top of HEAT rather than
-inventing a mode HA doesn't understand - the same way a real thermostat
-firmware would expose a night-setback as a preset.
+inventing a mode HA doesn't understand.
+
+Warmwasser (ww):  Aus / Auto / Ein
+    Aus  -> HVACMode.OFF
+    Auto -> HVACMode.AUTO
+    Ein  -> HVACMode.HEAT   (no preset - this circuit has no setback mode)
 
 Target/current temperature reuse the exact same CAPPL parameters as the
-existing number/sensor entities for this circuit, so this entity never
-diverges from what number.<hk>_raumtemp_heizen and the Raumtemperatur Ist
-sensor already show - it's just a different view onto the same data.
+existing number/sensor entities for each circuit, so this entity never
+diverges from what the number/sensor entities already show - it's just a
+different, standard-climate-domain view onto the same data.
 """
 import logging
 from datetime import timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -45,29 +50,62 @@ _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=30)
 
-# Index -> (hvac_mode, preset_mode). Falls back to this fixed order if the
-# device doesn't provide formatTexts for betriebsart[0] on older firmware;
-# matches the fallback_options already used in select.py for this parameter.
-MODE_FALLBACK = ["Aus", "Auto", "Heizen", "Absenken"]
-
 # Custom preset label matching the device's own wording exactly, instead of
 # HA's generic built-in PRESET_ECO ("Eco") which would be a translation
 # mismatch for what the device itself calls "Absenken".
 PRESET_ABSENKEN = "Absenken"
 
+# device label -> (hvac_mode, preset_mode)
+HK_MODE_MAP: Dict[str, Tuple[HVACMode, str]] = {
+    "Aus": (HVACMode.OFF, PRESET_NONE),
+    "Auto": (HVACMode.AUTO, PRESET_NONE),
+    "Heizen": (HVACMode.HEAT, PRESET_NONE),
+    "Absenken": (HVACMode.HEAT, PRESET_ABSENKEN),
+}
+HK_MODE_FALLBACK = ["Aus", "Auto", "Heizen", "Absenken"]
+
+WW_MODE_MAP: Dict[str, Tuple[HVACMode, str]] = {
+    "Aus": (HVACMode.OFF, PRESET_NONE),
+    "Auto": (HVACMode.AUTO, PRESET_NONE),
+    "Ein": (HVACMode.HEAT, PRESET_NONE),
+}
+WW_MODE_FALLBACK = ["Aus", "Auto", "Ein"]
+
 
 def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
-    """Build one climate entity per heating circuit present on this device."""
+    """Build one climate entity per heating circuit and warm-water circuit."""
     defs: Dict[str, Dict[str, Any]] = {}
+
     for idx in circuits.get("hk", []):
         base = f"CAPPL:LOCAL.hk[{idx}]"
         label = f"Heizkreis {idx + 1}"
         defs[f"hk{idx}_climate"] = {
             "name": label,
+            "icon": "mdi:radiator",
             "mode_parameter": f"{base}.betriebsart[0]",
             "target_parameter": f"{base}.raumtemp_heizen",
             "current_parameter": f"CAPPL:LOCAL.L_hk[{idx}].raumtemp_ist",
+            "mode_map": HK_MODE_MAP,
+            "mode_fallback": HK_MODE_FALLBACK,
+            "default_min_temp": 10.0,
+            "default_max_temp": 28.0,
         }
+
+    for idx in circuits.get("ww", []):
+        base = f"CAPPL:LOCAL.ww[{idx}]"
+        label = f"Warmwasser {idx + 1}"
+        defs[f"ww{idx}_climate"] = {
+            "name": label,
+            "icon": "mdi:water-boiler",
+            "mode_parameter": f"{base}.betriebsart[0]",
+            "target_parameter": f"{base}.temp_heizen",
+            "current_parameter": f"CAPPL:LOCAL.L_ww[{idx}].einschaltfuehler_ist",
+            "mode_map": WW_MODE_MAP,
+            "mode_fallback": WW_MODE_FALLBACK,
+            "default_min_temp": 30.0,
+            "default_max_temp": 65.0,
+        }
+
     return defs
 
 
@@ -76,7 +114,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up one climate entity per heating circuit."""
+    """Set up one climate entity per heating/warm-water circuit."""
     entry_data = hass.data["oekofen"][config_entry.entry_id]
     api: PellematicAPI = entry_data["api"]
     circuits = entry_data["circuits"]
@@ -109,7 +147,7 @@ class OekofenClimateCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name="ÖkOfen Heizkreis Climate",
+            name="ÖkOfen Climate",
             update_interval=SCAN_INTERVAL,
         )
 
@@ -121,17 +159,9 @@ class OekofenClimateCoordinator(DataUpdateCoordinator):
 
 
 class OekofenClimate(CoordinatorEntity, ClimateEntity):
-    """A heating circuit, exposed as a standard HA climate entity."""
+    """A heating or warm-water circuit, exposed as a standard HA climate entity."""
 
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_hvac_modes = [HVACMode.OFF, HVACMode.AUTO, HVACMode.HEAT]
-    _attr_preset_modes = [PRESET_NONE, PRESET_ABSENKEN]
-    _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE
-        | ClimateEntityFeature.PRESET_MODE
-        | ClimateEntityFeature.TURN_ON
-        | ClimateEntityFeature.TURN_OFF
-    )
     _attr_target_temperature_step = 0.5
 
     def __init__(
@@ -148,9 +178,27 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         self._mode_parameter = config["mode_parameter"]
         self._target_parameter = config["target_parameter"]
         self._current_parameter = config["current_parameter"]
+        self._mode_map: Dict[str, Tuple[HVACMode, str]] = config["mode_map"]
+        self._mode_fallback: List[str] = config["mode_fallback"]
+        self._default_min_temp = config["default_min_temp"]
+        self._default_max_temp = config["default_max_temp"]
+
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_name = config["name"]
-        self._attr_icon = "mdi:radiator"
+        self._attr_icon = config["icon"]
+
+        hvac_modes = sorted({mode for mode, _preset in self._mode_map.values()}, key=lambda m: m.value)
+        # Keep OFF/AUTO/HEAT in a sensible fixed order rather than alpha sort.
+        order = [HVACMode.OFF, HVACMode.AUTO, HVACMode.HEAT]
+        self._attr_hvac_modes = [m for m in order if m in hvac_modes]
+
+        presets = sorted({preset for _mode, preset in self._mode_map.values() if preset != PRESET_NONE})
+        features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
+        if presets:
+            self._attr_preset_modes = [PRESET_NONE] + presets
+            features |= ClimateEntityFeature.PRESET_MODE
+        self._attr_supported_features = features
+
         self._attr_device_info = {
             "identifiers": {("oekofen", entry_id)},
             "name": device_name,
@@ -167,16 +215,20 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         format_texts = format_texts.strip()
         if format_texts:
             return [text.strip() for text in format_texts.split("|")]
-        return MODE_FALLBACK
+        return self._mode_fallback
 
-    def _mode_index(self) -> Optional[int]:
+    def _mode_label(self) -> Optional[str]:
         point = self._point(self._mode_parameter)
         if not point or point.get("value") in (None, ""):
             return None
         try:
-            return int(float(point["value"]))
+            index = int(float(point["value"]))
         except (TypeError, ValueError):
             return None
+        options = self._mode_options()
+        if 0 <= index < len(options):
+            return options[index]
+        return None
 
     def _divisor(self, parameter: str) -> float:
         point = self._point(parameter)
@@ -216,7 +268,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
                 return round(float(point.get("lowerLimit")) / self._divisor(self._target_parameter), 1)
             except (TypeError, ValueError):
                 pass
-        return 10.0
+        return self._default_min_temp
 
     @property
     def max_temp(self) -> float:
@@ -226,36 +278,29 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
                 return round(float(point.get("upperLimit")) / self._divisor(self._target_parameter), 1)
             except (TypeError, ValueError):
                 pass
-        return 28.0
+        return self._default_max_temp
 
     @property
     def hvac_mode(self) -> Optional[HVACMode]:
-        options = self._mode_options()
-        index = self._mode_index()
-        if index is None or not (0 <= index < len(options)):
+        label = self._mode_label()
+        if label is None:
             return None
-        label = options[index]
-        if label == "Aus":
-            return HVACMode.OFF
-        if label == "Auto":
-            return HVACMode.AUTO
-        # Both "Heizen" and "Absenken" run the circuit's own heat control;
-        # "Absenken" is surfaced as a preset (see preset_mode below).
-        return HVACMode.HEAT
+        mapped = self._mode_map.get(label)
+        return mapped[0] if mapped else None
 
     @property
     def preset_mode(self) -> Optional[str]:
-        options = self._mode_options()
-        index = self._mode_index()
-        if index is None or not (0 <= index < len(options)):
+        label = self._mode_label()
+        if label is None:
             return PRESET_NONE
-        return PRESET_ABSENKEN if options[index] == "Absenken" else PRESET_NONE
+        mapped = self._mode_map.get(label)
+        return mapped[1] if mapped else PRESET_NONE
 
     @property
     def available(self) -> bool:
         return self.coordinator.last_update_success and self._mode_parameter in self.coordinator.data
 
-    async def _write_mode(self, label: str) -> None:
+    async def _write_label(self, label: str) -> None:
         options = self._mode_options()
         if label not in options:
             _LOGGER.warning("Mode '%s' not available in device options %s", label, options)
@@ -263,19 +308,29 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         await self.api.set_data(self._mode_parameter, options.index(label))
         await self.coordinator.async_request_refresh()
 
+    def _label_for(self, hvac_mode: Optional[HVACMode] = None, preset_mode: Optional[str] = None) -> Optional[str]:
+        """Find the device label matching the requested hvac_mode and/or preset_mode."""
+        target_mode = hvac_mode if hvac_mode is not None else self.hvac_mode
+        target_preset = preset_mode if preset_mode is not None else PRESET_NONE
+        for label, (mode, preset) in self._mode_map.items():
+            if mode == target_mode and preset == target_preset:
+                return label
+        # Fall back to any label matching just the mode, ignoring preset.
+        for label, (mode, _preset) in self._mode_map.items():
+            if mode == target_mode:
+                return label
+        return None
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        if hvac_mode == HVACMode.OFF:
-            await self._write_mode("Aus")
-        elif hvac_mode == HVACMode.AUTO:
-            await self._write_mode("Auto")
-        elif hvac_mode == HVACMode.HEAT:
-            await self._write_mode("Heizen")
+        label = self._label_for(hvac_mode=hvac_mode, preset_mode=PRESET_NONE)
+        if label:
+            await self._write_label(label)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        if preset_mode == PRESET_ABSENKEN:
-            await self._write_mode("Absenken")
-        else:
-            await self._write_mode("Heizen")
+        # Presets apply on top of HEAT in this device's model.
+        label = self._label_for(hvac_mode=HVACMode.HEAT, preset_mode=preset_mode)
+        if label:
+            await self._write_label(label)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         temperature = kwargs.get(ATTR_TEMPERATURE)
