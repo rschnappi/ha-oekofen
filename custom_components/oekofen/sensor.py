@@ -871,9 +871,19 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> Optional[str]:
-        """Return the unit from API if available, otherwise fallback to configured unit."""
+        """Return the unit from API if available, otherwise fallback to configured unit.
+
+        Suppressed entirely when the current value isn't numeric: Home
+        Assistant treats *any* sensor with a unit of measurement as required
+        to be numeric, regardless of device_class/state_class, so a text
+        status like "leer" (empty) would still crash entity registration
+        even with those two cleared.
+        """
+        if not isinstance(self.native_value, (int, float)):
+            return None
+
         parameter = self._sensor_config["parameter"]
-        
+
         if parameter in self.coordinator.data:
             data_point = self.coordinator.data[parameter]
             unit_text = data_point.get("unitText", "")
