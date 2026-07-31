@@ -13,7 +13,8 @@ from homeassistant.const import (
     CONF_HOST,
     PERCENTAGE,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.components import persistent_notification
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import (
@@ -23,11 +24,49 @@ from homeassistant.helpers.update_coordinator import (
 )
 from homeassistant.config_entries import ConfigEntry
 
+from .ignition_diagnostics import OekofenGluehstabZuendzeit
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=30)  # Based on 5-second jQuery intervals, but more conservative
+
+# Störmelderelais (fault relay): trips on serious safety conditions (e.g.
+# Not-Aus/STB overtemperature). Not exposed as its own entity - it just
+# raises/clears a persistent notification alongside the existing
+# "fault_relay" sensor already defined below.
+FAULT_RELAY_PARAMETER = "CAPPL:FA[0].ausgang_stoermelderelais"
+
+
+def _is_relay_active(value: Any) -> bool:
+    try:
+        return int(float(value)) != 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _register_fault_relay_watcher(hass: HomeAssistant, coordinator: "OekofenDataUpdateCoordinator", entry_id: str) -> None:
+    """Raise/clear a persistent notification when the Störmelderelais trips."""
+    notification_id = f"oekofen_stoermelderelais_{entry_id}"
+    was_active = {"value": False}
+
+    @callback
+    def _check() -> None:
+        point = coordinator.data.get(FAULT_RELAY_PARAMETER)
+        is_active = _is_relay_active(point.get("value")) if point else False
+        if is_active and not was_active["value"]:
+            persistent_notification.async_create(
+                hass,
+                "Das Störmelderelais der ÖkOfen-Anlage hat ausgelöst - Anlage prüfen.",
+                title="ÖkOfen: Störung",
+                notification_id=notification_id,
+            )
+        elif not is_active and was_active["value"]:
+            persistent_notification.async_dismiss(hass, notification_id)
+        was_active["value"] = is_active
+
+    coordinator.async_add_listener(_check)
+    _check()
 
 # Sensor definitions based on config.min.js JavaScript from ÖkOfen device
 # Organized by device menu categories: Allgemein, Pellematic, Heizkreis, Warmwasser, Zubringerpumpe
@@ -795,6 +834,8 @@ async def async_setup_entry(
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
     
+    device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
+
     # Create sensor entities
     entities = []
     for sensor_key, sensor_config in SENSOR_DEFINITIONS.items():
@@ -803,11 +844,15 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 sensor_key=sensor_key,
                 sensor_config=sensor_config,
-                device_name=f"ÖkOfen {config_entry.data[CONF_HOST]}",
+                device_name=device_name,
                 entry_id=config_entry.entry_id,
             )
         )
-    
+
+    entities.append(OekofenGluehstabZuendzeit(coordinator, config_entry.entry_id, device_name))
+
+    _register_fault_relay_watcher(hass, coordinator, config_entry.entry_id)
+
     async_add_entities(entities)
 
 

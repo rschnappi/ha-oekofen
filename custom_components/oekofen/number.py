@@ -21,6 +21,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .ignition_diagnostics import OekofenGluehstabWarnschwelle
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -191,19 +192,19 @@ async def async_setup_entry(
     api: PellematicAPI = entry_data["api"]
     circuits = entry_data["circuits"]
     definitions = build_number_definitions(circuits)
-
-    if not definitions:
-        return
-
-    parameters = [config["parameter"] for config in definitions.values()]
-    coordinator = OekofenNumberCoordinator(hass, api, parameters)
-    await coordinator.async_config_entry_first_refresh()
-
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
-    entities = [
-        OekofenNumber(coordinator, api, key, config, config_entry.entry_id, device_name)
-        for key, config in definitions.items()
-    ]
+
+    entities: List[Any] = [OekofenGluehstabWarnschwelle(config_entry.entry_id, device_name)]
+
+    if definitions:
+        parameters = [config["parameter"] for config in definitions.values()]
+        coordinator = OekofenNumberCoordinator(hass, api, parameters)
+        await coordinator.async_config_entry_first_refresh()
+        entities += [
+            OekofenNumber(coordinator, api, key, config, config_entry.entry_id, device_name)
+            for key, config in definitions.items()
+        ]
+
     async_add_entities(entities)
 
 
