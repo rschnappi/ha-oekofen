@@ -194,9 +194,15 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
 
         presets = sorted({preset for _mode, preset in self._mode_map.values() if preset != PRESET_NONE})
         features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
+        # Always assign _attr_preset_modes (None when there are no presets):
+        # ClimateEntity's preset_modes property reads this attribute
+        # unconditionally, so leaving it unset for circuits without presets
+        # (e.g. Warmwasser) raises AttributeError instead of returning None.
         if presets:
             self._attr_preset_modes = [PRESET_NONE] + presets
             features |= ClimateEntityFeature.PRESET_MODE
+        else:
+            self._attr_preset_modes = None
         self._attr_supported_features = features
 
         self._attr_device_info = {
