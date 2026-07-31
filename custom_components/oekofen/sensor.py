@@ -91,7 +91,27 @@ SENSOR_DEFINITIONS = {
         "category": "Allgemein",
         "entity_category": "diagnostic",
     },
-    
+    "fernwartung_code_1": {
+        "name": "Fernwartungscode 1",
+        "parameter": "CAPPL:LOCAL.L_fernwartung_code_1",
+        "device_class": None,
+        "state_class": None,
+        "unit": None,
+        "icon": "mdi:remote-desktop",
+        "category": "Allgemein",
+        "entity_category": "diagnostic",
+    },
+    "fernwartung_code_2": {
+        "name": "Fernwartungscode 2",
+        "parameter": "CAPPL:LOCAL.L_fernwartung_code_2",
+        "device_class": None,
+        "state_class": None,
+        "unit": None,
+        "icon": "mdi:remote-desktop",
+        "category": "Allgemein",
+        "entity_category": "diagnostic",
+    },
+
     # ========== PELLEMATIC (Boiler) ==========
     "boiler_status": {
         "name": "Boiler Status",
