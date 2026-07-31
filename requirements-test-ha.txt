@@ -1,0 +1,6 @@
+# Additional requirements for testing the number/select/switch/climate/
+# time/datetime platforms, which subclass real Home Assistant entity base
+# classes. requirements-test.txt alone (no homeassistant) is enough for
+# test_pellematic_api.py, which has no Home Assistant dependency at all.
+-r requirements-test.txt
+homeassistant

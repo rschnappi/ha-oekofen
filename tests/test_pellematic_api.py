@@ -205,3 +205,47 @@ class TestSetData:
             for call in calls
         ][-1:]
         assert sent_kwargs["json"] == {"CAPPL:LOCAL.anlage_betriebsart": 1}
+
+
+class TestSetDataMulti:
+    async def test_sends_all_parameters_in_one_request_and_maps_by_name(self, api):
+        api._authenticated = True
+        with aioresponses() as m:
+            m.post(SET_URL, status=200, payload=[
+                {"name": "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu", "status": "OK", "value": "1700000000"},
+                {"name": "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit", "status": "OK", "value": "1"},
+            ])
+            result = await api.set_data_multi({
+                "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu": 1700000000,
+                "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit": 1,
+            })
+
+        assert result == {
+            "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu": "1700000000",
+            "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit": "1",
+        }
+        (_, sent_kwargs), = [
+            (call.args, call.kwargs)
+            for calls in m.requests.values()
+            for call in calls
+        ][-1:]
+        assert sent_kwargs["json"] == {
+            "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu": 1700000000,
+            "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit": 1,
+        }
+
+    async def test_html_response_triggers_reauth_and_retry(self, api):
+        api._authenticated = True
+        with aioresponses() as m:
+            m.post(SET_URL, status=200, body="<html>login</html>")
+            m.post(INDEX_URL, status=303, headers=login_headers())
+            m.post(SET_URL, status=200, payload=[{"name": "CAPPL:X", "status": "OK", "value": "1"}])
+            result = await api.set_data_multi({"CAPPL:X": 1})
+        assert result == {"CAPPL:X": "1"}
+
+    async def test_failed_status_raises(self, api):
+        api._authenticated = True
+        with aioresponses() as m:
+            m.post(SET_URL, status=200, payload=[{"name": "CAPPL:X", "status": "ERROR"}])
+            with pytest.raises(Exception, match="Set failed"):
+                await api.set_data_multi({"CAPPL:X": 1})
