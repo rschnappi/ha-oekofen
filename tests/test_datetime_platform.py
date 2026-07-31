@@ -28,8 +28,12 @@ def test_build_datetime_definitions_per_heating_circuit():
     assert defs["hk0_urlaub_ende"]["parameter"] == "CAPPL:LOCAL.hk[0].urlaubsprg_ende"
 
 
-def test_build_datetime_definitions_empty_without_circuits():
-    assert build_datetime_definitions({"hk": []}) == {}
+def test_build_datetime_definitions_always_includes_device_clock():
+    defs = build_datetime_definitions({"hk": []})
+    assert set(defs) == {"device_clock"}
+    assert defs["device_clock"]["parameter"] == "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"
+    assert defs["device_clock"]["read_parameter"] == "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek"
+    assert defs["device_clock"]["commit_parameter"] == "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit"
 
 
 def _make_entity(coordinator, api=None):
@@ -65,4 +69,43 @@ async def test_async_set_value_converts_to_device_seconds():
     called_param, called_seconds = api.set_data.call_args[0]
     assert called_param == "P"
     assert isinstance(called_seconds, int)
+    assert coord.refresh_calls == 1
+
+
+def _make_device_clock_entity(coordinator, api=None):
+    config = build_datetime_definitions({"hk": []})["device_clock"]
+    return OekofenDateTime(coordinator, api or AsyncMock(), "device_clock", config, entry_id="e1", device_name="Test")
+
+
+def test_device_clock_reads_from_read_parameter_not_write_parameter():
+    raw = int(datetime(2026, 7, 10, 12, 0, 0, tzinfo=timezone.utc).timestamp())
+    coord = FakeCoordinator({"CAPPL:LOCAL.L_fernwartung_datum_zeit_sek": make_point(str(raw))})
+    entity = _make_device_clock_entity(coord)
+
+    assert entity.native_value is not None
+    assert entity.available is True
+
+
+def test_device_clock_available_false_when_read_parameter_missing_even_if_write_parameter_present():
+    coord = FakeCoordinator({"CAPPL:LOCAL.L_fernwartung_uhrzeit_neu": make_point("0")})
+    entity = _make_device_clock_entity(coord)
+    assert entity.available is False
+
+
+async def test_device_clock_set_value_writes_value_and_commit_flag_together():
+    api = AsyncMock()
+    coord = FakeCoordinator({"CAPPL:LOCAL.L_fernwartung_datum_zeit_sek": make_point("0")})
+    entity = _make_device_clock_entity(coord, api=api)
+    value = dt_util.as_utc(datetime(2026, 8, 1, 10, 0, 0))
+
+    await entity.async_set_value(value)
+
+    api.set_data.assert_not_awaited()
+    assert api.set_data_multi.await_count == 1
+    (sent_values,), _ = api.set_data_multi.call_args
+    assert set(sent_values) == {
+        "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu",
+        "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit",
+    }
+    assert sent_values["CAPPL:LOCAL.L_fernwartung_setze_uhrzeit"] == 1
     assert coord.refresh_calls == 1

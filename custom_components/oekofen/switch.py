@@ -43,6 +43,11 @@ def build_mode_switch_definitions(circuits: Dict[str, list]) -> Dict[str, Dict[s
             "name": f"{label} Einmal Aufbereiten",
             "icon": "mdi:water-plus",
         }
+    defs["mail_testmail"] = {
+        "parameter": "CAPPL:LOCAL.L_fernwartung_sende_testmail",
+        "name": "Mail Testmail senden",
+        "icon": "mdi:email-fast-outline",
+    }
     return defs
 
 

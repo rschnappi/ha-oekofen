@@ -20,6 +20,7 @@ PLATFORMS = [
     Platform.TIME,
     Platform.DATETIME,
     Platform.CLIMATE,
+    Platform.TEXT,
 ]
 
 # Service schemas

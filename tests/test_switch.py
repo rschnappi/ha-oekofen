@@ -18,8 +18,15 @@ def test_build_mode_switch_definitions():
     assert defs["ww0_einmal_aufbereiten"]["parameter"] == "CAPPL:LOCAL.ww[0].einmal_aufbereiten"
 
 
-def test_build_mode_switch_definitions_empty_for_no_circuits():
-    assert build_mode_switch_definitions({"hk": [], "ww": []}) == {}
+def test_build_mode_switch_definitions_always_includes_mail_testmail():
+    defs = build_mode_switch_definitions({"hk": [], "ww": []})
+    assert defs == {
+        "mail_testmail": {
+            "parameter": "CAPPL:LOCAL.L_fernwartung_sende_testmail",
+            "name": "Mail Testmail senden",
+            "icon": "mdi:email-fast-outline",
+        }
+    }
 
 
 def _day_slot():

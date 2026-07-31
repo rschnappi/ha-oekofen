@@ -369,7 +369,86 @@ class PellematicAPI:
         except Exception as e:
             _LOGGER.error(f"Set data error: {e}")
             raise
-    
+
+    async def set_data_multi(self, values: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Set several parameters on the ÖkOfen device in a single request.
+
+        Some device settings only take effect when a companion "commit"
+        flag is written together with the actual value in the same
+        request - e.g. the device clock requires
+        L_fernwartung_setze_uhrzeit=1 alongside L_fernwartung_uhrzeit_neu.
+        The device's own web UI always sends these together, so we do too.
+
+        Args:
+            values: Mapping of parameter name to the raw value to send
+                (already divisor-applied by the caller, if relevant).
+
+        Returns:
+            Dict mapping each parameter name to its confirmed value.
+        """
+        if not self._authenticated:
+            if not await self.authenticate():
+                raise Exception("Authentication required")
+
+        session = await self._get_session()
+
+        try:
+            url = f"{self.url}/?action=set"
+            headers = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+
+            _LOGGER.info(f"Setting parameters: {values}")
+
+            async with async_timeout.timeout(10):
+                async with session.post(url, json=values, headers=headers) as response:
+                    response_text = await response.text()
+
+                    if response.status == 200:
+                        try:
+                            response_data = json.loads(response_text)
+                            result = {}
+                            for item in response_data:
+                                if item.get('status') == 'OK':
+                                    result[item['name']] = item.get('value')
+                                else:
+                                    _LOGGER.error(f"Set failed: {item}")
+                                    raise Exception(f"Set failed: {item.get('status', 'UNKNOWN')}")
+                            return result
+
+                        except json.JSONDecodeError as e:
+                            # The device answers HTTP 200 with the login page
+                            # (HTML) instead of JSON when the session has
+                            # expired - treat this the same as a 401.
+                            _LOGGER.warning(
+                                f"Failed to parse set response, session likely "
+                                f"expired - re-authenticating: {e}"
+                            )
+                            self._authenticated = False
+                            if await self.authenticate():
+                                return await self.set_data_multi(values)
+                            else:
+                                raise Exception("Re-authentication failed")
+
+                    elif response.status == 401:
+                        _LOGGER.warning("Session expired, re-authenticating")
+                        self._authenticated = False
+                        if await self.authenticate():
+                            return await self.set_data_multi(values)
+                        else:
+                            raise Exception("Re-authentication failed")
+
+                    else:
+                        _LOGGER.error(f"Set request failed with status {response.status}")
+                        _LOGGER.debug(f"Response: {response_text}")
+                        raise Exception(f"HTTP {response.status}")
+
+        except Exception as e:
+            _LOGGER.error(f"Set data error: {e}")
+            raise
+
     async def close(self):
         """Close the session."""
         if self._session and not self._session.closed:

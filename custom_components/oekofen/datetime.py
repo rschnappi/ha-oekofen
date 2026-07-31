@@ -24,7 +24,22 @@ SCAN_INTERVAL = timedelta(seconds=60)
 
 def build_datetime_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
     """Build the writable-datetime definitions (Party endzeit, Urlaub start/ende)."""
-    defs: Dict[str, Dict[str, Any]] = {}
+    defs: Dict[str, Dict[str, Any]] = {
+        # The device's own clock. Unlike everything else, the *current*
+        # value and the *write target* are different parameters: the
+        # running clock is L_fernwartung_datum_zeit_sek, while a new value
+        # is staged in L_fernwartung_uhrzeit_neu and only takes effect once
+        # L_fernwartung_setze_uhrzeit=1 is sent in the same request (the
+        # device's own web UI always sends these two together, see
+        # config.min.js "zusatzVariable").
+        "device_clock": {
+            "parameter": "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu",
+            "read_parameter": "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek",
+            "commit_parameter": "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit",
+            "name": "Geräteuhrzeit",
+            "icon": "mdi:clock-edit-outline",
+        },
+    }
 
     for idx in circuits.get("hk", []):
         base = f"CAPPL:LOCAL.hk[{idx}]"
@@ -62,7 +77,11 @@ async def async_setup_entry(
     if not definitions:
         return
 
-    parameters = [config["parameter"] for config in definitions.values()]
+    parameters = sorted({
+        param
+        for config in definitions.values()
+        for param in (config["parameter"], config.get("read_parameter", config["parameter"]))
+    })
     coordinator = OekofenDateTimeCoordinator(hass, api, parameters)
     await coordinator.async_config_entry_first_refresh()
 
@@ -109,6 +128,8 @@ class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
         super().__init__(coordinator)
         self.api = api
         self._parameter = config["parameter"]
+        self._read_parameter = config.get("read_parameter", self._parameter)
+        self._commit_parameter = config.get("commit_parameter")
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_name = config["name"]
         self._attr_icon = config.get("icon")
@@ -120,7 +141,7 @@ class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
         }
 
     def _data_point(self) -> Optional[Dict[str, Any]]:
-        return self.coordinator.data.get(self._parameter)
+        return self.coordinator.data.get(self._read_parameter)
 
     @property
     def native_value(self) -> Optional[datetime]:
@@ -131,9 +152,12 @@ class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+        return self.coordinator.last_update_success and self._read_parameter in self.coordinator.data
 
     async def async_set_value(self, value: datetime) -> None:
         seconds = datetime_to_device_seconds(value)
-        await self.api.set_data(self._parameter, seconds)
+        if self._commit_parameter:
+            await self.api.set_data_multi({self._parameter: seconds, self._commit_parameter: 1})
+        else:
+            await self.api.set_data(self._parameter, seconds)
         await self.coordinator.async_request_refresh()
