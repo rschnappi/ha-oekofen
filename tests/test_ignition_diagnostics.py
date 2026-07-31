@@ -1,25 +1,49 @@
-"""Tests for the Glühstab ignition-duration diagnostics (ignition_diagnostics.py)."""
+"""Tests for the Zündzeit (ignition-duration) diagnostics (ignition_diagnostics.py)."""
 from unittest.mock import MagicMock, patch
 
 from custom_components.oekofen.ignition_diagnostics import (
     DEFAULT_WARNSCHWELLE_SECONDS,
-    GLUEHSTAB_PARAMETER,
+    KESSELSTATUS_PARAMETER,
     OekofenGluehstabWarnschwelle,
     OekofenGluehstabZuendzeit,
-    _is_off,
+    _is_zuendung,
+    _resolve_label,
     get_warnschwelle,
 )
 
 from .conftest import FakeCoordinator, make_point
 
+FORMAT_TEXTS = "Aus|Start|Zuendung|Softstart|Leistungsbrand|Saugen|Nachlauf"
 
-def test_is_off_handles_whitespace_and_case():
-    assert _is_off(" Aus") is True
-    assert _is_off("aus") is True
-    assert _is_off("AUS") is True
-    assert _is_off("Ein") is False
-    assert _is_off("") is None
-    assert _is_off(None) is None
+
+def _point(label: str):
+    index = FORMAT_TEXTS.split("|").index(label)
+    return make_point(str(index), format_texts=FORMAT_TEXTS)
+
+
+def test_resolve_label_uses_format_texts_index():
+    assert _resolve_label(_point("Zuendung")) == "Zuendung"
+    assert _resolve_label(_point("Softstart")) == "Softstart"
+
+
+def test_resolve_label_none_when_missing_or_blank():
+    assert _resolve_label(None) is None
+    assert _resolve_label(make_point("")) is None
+
+
+def test_resolve_label_out_of_range_returns_raw_value():
+    # Mirrors OekofenSensor.native_value: falls back to the raw value
+    # rather than hiding it, but that raw value can never match "zuendung".
+    label = _resolve_label(make_point("99", format_texts=FORMAT_TEXTS))
+    assert label == "99"
+    assert _is_zuendung(label) is False
+
+
+def test_is_zuendung_case_and_whitespace_insensitive():
+    assert _is_zuendung("Zuendung") is True
+    assert _is_zuendung(" zuendung ") is True
+    assert _is_zuendung("Softstart") is False
+    assert _is_zuendung(None) is None
 
 
 def test_get_warnschwelle_default_when_entity_missing():
@@ -31,10 +55,10 @@ def test_get_warnschwelle_default_when_entity_missing():
 
 def test_get_warnschwelle_reads_current_entity_state():
     hass = MagicMock()
-    hass.states.get.return_value = MagicMock(state="180")
+    hass.states.get.return_value = MagicMock(state="480")
     with patch("custom_components.oekofen.ignition_diagnostics.er.async_get") as mock_er:
         mock_er.return_value.async_get_entity_id.return_value = "number.x_gluehstab_warnschwelle"
-        assert get_warnschwelle(hass, "entry1") == 180.0
+        assert get_warnschwelle(hass, "entry1") == 480.0
 
 
 def test_get_warnschwelle_falls_back_on_unavailable_state():
@@ -60,44 +84,58 @@ def test_no_value_yet_leaves_state_unset():
 
 
 def test_first_seen_value_does_not_trigger_transition():
-    coord = FakeCoordinator({GLUEHSTAB_PARAMETER: make_point("Ein")})
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Zuendung")})
     entity = _make_entity(coord)
     entity._handle_coordinator_update()
-    assert entity._on_since is None  # no prior state to compare against yet
-    assert entity._last_state_off is False
+    assert entity._zuendung_since is None  # no prior state to compare against yet
+    assert entity._last_is_zuendung is True
 
 
-def test_off_to_on_to_off_records_duration_and_checks_threshold():
-    coord = FakeCoordinator({GLUEHSTAB_PARAMETER: make_point("Aus")})
+def test_warm_restart_skipping_zuendung_never_starts_a_timer():
+    """Kesselstatus can go Saugen -> Leistungsbrand directly (embers still hot);
+    without ever passing through "Zuendung" the sensor must stay unset."""
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Saugen")})
     entity = _make_entity(coord)
-    entity._handle_coordinator_update()  # establishes baseline: off
+    entity._handle_coordinator_update()
 
-    coord.data[GLUEHSTAB_PARAMETER] = make_point("Ein")
-    entity._handle_coordinator_update()  # off -> on
-    assert entity._on_since is not None
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Leistungsbrand")
+    entity._handle_coordinator_update()
+
+    assert entity._attr_native_value is None
+    assert entity._zuendung_since is None
+
+
+def test_zuendung_to_softstart_records_duration_and_checks_threshold():
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Start")})
+    entity = _make_entity(coord)
+    entity._handle_coordinator_update()  # baseline: not zuendung
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Zuendung")
+    entity._handle_coordinator_update()  # -> Zuendung
+    assert entity._zuendung_since is not None
 
     with patch("custom_components.oekofen.ignition_diagnostics.get_warnschwelle", return_value=999):
         with patch("custom_components.oekofen.ignition_diagnostics.async_create_notification") as mock_notify:
-            coord.data[GLUEHSTAB_PARAMETER] = make_point("Aus")
-            entity._handle_coordinator_update()  # on -> off
+            coord.data[KESSELSTATUS_PARAMETER] = _point("Softstart")
+            entity._handle_coordinator_update()  # Zuendung -> Softstart
 
-            assert entity._on_since is None
+            assert entity._zuendung_since is None
             assert entity._attr_native_value is not None
             assert entity._attr_native_value >= 0
             mock_notify.assert_not_called()  # under threshold
 
 
 def test_duration_over_threshold_triggers_notification():
-    coord = FakeCoordinator({GLUEHSTAB_PARAMETER: make_point("Aus")})
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Start")})
     entity = _make_entity(coord)
     entity._handle_coordinator_update()
 
-    coord.data[GLUEHSTAB_PARAMETER] = make_point("Ein")
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Zuendung")
     entity._handle_coordinator_update()
 
     with patch("custom_components.oekofen.ignition_diagnostics.get_warnschwelle", return_value=-1):
         with patch("custom_components.oekofen.ignition_diagnostics.async_create_notification") as mock_notify:
-            coord.data[GLUEHSTAB_PARAMETER] = make_point("Aus")
+            coord.data[KESSELSTATUS_PARAMETER] = _point("Softstart")
             entity._handle_coordinator_update()
 
             mock_notify.assert_called_once()

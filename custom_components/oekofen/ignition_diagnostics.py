@@ -1,10 +1,19 @@
-"""Glühstab (glow plug) ignition-duration diagnostics.
+"""Zündzeit (ignition-duration) diagnostics.
 
-Tracks how long the igniter (CAPPL:FA[0].ausgang_motor[1]) stays energized
-during each ignition cycle. A lengthening ignition time is a leading
-indicator of a worn/failing glow plug, so this is exposed as its own
-sensor (with automatic long-term statistics for trend viewing) plus a
-persistent notification once a user-adjustable threshold is exceeded.
+Tracks how long the boiler spends in its own "Zuendung" (ignition)
+Kesselstatus phase - the window between "Start" and "Softstart" where the
+Glühstab (glow plug) heats the fuel bed until flame is established. This
+is the device's own, explicit ignition window (CAPPL:FA[0].L_kesselstatus),
+which turned out to be far more accurate than an earlier attempt at
+inferring it from the Glühstab relay's own on/off time: warm restarts
+(embers still present) skip the Glühstab entirely and jump straight to
+"Softstart"/"Leistungsbrand", so relay-on-time alone doesn't isolate a
+real cold-start ignition the way the "Zuendung" status does.
+
+A lengthening ignition time is a leading indicator of a worn/failing
+glow plug, so this is exposed as its own sensor (with automatic
+long-term statistics for trend viewing) plus a persistent notification
+once a user-adjustable threshold is exceeded.
 
 The threshold is a plain Home Assistant-side setting (not backed by any
 device parameter), so it's looked up by unique_id via the entity
@@ -35,17 +44,39 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "oekofen"
 
-GLUEHSTAB_PARAMETER = "CAPPL:FA[0].ausgang_motor[1]"
+KESSELSTATUS_PARAMETER = "CAPPL:FA[0].L_kesselstatus"
+ZUENDUNG_LABEL = "zuendung"
 ZUENDZEIT_KEY = "gluehstab_zuendzeit"
 WARNSCHWELLE_KEY = "gluehstab_warnschwelle"
-DEFAULT_WARNSCHWELLE_SECONDS = 240.0
+# Based on one observed real cold-start ignition (~408s/6:48min) - tune
+# this via the "Glühstab Warnschwelle" number entity once more samples
+# are available.
+DEFAULT_WARNSCHWELLE_SECONDS = 600.0
 
 
-def _is_off(value: Optional[str]) -> Optional[bool]:
-    """Whether a Glühstab formatText value means "off" (device sends e.g. " Aus")."""
+def _resolve_label(point: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Resolve a coordinator data point's raw value to its device-provided text label."""
+    if not point:
+        return None
+    value = point.get("value")
     if value in (None, ""):
         return None
-    return str(value).strip().lower() == "aus"
+    format_texts = point.get("formatTexts") or ""
+    if format_texts:
+        options = format_texts.split("|")
+        try:
+            index = int(float(value))
+        except (TypeError, ValueError):
+            return None
+        if 0 <= index < len(options):
+            return options[index]
+    return str(value)
+
+
+def _is_zuendung(label: Optional[str]) -> Optional[bool]:
+    if label is None:
+        return None
+    return label.strip().lower() == ZUENDUNG_LABEL
 
 
 def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAULT_WARNSCHWELLE_SECONDS) -> float:
@@ -63,7 +94,7 @@ def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAUL
 
 
 class OekofenGluehstabZuendzeit(CoordinatorEntity, SensorEntity):
-    """Duration the Glühstab stayed energized during the last ignition cycle."""
+    """Duration of the boiler's last "Zuendung" (ignition) Kesselstatus phase."""
 
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -81,27 +112,32 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, SensorEntity):
             "manufacturer": "ÖkOfen",
             "model": "Pellematic",
         }
-        self._on_since: Optional[datetime] = None
-        self._last_state_off: Optional[bool] = None
+        self._zuendung_since: Optional[datetime] = None
+        self._last_is_zuendung: Optional[bool] = None
 
     def _handle_coordinator_update(self) -> None:
-        point = self.coordinator.data.get(GLUEHSTAB_PARAMETER)
-        is_off = _is_off(point.get("value")) if point else None
+        point = self.coordinator.data.get(KESSELSTATUS_PARAMETER)
+        label = _resolve_label(point)
+        is_zuendung = _is_zuendung(label)
 
-        if is_off is not None and self._last_state_off is not None and is_off != self._last_state_off:
+        if (
+            is_zuendung is not None
+            and self._last_is_zuendung is not None
+            and is_zuendung != self._last_is_zuendung
+        ):
             now = datetime.now(timezone.utc)
-            if self._last_state_off and not is_off:
-                # Aus -> an: neue Zündung beginnt
-                self._on_since = now
-            elif not self._last_state_off and is_off and self._on_since is not None:
-                # an -> Aus: Zündung beendet, Dauer auswerten
-                duration = round((now - self._on_since).total_seconds())
+            if is_zuendung and not self._last_is_zuendung:
+                # Kesselstatus wechselt in "Zuendung": neuer Zündvorgang beginnt
+                self._zuendung_since = now
+            elif not is_zuendung and self._last_is_zuendung and self._zuendung_since is not None:
+                # Kesselstatus verlässt "Zuendung": Zündvorgang beendet, Dauer auswerten
+                duration = round((now - self._zuendung_since).total_seconds())
                 self._attr_native_value = duration
-                self._on_since = None
+                self._zuendung_since = None
                 self._maybe_warn(duration)
 
-        if is_off is not None:
-            self._last_state_off = is_off
+        if is_zuendung is not None:
+            self._last_is_zuendung = is_zuendung
 
         super()._handle_coordinator_update()
 
