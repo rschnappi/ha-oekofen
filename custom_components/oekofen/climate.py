@@ -45,6 +45,11 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .betriebsart import (
+    ANLAGE_MODE_PARAMETER,
+    betriebsart_parameter,
+    betriebsart_slot_parameters,
+)
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -91,7 +96,7 @@ def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[
         defs[f"hk{idx}_climate"] = {
             "name": label,
             "icon": "mdi:radiator",
-            "mode_parameter": f"{base}.betriebsart[0]",
+            "betriebsart_base": base,
             "target_parameter": f"{base}.raumtemp_heizen",
             "current_parameter": f"CAPPL:LOCAL.L_hk[{idx}].raumtemp_ist",
             "mode_map": HK_MODE_MAP,
@@ -106,7 +111,7 @@ def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[
         defs[f"ww{idx}_climate"] = {
             "name": label,
             "icon": "mdi:water-boiler",
-            "mode_parameter": f"{base}.betriebsart[0]",
+            "betriebsart_base": base,
             "target_parameter": f"{base}.temp_heizen",
             "current_parameter": f"CAPPL:LOCAL.L_ww[{idx}].einschaltfuehler_ist",
             "mode_map": WW_MODE_MAP,
@@ -153,9 +158,15 @@ async def async_setup_entry(
 
     parameters: List[str] = []
     for config in definitions.values():
-        parameters += [config["mode_parameter"], config["target_parameter"], config["current_parameter"]]
+        if config.get("betriebsart_base"):
+            parameters += betriebsart_slot_parameters(config["betriebsart_base"])
+        else:
+            parameters.append(config["mode_parameter"])
+        parameters += [config["target_parameter"], config["current_parameter"]]
         if config.get("boost_parameter"):
             parameters.append(config["boost_parameter"])
+    if ANLAGE_MODE_PARAMETER not in parameters:
+        parameters.append(ANLAGE_MODE_PARAMETER)
 
     coordinator = OekofenClimateCoordinator(hass, api, parameters)
     await coordinator.async_config_entry_first_refresh()
@@ -205,7 +216,8 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
     ) -> None:
         super().__init__(coordinator)
         self.api = api
-        self._mode_parameter = config["mode_parameter"]
+        self._betriebsart_base: Optional[str] = config.get("betriebsart_base")
+        self._mode_parameter: Optional[str] = config.get("mode_parameter")
         self._target_parameter = config["target_parameter"]
         self._current_parameter = config["current_parameter"]
         self._mode_map: Dict[str, Tuple[HVACMode, str]] = config["mode_map"]
@@ -248,8 +260,13 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
     def _point(self, parameter: str) -> Optional[Dict[str, Any]]:
         return self.coordinator.data.get(parameter)
 
+    def _mode_parameter_now(self) -> str:
+        if self._betriebsart_base:
+            return betriebsart_parameter(self._betriebsart_base, self.coordinator.data)
+        return self._mode_parameter
+
     def _mode_options(self) -> List[str]:
-        point = self._point(self._mode_parameter)
+        point = self._point(self._mode_parameter_now())
         format_texts = (point.get("formatTexts") if point else "") or ""
         format_texts = format_texts.strip()
         if format_texts:
@@ -257,7 +274,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         return self._mode_fallback
 
     def _mode_label(self) -> Optional[str]:
-        point = self._point(self._mode_parameter)
+        point = self._point(self._mode_parameter_now())
         if not point or point.get("value") in (None, ""):
             return None
         try:
@@ -350,14 +367,14 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._mode_parameter in self.coordinator.data
+        return self.coordinator.last_update_success and self._mode_parameter_now() in self.coordinator.data
 
     async def _write_label(self, label: str) -> None:
         options = self._mode_options()
         if label not in options:
             _LOGGER.warning("Mode '%s' not available in device options %s", label, options)
             return
-        await self.api.set_data(self._mode_parameter, options.index(label))
+        await self.api.set_data(self._mode_parameter_now(), options.index(label))
         await self.coordinator.async_request_refresh()
 
     def _label_for(self, hvac_mode: Optional[HVACMode] = None, preset_mode: Optional[str] = None) -> Optional[str]:

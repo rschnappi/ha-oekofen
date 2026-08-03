@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 from homeassistant.components.climate import PRESET_BOOST, PRESET_NONE, HVACMode
 
+from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER
 from custom_components.oekofen.climate import (
     HK_MODE_MAP,
     PE_MODE_MAP,
@@ -16,15 +17,17 @@ from .conftest import FakeCoordinator, make_point
 
 def test_build_climate_definitions_one_per_circuit():
     defs = build_climate_definitions({"hk": [0], "ww": [0], "pellematic": [0]})
-    assert defs["hk0_climate"]["mode_parameter"] == "CAPPL:LOCAL.hk[0].betriebsart[0]"
+    assert defs["hk0_climate"]["betriebsart_base"] == "CAPPL:LOCAL.hk[0]"
     assert defs["hk0_climate"]["target_parameter"] == "CAPPL:LOCAL.hk[0].raumtemp_heizen"
     assert defs["hk0_climate"]["current_parameter"] == "CAPPL:LOCAL.L_hk[0].raumtemp_ist"
     assert defs["hk0_climate"]["mode_map"] is HK_MODE_MAP
 
-    assert defs["ww0_climate"]["mode_parameter"] == "CAPPL:LOCAL.ww[0].betriebsart[0]"
+    assert defs["ww0_climate"]["betriebsart_base"] == "CAPPL:LOCAL.ww[0]"
     assert defs["ww0_climate"]["target_parameter"] == "CAPPL:LOCAL.ww[0].temp_heizen"
     assert defs["ww0_climate"]["mode_map"] is WW_MODE_MAP
 
+    # Pellematic's mode is NOT slotted by Anlage-Betriebsart, unlike hk/ww.
+    assert "betriebsart_base" not in defs["pe0_climate"]
     assert defs["pe0_climate"]["mode_parameter"] == "CAPPL:FA[0].betriebsart_fa"
     assert defs["pe0_climate"]["target_parameter"] == "CAPPL:FA[0].pe_kesseltemperatur_soll"
     assert defs["pe0_climate"]["current_parameter"] == "CAPPL:FA[0].L_kesseltemperatur"
@@ -45,6 +48,10 @@ def _pe_config():
 
 def _make_entity(coordinator, config, key="hk0_climate", api=None):
     return OekofenClimate(coordinator, api or AsyncMock(), key, config, entry_id="e1", device_name="Test")
+
+
+def _mode_param(config, slot=0):
+    return f"{config['betriebsart_base']}.betriebsart[{slot}]"
 
 
 def test_hvac_modes_are_off_auto_heat_in_order():
@@ -79,7 +86,7 @@ def test_preset_mode_falls_back_to_mode_map_when_boost_inactive():
     config = _ww_config()
     coord = FakeCoordinator({
         config["boost_parameter"]: make_point("0"),
-        config["mode_parameter"]: make_point("2", format_texts="Aus|Auto|Ein"),
+        _mode_param(config): make_point("2", format_texts="Aus|Auto|Ein"),
     })
     entity = _make_entity(coord, config, key="ww0_climate")
     assert entity.preset_mode == PRESET_NONE
@@ -136,7 +143,7 @@ async def test_pellematic_async_set_temperature_writes_regeltemperatur():
 
 def test_hvac_mode_and_preset_for_heizen():
     config = _hk_config()
-    coord = FakeCoordinator({config["mode_parameter"]: make_point("2", format_texts="Aus|Auto|Heizen|Absenken")})
+    coord = FakeCoordinator({_mode_param(config): make_point("2", format_texts="Aus|Auto|Heizen|Absenken")})
     entity = _make_entity(coord, config)
     assert entity.hvac_mode == HVACMode.HEAT
     assert entity.preset_mode == PRESET_NONE
@@ -144,10 +151,22 @@ def test_hvac_mode_and_preset_for_heizen():
 
 def test_hvac_mode_and_preset_for_absenken():
     config = _hk_config()
-    coord = FakeCoordinator({config["mode_parameter"]: make_point("3", format_texts="Aus|Auto|Heizen|Absenken")})
+    coord = FakeCoordinator({_mode_param(config): make_point("3", format_texts="Aus|Auto|Heizen|Absenken")})
     entity = _make_entity(coord, config)
     assert entity.hvac_mode == HVACMode.HEAT
     assert entity.preset_mode == "Absenken"
+
+
+def test_hvac_mode_uses_slot_matching_current_anlage_mode():
+    """Regression test: Anlage=Auto (slot 1) must read betriebsart[1], not [0]."""
+    config = _hk_config()
+    coord = FakeCoordinator({
+        ANLAGE_MODE_PARAMETER: make_point("1"),  # Anlage = Auto
+        _mode_param(config, slot=0): make_point("2", format_texts="Aus|Auto|Heizen|Absenken"),  # stale/inactive
+        _mode_param(config, slot=1): make_point("0", format_texts="Aus|Auto|Heizen|Absenken"),  # active: "Aus"
+    })
+    entity = _make_entity(coord, config)
+    assert entity.hvac_mode == HVACMode.OFF
 
 
 def test_hvac_mode_none_when_unavailable():
@@ -180,23 +199,37 @@ def test_min_max_temp_fall_back_to_circuit_defaults():
 async def test_async_set_hvac_mode_writes_heizen():
     config = _hk_config()
     api = AsyncMock()
-    coord = FakeCoordinator({config["mode_parameter"]: make_point("1", format_texts="Aus|Auto|Heizen|Absenken")})
+    coord = FakeCoordinator({_mode_param(config): make_point("1", format_texts="Aus|Auto|Heizen|Absenken")})
     entity = _make_entity(coord, config, api=api)
 
     await entity.async_set_hvac_mode(HVACMode.HEAT)
 
-    api.set_data.assert_awaited_once_with(config["mode_parameter"], 2)  # index of "Heizen"
+    api.set_data.assert_awaited_once_with(_mode_param(config), 2)  # index of "Heizen"
 
 
 async def test_async_set_preset_mode_absenken_writes_correct_index():
     config = _hk_config()
     api = AsyncMock()
-    coord = FakeCoordinator({config["mode_parameter"]: make_point("1", format_texts="Aus|Auto|Heizen|Absenken")})
+    coord = FakeCoordinator({_mode_param(config): make_point("1", format_texts="Aus|Auto|Heizen|Absenken")})
     entity = _make_entity(coord, config, api=api)
 
     await entity.async_set_preset_mode("Absenken")
 
-    api.set_data.assert_awaited_once_with(config["mode_parameter"], 3)  # index of "Absenken"
+    api.set_data.assert_awaited_once_with(_mode_param(config), 3)  # index of "Absenken"
+
+
+async def test_async_set_hvac_mode_writes_to_slot_matching_current_anlage_mode():
+    config = _hk_config()
+    api = AsyncMock()
+    coord = FakeCoordinator({
+        ANLAGE_MODE_PARAMETER: make_point("2"),  # Anlage = Warmwasser -> slot 2
+        _mode_param(config, slot=2): make_point("1", format_texts="Aus|Auto|Heizen|Absenken"),
+    })
+    entity = _make_entity(coord, config, api=api)
+
+    await entity.async_set_hvac_mode(HVACMode.HEAT)
+
+    api.set_data.assert_awaited_once_with(_mode_param(config, slot=2), 2)
 
 
 async def test_async_set_temperature_applies_divisor():

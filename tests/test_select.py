@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER
 from custom_components.oekofen.select import (
     OekofenModeSelect,
     build_select_definitions,
@@ -18,12 +19,33 @@ def test_build_select_definitions_always_includes_system_mode():
 
 def test_build_select_definitions_per_circuit():
     defs = build_select_definitions({"hk": [0], "ww": [0], "zirkp": [0], "pellematic": [0]})
-    assert defs["hk0_mode"]["parameter"] == "CAPPL:LOCAL.hk[0].betriebsart[0]"
+    # hk/ww betriebsart is slotted by the current Anlage-Betriebsart, so it
+    # has no fixed "parameter" - see betriebsart.py.
+    assert defs["hk0_mode"]["betriebsart_base"] == "CAPPL:LOCAL.hk[0]"
+    assert "parameter" not in defs["hk0_mode"]
     assert defs["hk0_zeitprogramm"]["parameter"] == "CAPPL:LOCAL.hk[0].aktives_zeitprogramm"
     assert defs["ww0_vorrang"]["parameter"] == "CAPPL:LOCAL.ww[0].prioritaet"
     assert defs["ww0_legionellenschutz"]["parameter"] == "CAPPL:LOCAL.ww[0].legionellen_wochentag"
     assert defs["zirkp0_zeitprogramm"]["parameter"] == "CAPPL:LOCAL.zirkp[0].aktives_zeitprogramm"
+    # Pellematic's mode is NOT slotted, unlike hk/ww.
     assert defs["pe0_mode"]["parameter"] == "CAPPL:FA[0].betriebsart_fa"
+
+
+async def test_hk_mode_select_uses_slot_matching_current_anlage_mode():
+    """Regression test: Anlage=Auto (slot 1) must read/write betriebsart[1], not [0]."""
+    config = build_select_definitions({"hk": [0], "ww": [], "zirkp": [], "pellematic": []})["hk0_mode"]
+    api = AsyncMock()
+    coord = FakeCoordinator({
+        ANLAGE_MODE_PARAMETER: make_point("1"),  # Anlage = Auto
+        "CAPPL:LOCAL.hk[0].betriebsart[0]": make_point("2", format_texts="Aus|Auto|Heizen|Absenken"),  # stale
+        "CAPPL:LOCAL.hk[0].betriebsart[1]": make_point("0", format_texts="Aus|Auto|Heizen|Absenken"),  # active
+    })
+    entity = OekofenModeSelect(coord, api, "hk0_mode", config, entry_id="e1", device_name="Test")
+
+    assert entity.current_option == "Aus"
+
+    await entity.async_select_option("Heizen")
+    api.set_data.assert_awaited_once_with("CAPPL:LOCAL.hk[0].betriebsart[1]", 2)
 
 
 def _make_entity(coordinator, config, api=None):
