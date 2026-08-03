@@ -48,6 +48,11 @@ def test_build_select_definitions_per_circuit():
     assert defs["hk0_zeitprogramm"]["parameter"] == "CAPPL:LOCAL.hk[0].aktives_zeitprogramm"
     assert defs["ww0_vorrang"]["parameter"] == "CAPPL:LOCAL.ww[0].prioritaet"
     assert defs["ww0_legionellenschutz"]["parameter"] == "CAPPL:LOCAL.ww[0].legionellen_wochentag"
+    # Zirkulationspumpe's mode is NOT installer-gated in the vendor's own
+    # config.min.js (anzeigebedingung:null), unlike hk/ww's mode, so it is
+    # a plain fixed "parameter" - not slotted, no warning.
+    assert defs["zirkp0_mode"]["parameter"] == "CAPPL:LOCAL.zirkp[0].betriebsart"
+    assert "warning" not in defs["zirkp0_mode"]
     assert defs["zirkp0_zeitprogramm"]["parameter"] == "CAPPL:LOCAL.zirkp[0].aktives_zeitprogramm"
     # Pellematic's mode is NOT slotted, unlike hk/ww.
     assert defs["pe0_mode"]["parameter"] == "CAPPL:FA[0].betriebsart_fa"

@@ -50,6 +50,10 @@ Diese Integration bietet vollständige Kontrolle über Ihr ÖkOfen Heizsystem mi
 
 Die gewählte Sprache bestimmt die Sensornamen und Werte, die von der API zurückgegeben werden.
 
+### Verbindungsdaten nachträglich ändern
+
+Über **Einstellungen** → **Geräte & Dienste** → ÖkOfen-Integration → **Konfigurieren** lassen sich IP-Adresse, Benutzername, Passwort und Sprache jederzeit anpassen (z.B. nach einem IP-Wechsel), ohne die Integration entfernen und neu einrichten zu müssen. Nach dem Speichern wird die Integration automatisch neu geladen.
+
 ## 📊 Verfügbare Sensoren
 
 Die Integration stellt über 80 Sensoren zur Verfügung, organisiert nach Kategorien:
@@ -205,7 +209,7 @@ Ein Teil der Sollwerte ist am Original-Gerät selbst **hinter dem Installateur-/
 
 - Heizkreis: Vorlauf Max, Vorlauf Min
 - Warmwasser: Vorrang, Überhöhung, Nachlaufzeit, Einschalthysterese, Legionellenschutz
-- Pellematic: Regeltemperatur, Abschalttemperatur, Abgastemp-Minimum, Leistungsstufe (klassisch + Smart)
+- Pellematic: Regeltemperatur (klassisch + Smart), Abschalttemperatur, Abgastemp-Minimum, Leistungsstufe (klassisch + Smart)
 
 **Falsche Werte hier können die Anlage beschädigen oder Sicherheitsfunktionen beeinträchtigen** (insbesondere Kessel-Abschalttemperatur und Abgastemp-Minimum sind vermutlich Schutzparameter, keine reinen Komfort-Einstellungen). Im Zweifel am Gerät selbst mit Installateur-Code ändern, oder Rücksprache mit dem Installateur halten.
 
@@ -304,6 +308,15 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ### Version 0.8.0
 
+- ⚙️ **Verbindungsdaten nachträglich editierbar**: Neuer Options-Flow
+  (Integration → "Konfigurieren") erlaubt das Ändern von IP-Adresse,
+  Benutzername, Passwort und Sprache, ohne die Integration neu einrichten
+  zu müssen.
+- ✅ Weitere native Felder ergänzt: Zirkulationspumpe Betriebsart
+  (`select.*`, nicht installateurgesperrt) sowie Pellematic Regeltemperatur
+  für "Smart"-Firmware (`number.*`, `frischwasser_soll_temp` - analog zum
+  bestehenden Leistungsstufe-Muster, gilt je nach Firmware nur eine der
+  beiden Regeltemperatur-Entities).
 - 🐛 **Kritischer Fix: Heizkreis-/Warmwasser-Betriebsart las/schrieb den
   falschen Wert, sobald die Anlage nicht auf "Aus" stand.** Das Gerät
   speichert `betriebsart` pro Heizkreis/Warmwasser als 3er-Array

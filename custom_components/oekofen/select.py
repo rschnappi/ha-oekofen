@@ -102,6 +102,12 @@ def build_select_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
     for idx in circuits.get("zirkp", []):
         base = f"CAPPL:LOCAL.zirkp[{idx}]"
         label = f"Zirkulationspumpe {idx + 1}"
+        defs[f"zirkp{idx}_mode"] = {
+            "parameter": f"{base}.betriebsart",
+            "name": f"{label} Betriebsart",
+            "icon": "mdi:pump",
+            "fallback_options": ["Aus", "Auto", "Ein"],
+        }
         defs[f"zirkp{idx}_zeitprogramm"] = {
             "parameter": f"{base}.aktives_zeitprogramm",
             "name": f"{label} Aktives Zeitprogramm",

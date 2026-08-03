@@ -25,6 +25,7 @@ def test_build_number_definitions_marks_installer_locked_fields_with_warning():
         "pe0_agt_min",
         "pe0_leistungsstufe",
         "pe0_leistungsstufe_smart",
+        "pe0_frischwasser_soll_temp",
     ):
         assert defs[key]["warning"] == INSTALLER_WARNING
         assert defs[key]["name"].startswith("⚠️ ")
@@ -52,6 +53,7 @@ def test_build_number_definitions_covers_all_circuit_types():
     assert defs["hk0_raumtemp_heizen"]["parameter"] == "CAPPL:LOCAL.hk[0].raumtemp_heizen"
     assert defs["ww0_wassertemp_soll"]["parameter"] == "CAPPL:LOCAL.ww[0].temp_heizen"
     assert defs["pe0_kesseltemperatur_soll"]["parameter"] == "CAPPL:FA[0].pe_kesseltemperatur_soll"
+    assert defs["pe0_frischwasser_soll_temp"]["parameter"] == "CAPPL:FA[0].frischwasser_soll_temp"
     assert defs["zirkp0_abschalttemp"]["parameter"] == "CAPPL:LOCAL.zirkp[0].ruecklauftemp_soll"
 
 
