@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, UnitOfTemperature
+from homeassistant.const import CONF_HOST, EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -54,12 +54,14 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "parameter": f"{base}.heizkurve_steigung",
             "name": f"{label} Heizkurve Steigung",
             "icon": "mdi:chart-line",
+            "config": True,
         }
         defs[f"hk{idx}_heizkurve_fusspunkt"] = {
             "parameter": f"{base}.heizkurve_fusspunkt",
             "name": f"{label} Heizkurve Fußpunkt",
             "icon": "mdi:chart-line",
             "temperature": True,
+            "config": True,
         }
         defs[f"hk{idx}_heizgrenze_heizen"] = {
             "parameter": f"{base}.heizgrenze_heizen",
@@ -77,11 +79,13 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "parameter": f"{base}.vorhaltezeit",
             "name": f"{label} Vorhaltezeit",
             "icon": "mdi:timer-outline",
+            "config": True,
         }
         defs[f"hk{idx}_raumfuehlereinfluss"] = {
             "parameter": f"{base}.raumfuehler_einfluss",
             "name": f"{label} Raumfühlereinfluss",
             "icon": "mdi:percent-outline",
+            "config": True,
         }
         defs[f"hk{idx}_raumtemp_hysterese"] = {
             "parameter": f"{base}.raumtemp_plus",
@@ -99,12 +103,14 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "name": f"{label} Vorlauf Max",
             "icon": "mdi:thermometer-chevron-up",
             "temperature": True,
+            "config": True,
         }
         defs[f"hk{idx}_vorlauftemp_min"] = {
             "parameter": f"{base}.vorlauftemp_min",
             "name": f"{label} Vorlauf Min",
             "icon": "mdi:thermometer-chevron-down",
             "temperature": True,
+            "config": True,
         }
 
     for idx in circuits.get("ww", []):
@@ -263,6 +269,11 @@ class OekofenNumber(CoordinatorEntity, NumberEntity):
         if config.get("temperature"):
             self._attr_device_class = NumberDeviceClass.TEMPERATURE
             self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+        # Always assign _attr_entity_category (None when not a config field):
+        # like _attr_preset_modes on ClimateEntity, this has no class-level
+        # default on newer Home Assistant versions, so leaving it unset
+        # raises AttributeError instead of returning None.
+        self._attr_entity_category = EntityCategory.CONFIG if config.get("config") else None
         self._attr_device_info = {
             "identifiers": {("oekofen", entry_id)},
             "name": device_name,

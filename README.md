@@ -126,6 +126,8 @@ Automatisierungen und Skripten nutzbar sind - keine `input_number`/
 
 Die Integration bietet folgende Services zum Steuern des Heizsystems:
 
+⚠️ **Legacy-Hinweis**: `set_system_mode`/`set_heating_mode`/`set_hot_water_mode`/`set_pellematic_mode` steuern dieselben Parameter, die inzwischen über die nativen `select.*`/`climate.*`-Entities (Betriebsart-Dropdown bzw. Thermostat-Karte) komfortabler mit Status-Feedback verfügbar sind. Die Services bleiben aus Kompatibilitätsgründen bestehen, für **neue** Automatisierungen aber bitte die Entities bevorzugen. `oekofen.set_parameter` bleibt weiterhin der generische Weg für alle Parameter, die (noch) keine eigene Entity haben.
+
 ### `oekofen.set_system_mode`
 Setzt den Betriebsmodus der Anlage.
 ```yaml
