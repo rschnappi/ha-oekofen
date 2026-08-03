@@ -1,13 +1,35 @@
 """Tests for the Störmelderelais (fault relay) notification watcher in sensor.py."""
 from unittest.mock import MagicMock, patch
 
+from homeassistant.const import EntityCategory
+
 from custom_components.oekofen.sensor import (
     FAULT_RELAY_PARAMETER,
+    OekofenSensor,
     _is_relay_active,
     _register_fault_relay_watcher,
 )
 
-from .conftest import make_point
+from .conftest import FakeCoordinator, make_point
+
+
+def _make_sensor(entity_category=None):
+    config = {"parameter": "P", "name": "N"}
+    if entity_category is not None:
+        config["entity_category"] = entity_category
+    return OekofenSensor(FakeCoordinator({}), "k", config, device_name="Test", entry_id="e1")
+
+
+def test_entity_category_diagnostic_is_applied():
+    assert _make_sensor("diagnostic")._attr_entity_category == EntityCategory.DIAGNOSTIC
+
+
+def test_entity_category_config_is_applied():
+    assert _make_sensor("config")._attr_entity_category == EntityCategory.CONFIG
+
+
+def test_entity_category_absent_by_default():
+    assert _make_sensor()._attr_entity_category is None
 
 
 class ListenerCoordinator:

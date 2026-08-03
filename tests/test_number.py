@@ -1,6 +1,8 @@
 """Tests for the number platform (number.py)."""
 from unittest.mock import AsyncMock
 
+from homeassistant.const import EntityCategory
+
 from custom_components.oekofen.number import OekofenNumber, build_number_definitions
 
 from .conftest import FakeCoordinator, make_point
@@ -13,6 +15,35 @@ def test_build_number_definitions_covers_all_circuit_types():
     assert defs["ww0_wassertemp_soll"]["parameter"] == "CAPPL:LOCAL.ww[0].temp_heizen"
     assert defs["pe0_kesseltemperatur_soll"]["parameter"] == "CAPPL:FA[0].pe_kesseltemperatur_soll"
     assert defs["zirkp0_abschalttemp"]["parameter"] == "CAPPL:LOCAL.zirkp[0].ruecklauftemp_soll"
+
+
+def test_build_number_definitions_marks_installer_tuning_fields_as_config():
+    defs = build_number_definitions({"hk": [0], "ww": [0], "pellematic": [], "zirkp": []})
+    for key in (
+        "hk0_heizkurve_steigung",
+        "hk0_heizkurve_fusspunkt",
+        "hk0_vorhaltezeit",
+        "hk0_raumfuehlereinfluss",
+        "hk0_vorlauftemp_max",
+        "hk0_vorlauftemp_min",
+    ):
+        assert defs[key]["config"] is True
+
+    # User-facing setpoints stay as regular (non-config) entities.
+    assert "config" not in defs["hk0_raumtemp_heizen"]
+    assert "config" not in defs["ww0_wassertemp_soll"]
+
+
+def test_config_flag_sets_entity_category():
+    config = {"parameter": "P", "name": "N", "icon": None, "config": True}
+    entity = OekofenNumber(FakeCoordinator({}), AsyncMock(), "k", config, entry_id="e1", device_name="Test")
+    assert entity._attr_entity_category == EntityCategory.CONFIG
+
+
+def test_no_config_flag_leaves_entity_category_unset():
+    config = {"parameter": "P", "name": "N", "icon": None}
+    entity = OekofenNumber(FakeCoordinator({}), AsyncMock(), "k", config, entry_id="e1", device_name="Test")
+    assert entity._attr_entity_category is None
 
 
 def test_build_number_definitions_includes_vorlauftemp_per_circuit():

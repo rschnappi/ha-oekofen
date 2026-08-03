@@ -12,6 +12,7 @@ from homeassistant.const import (
     UnitOfTemperature,
     CONF_HOST,
     PERCENTAGE,
+    EntityCategory,
 )
 from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant, callback
@@ -30,6 +31,11 @@ from .pellematic_api import PellematicAPI
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=30)  # Based on 5-second jQuery intervals, but more conservative
+
+ENTITY_CATEGORY_MAP = {
+    "diagnostic": EntityCategory.DIAGNOSTIC,
+    "config": EntityCategory.CONFIG,
+}
 
 # Störmelderelais (fault relay): trips on serious safety conditions (e.g.
 # Not-Aus/STB overtemperature). Not exposed as its own entity - it just
@@ -910,6 +916,7 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
         self._attr_state_class = sensor_config.get("state_class")
         self._attr_native_unit_of_measurement = sensor_config.get("unit")
         self._attr_icon = sensor_config.get("icon")
+        self._attr_entity_category = ENTITY_CATEGORY_MAP.get(sensor_config.get("entity_category"))
         self._fallback_name = sensor_config["name"]
 
         # Device info - identifiers use the stable config entry id so the
