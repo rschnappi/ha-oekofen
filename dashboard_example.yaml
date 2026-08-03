@@ -203,6 +203,9 @@ views:
               - entity: number.pellematic_1_regeltemperatur
                 name: Regeltemperatur
                 icon: mdi:thermometer
+              - entity: number.pellematic_1_regeltemperatur_smart
+                name: Regeltemperatur (Smart)
+                icon: mdi:thermometer
               - entity: number.pellematic_1_abschalttemperatur
                 name: Abschalttemperatur
                 icon: mdi:thermometer-high

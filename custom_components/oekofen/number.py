@@ -191,6 +191,20 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "config": True,
             "warning": INSTALLER_WARNING,
         }
+        # On "Smart" firmware (L_pe_schnecke_sauganlage==4), the real
+        # regulation-temperature setpoint is frischwasser_soll_temp, not
+        # pe_kesseltemperatur_soll (config.min.js gates the latter to
+        # "!= 4" in the vendor's own einstellungen menu). Same
+        # dual-firmware pattern as Leistungsstufe below: both entities
+        # are created, whichever doesn't apply simply stays unavailable.
+        defs[f"pe{idx}_frischwasser_soll_temp"] = {
+            "parameter": f"{base}.frischwasser_soll_temp",
+            "name": f"⚠️ {label} Regeltemperatur (Smart)",
+            "icon": "mdi:thermometer",
+            "temperature": True,
+            "config": True,
+            "warning": INSTALLER_WARNING,
+        }
         # "Leistungsstufe" is stored under one of two different parameter
         # names depending on whether the boiler runs classic or "Smart"
         # firmware (config.min.js switches on L_pe_schnecke_sauganlage==4).
