@@ -6,6 +6,7 @@ from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platfor
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
+from .betriebsart import ANLAGE_MODE_PARAMETER, active_betriebsart_slot
 from .discovery import async_discover_circuits
 from .pellematic_api import PellematicAPI
 
@@ -148,9 +149,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "absenken": 3,
         }
         
-        parameter = f"CAPPL:LOCAL.hk[{circuit}].betriebsart[0]"
+        # Betriebsart is a 3-slot array (one slot per Anlage-Betriebsart);
+        # only the slot matching the current Anlage mode is actually live.
+        anlage_data = await api.get_data([ANLAGE_MODE_PARAMETER])
+        slot = active_betriebsart_slot(anlage_data)
+        parameter = f"CAPPL:LOCAL.hk[{circuit}].betriebsart[{slot}]"
         value = mode_map[mode]
-        
+
         _LOGGER.info(f"Setting heating circuit {circuit} mode to {mode} (value={value})")
         
         try:
@@ -173,9 +178,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "ein": 2,
         }
         
-        parameter = f"CAPPL:LOCAL.ww[{circuit}].betriebsart[0]"
+        # Betriebsart is a 3-slot array (one slot per Anlage-Betriebsart);
+        # only the slot matching the current Anlage mode is actually live.
+        anlage_data = await api.get_data([ANLAGE_MODE_PARAMETER])
+        slot = active_betriebsart_slot(anlage_data)
+        parameter = f"CAPPL:LOCAL.ww[{circuit}].betriebsart[{slot}]"
         value = mode_map[mode]
-        
+
         _LOGGER.info(f"Setting hot water circuit {circuit} mode to {mode} (value={value})")
         
         try:

@@ -21,6 +21,11 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .betriebsart import (
+    ANLAGE_MODE_PARAMETER,
+    betriebsart_parameter,
+    betriebsart_slot_parameters,
+)
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,7 +48,7 @@ def build_select_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
         base = f"CAPPL:LOCAL.hk[{idx}]"
         label = f"Heizkreis {idx + 1}"
         defs[f"hk{idx}_mode"] = {
-            "parameter": f"{base}.betriebsart[0]",
+            "betriebsart_base": base,
             "name": f"{label} Betriebsart",
             "icon": "mdi:radiator",
             "fallback_options": ["Aus", "Auto", "Heizen", "Absenken"],
@@ -59,7 +64,7 @@ def build_select_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
         base = f"CAPPL:LOCAL.ww[{idx}]"
         label = f"Warmwasser {idx + 1}"
         defs[f"ww{idx}_mode"] = {
-            "parameter": f"{base}.betriebsart[0]",
+            "betriebsart_base": base,
             "name": f"{label} Betriebsart",
             "icon": "mdi:water-boiler",
             "fallback_options": ["Aus", "Auto", "Ein"],
@@ -120,7 +125,14 @@ async def async_setup_entry(
     if not definitions:
         return
 
-    parameters = [config["parameter"] for config in definitions.values()]
+    parameters: List[str] = []
+    for config in definitions.values():
+        if config.get("betriebsart_base"):
+            parameters += betriebsart_slot_parameters(config["betriebsart_base"])
+        else:
+            parameters.append(config["parameter"])
+    if ANLAGE_MODE_PARAMETER not in parameters:
+        parameters.append(ANLAGE_MODE_PARAMETER)
     coordinator = OekofenSelectCoordinator(hass, api, parameters)
     await coordinator.async_config_entry_first_refresh()
 
@@ -166,7 +178,8 @@ class OekofenModeSelect(CoordinatorEntity, SelectEntity):
     ) -> None:
         super().__init__(coordinator)
         self.api = api
-        self._parameter = config["parameter"]
+        self._betriebsart_base = config.get("betriebsart_base")
+        self._parameter = config.get("parameter")
         self._fallback_options = config.get("fallback_options", [])
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_name = config["name"]
@@ -178,8 +191,13 @@ class OekofenModeSelect(CoordinatorEntity, SelectEntity):
             "model": "Pellematic",
         }
 
+    def _current_parameter(self) -> str:
+        if self._betriebsart_base:
+            return betriebsart_parameter(self._betriebsart_base, self.coordinator.data)
+        return self._parameter
+
     def _data_point(self) -> Optional[Dict[str, Any]]:
-        return self.coordinator.data.get(self._parameter)
+        return self.coordinator.data.get(self._current_parameter())
 
     @property
     def options(self) -> List[str]:
@@ -206,11 +224,12 @@ class OekofenModeSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+        return self.coordinator.last_update_success and self._current_parameter() in self.coordinator.data
 
     async def async_select_option(self, option: str) -> None:
         options = self.options
         if option not in options:
-            raise ValueError(f"Unknown option '{option}' for {self._parameter}")
-        await self.api.set_data(self._parameter, options.index(option))
+            raise ValueError(f"Unknown option '{option}' for {self._current_parameter()}")
+        parameter = self._current_parameter()
+        await self.api.set_data(parameter, options.index(option))
         await self.coordinator.async_request_refresh()

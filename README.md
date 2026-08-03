@@ -294,6 +294,18 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ### Version 0.8.0
 
+- 🐛 **Kritischer Fix: Heizkreis-/Warmwasser-Betriebsart las/schrieb den
+  falschen Wert, sobald die Anlage nicht auf "Aus" stand.** Das Gerät
+  speichert `betriebsart` pro Heizkreis/Warmwasser als 3er-Array
+  (`betriebsart[0..2]`) - ein Slot pro möglicher Anlage-Betriebsart
+  (Aus/Auto/Warmwasser), von denen nur der zum aktuellen Anlage-Modus
+  passende Slot tatsächlich aktiv ist (siehe Original-Firmware,
+  `config.min.js`). `climate.*`/`select.*` (und die Legacy-Services
+  `set_heating_mode`/`set_hot_water_mode`) haben bisher immer fix
+  `betriebsart[0]` verwendet - bei laufendem Anlage-Modus "Auto" (der
+  Normalfall) wurde damit ein veralteter, inaktiver Slot angezeigt und
+  Änderungen gingen ins Leere. Neues `betriebsart.py` löst den aktiven
+  Slot jetzt live anhand von `CAPPL:LOCAL.anlage_betriebsart` auf.
 - ✅ **Climate-Plattform** (`climate.py`, neu): Heizkreis und Warmwasser
   bekommen echte `climate.*`-Entities für Thermostat-Karten in HA, statt nur
   Sensoren/Number-Feldern. Mode-Mapping ist pro Kreistyp konfigurierbar
