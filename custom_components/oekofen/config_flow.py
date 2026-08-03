@@ -111,11 +111,18 @@ class OekofenOptionsFlow(config_entries.OptionsFlow):
     """
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+        # Stored under a private name rather than self.config_entry: on
+        # newer HA (2024.12+) that became a framework-managed read-only
+        # property, and assigning to it here raises AttributeError.
+        self._config_entry = config_entry
 
     async def async_step_init(self, user_input=None) -> FlowResult:
+        """Let the user pick between editing the connection or removing the device."""
+        return self.async_show_menu(step_id="init", menu_options=["edit", "remove"])
+
+    async def async_step_edit(self, user_input=None) -> FlowResult:
         errors = {}
-        current = self.config_entry.data
+        current = self._config_entry.data
 
         if user_input is not None:
             try:
@@ -125,7 +132,7 @@ class OekofenOptionsFlow(config_entries.OptionsFlow):
                     user_input[CONF_PASSWORD],
                 )
                 self.hass.config_entries.async_update_entry(
-                    self.config_entry,
+                    self._config_entry,
                     data=user_input,
                     title=f"ÖkOfen {user_input[CONF_HOST]}",
                 )
@@ -144,7 +151,16 @@ class OekofenOptionsFlow(config_entries.OptionsFlow):
             vol.Required(CONF_PASSWORD, default=current.get(CONF_PASSWORD)): cv.string,
             vol.Required("language", default=current.get("language", "de")): vol.In(["de", "en", "fr", "it"]),
         })
-        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+        return self.async_show_form(step_id="edit", data_schema=schema, errors=errors)
+
+    async def async_step_remove(self, user_input=None) -> FlowResult:
+        """Confirm and remove this config entry (same effect as deleting it via the three-dot menu)."""
+        if user_input is not None:
+            self.hass.async_create_task(
+                self.hass.config_entries.async_remove(self._config_entry.entry_id)
+            )
+            return self.async_abort(reason="entry_removed")
+        return self.async_show_form(step_id="remove")
 
 
 class AuthenticationError(Exception):

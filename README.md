@@ -52,7 +52,10 @@ Die gewählte Sprache bestimmt die Sensornamen und Werte, die von der API zurüc
 
 ### Verbindungsdaten nachträglich ändern
 
-Über **Einstellungen** → **Geräte & Dienste** → ÖkOfen-Integration → **Konfigurieren** lassen sich IP-Adresse, Benutzername, Passwort und Sprache jederzeit anpassen (z.B. nach einem IP-Wechsel), ohne die Integration entfernen und neu einrichten zu müssen. Nach dem Speichern wird die Integration automatisch neu geladen.
+Über **Einstellungen** → **Geräte & Dienste** → ÖkOfen-Integration → **Konfigurieren** öffnet sich ein Menü mit zwei Optionen:
+
+- **Verbindung bearbeiten**: IP-Adresse, Benutzername, Passwort und Sprache anpassen (z.B. nach einem IP-Wechsel), ohne die Integration entfernen und neu einrichten zu müssen. Nach dem Speichern wird die Integration automatisch neu geladen.
+- **Gerät entfernen**: entspricht dem Löschen über das Drei-Punkte-Menü, nur direkt aus demselben Dialog heraus.
 
 ## 📊 Verfügbare Sensoren
 
@@ -313,9 +316,13 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 ### Version 0.8.0
 
 - ⚙️ **Verbindungsdaten nachträglich editierbar**: Neuer Options-Flow
-  (Integration → "Konfigurieren") erlaubt das Ändern von IP-Adresse,
-  Benutzername, Passwort und Sprache, ohne die Integration neu einrichten
-  zu müssen.
+  (Integration → "Konfigurieren") bietet ein Menü mit "Verbindung
+  bearbeiten" (IP-Adresse, Benutzername, Passwort, Sprache ändern, ohne
+  die Integration neu einrichten zu müssen) und "Gerät entfernen".
+  🐛 Ursprüngliche Version brach mit `AttributeError: property
+  'config_entry' has no setter` auf neueren HA-Versionen (2024.12+, dort
+  ist `OptionsFlow.config_entry` eine schreibgeschützte Framework-Property)
+  - behoben durch internes Speichern unter `_config_entry`.
 - ℹ️ `select.*_betriebsart`/`climate.*` von Heizkreis/Warmwasser zeigen jetzt
   ein `hinweis`-Attribut, solange Anlage-Betriebsart "Aus" ist (Änderungen
   wirken sich erst nach Umschalten auf Auto/Warmwasser aus - analog zum
