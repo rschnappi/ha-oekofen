@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER
+from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER, AUS_MODE_HINWEIS
 from custom_components.oekofen.select import (
     INSTALLER_WARNING,
     OekofenModeSelect,
@@ -77,6 +77,27 @@ async def test_hk_mode_select_uses_slot_matching_current_anlage_mode():
 
 def _make_entity(coordinator, config, api=None):
     return OekofenModeSelect(coordinator, api or AsyncMock(), "hk0_mode", config, entry_id="e1", device_name="Test")
+
+
+def test_extra_state_attributes_hints_when_anlage_is_aus():
+    config = build_select_definitions({"hk": [0], "ww": [], "zirkp": [], "pellematic": []})["hk0_mode"]
+    coord = FakeCoordinator({ANLAGE_MODE_PARAMETER: make_point("0")})  # Anlage = Aus
+    entity = _make_entity(coord, config)
+    assert entity.extra_state_attributes == {"hinweis": AUS_MODE_HINWEIS}
+
+
+def test_extra_state_attributes_none_when_anlage_not_aus():
+    config = build_select_definitions({"hk": [0], "ww": [], "zirkp": [], "pellematic": []})["hk0_mode"]
+    coord = FakeCoordinator({ANLAGE_MODE_PARAMETER: make_point("1")})  # Anlage = Auto
+    entity = _make_entity(coord, config)
+    assert entity.extra_state_attributes is None
+
+
+def test_extra_state_attributes_none_for_unslotted_zirkp_mode():
+    config = build_select_definitions({"hk": [], "ww": [], "zirkp": [0], "pellematic": []})["zirkp0_mode"]
+    coord = FakeCoordinator({ANLAGE_MODE_PARAMETER: make_point("0")})
+    entity = OekofenModeSelect(coord, AsyncMock(), "zirkp0_mode", config, entry_id="e1", device_name="Test")
+    assert entity.extra_state_attributes is None
 
 
 def test_options_prefers_device_formatTexts_over_fallback():

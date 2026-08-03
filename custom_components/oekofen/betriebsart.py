@@ -18,6 +18,19 @@ from typing import Any, Dict, List
 
 ANLAGE_MODE_PARAMETER = "CAPPL:LOCAL.anlage_betriebsart"
 
+# The vendor's own UI greys out (aktivierbedingung) the hk/ww Betriebsart
+# control while Anlage-Betriebsart == "Aus" (0 is falsy in that JS
+# expression) - not a safety gate like the installer PIN, just a UX cue
+# that the whole system being off makes per-circuit mode moot until Anlage
+# is switched back to Auto/Warmwasser. We keep the field writable (same
+# reasoning as the installer-locked fields) but surface the same cue here.
+AUS_MODE_HINWEIS = (
+    "Anlage-Betriebsart ist aktuell 'Aus' - Änderungen an dieser "
+    "Betriebsart wirken sich erst aus, sobald die Anlage wieder auf "
+    "Auto/Warmwasser gestellt wird (am Original-Gerät ist dieses Feld in "
+    "diesem Zustand ausgegraut)."
+)
+
 
 def active_betriebsart_slot(data: Dict[str, Any]) -> int:
     """Return the array index (0-2) of the currently active betriebsart slot."""

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 
 from homeassistant.components.climate import PRESET_BOOST, PRESET_NONE, HVACMode
 
-from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER
+from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER, AUS_MODE_HINWEIS
 from custom_components.oekofen.climate import (
     HK_MODE_MAP,
     PE_MODE_MAP,
@@ -258,3 +258,24 @@ def test_available_false_when_mode_parameter_missing():
     config = _hk_config()
     entity = _make_entity(FakeCoordinator({}), config)
     assert entity.available is False
+
+
+def test_extra_state_attributes_hints_when_anlage_is_aus():
+    config = _hk_config()
+    coord = FakeCoordinator({ANLAGE_MODE_PARAMETER: make_point("0")})  # Anlage = Aus
+    entity = _make_entity(coord, config)
+    assert entity.extra_state_attributes == {"hinweis": AUS_MODE_HINWEIS}
+
+
+def test_extra_state_attributes_none_when_anlage_not_aus():
+    config = _hk_config()
+    coord = FakeCoordinator({ANLAGE_MODE_PARAMETER: make_point("1")})  # Anlage = Auto
+    entity = _make_entity(coord, config)
+    assert entity.extra_state_attributes is None
+
+
+def test_extra_state_attributes_none_for_unslotted_pellematic():
+    config = _pe_config()
+    coord = FakeCoordinator({ANLAGE_MODE_PARAMETER: make_point("0")})
+    entity = _make_entity(coord, config, key="pe0_climate")
+    assert entity.extra_state_attributes is None

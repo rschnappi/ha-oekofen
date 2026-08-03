@@ -23,6 +23,8 @@ from homeassistant.helpers.update_coordinator import (
 
 from .betriebsart import (
     ANLAGE_MODE_PARAMETER,
+    AUS_MODE_HINWEIS,
+    active_betriebsart_slot,
     betriebsart_parameter,
     betriebsart_slot_parameters,
 )
@@ -211,9 +213,12 @@ class OekofenModeSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def extra_state_attributes(self) -> Optional[Dict[str, Any]]:
+        attrs: Dict[str, Any] = {}
         if self._warning:
-            return {"warnhinweis": self._warning}
-        return None
+            attrs["warnhinweis"] = self._warning
+        if self._betriebsart_base and active_betriebsart_slot(self.coordinator.data) == 0:
+            attrs["hinweis"] = AUS_MODE_HINWEIS
+        return attrs or None
 
     def _current_parameter(self) -> str:
         if self._betriebsart_base:

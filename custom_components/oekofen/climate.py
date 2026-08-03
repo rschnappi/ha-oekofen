@@ -47,6 +47,8 @@ from homeassistant.helpers.update_coordinator import (
 
 from .betriebsart import (
     ANLAGE_MODE_PARAMETER,
+    AUS_MODE_HINWEIS,
+    active_betriebsart_slot,
     betriebsart_parameter,
     betriebsart_slot_parameters,
 )
@@ -284,6 +286,12 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         options = self._mode_options()
         if 0 <= index < len(options):
             return options[index]
+        return None
+
+    @property
+    def extra_state_attributes(self) -> Optional[Dict[str, Any]]:
+        if self._betriebsart_base and active_betriebsart_slot(self.coordinator.data) == 0:
+            return {"hinweis": AUS_MODE_HINWEIS}
         return None
 
     def _divisor(self, parameter: str) -> float:

@@ -213,6 +213,10 @@ Ein Teil der Sollwerte ist am Original-Gerät selbst **hinter dem Installateur-/
 
 **Falsche Werte hier können die Anlage beschädigen oder Sicherheitsfunktionen beeinträchtigen** (insbesondere Kessel-Abschalttemperatur und Abgastemp-Minimum sind vermutlich Schutzparameter, keine reinen Komfort-Einstellungen). Im Zweifel am Gerät selbst mit Installateur-Code ändern, oder Rücksprache mit dem Installateur halten.
 
+### ℹ️ Betriebsart bei Anlage "Aus"
+
+Am Original-Gerät ist die Heizkreis-/Warmwasser-Betriebsart (`select.*_betriebsart`, sowie die Modus-Auswahl der zugehörigen `climate.*`-Entity) ausgegraut, solange die **Anlage-Betriebsart auf "Aus" steht** – eine reine UI-Ausgrauung am Gerät, kein Sicherheitsmechanismus. Diese Integration lässt das Feld deshalb weiterhin editierbar, zeigt in diesem Zustand aber ein `hinweis`-Attribut: Änderungen wirken sich erst aus, sobald die Anlage wieder auf Auto/Warmwasser gestellt wird.
+
 ### Langzeitstatistik
 
 Sensoren mit numerischem Wert haben bereits die passende `state_class` (measurement bzw. total_increasing), wodurch Home Assistant automatisch **Langzeitstatistiken** führt (im Gegensatz zur normalen Historie verfallen diese nicht nach ein paar Tagen). Für echte Langzeit-Trends (z.B. Temperaturverlauf über Monate, oder Brennerstarts pro Tag zur Kurztakt-Analyse) nutzt `dashboard_example.yaml` dafür `statistics-graph`-Karten statt `history-graph`.
@@ -312,6 +316,10 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
   (Integration → "Konfigurieren") erlaubt das Ändern von IP-Adresse,
   Benutzername, Passwort und Sprache, ohne die Integration neu einrichten
   zu müssen.
+- ℹ️ `select.*_betriebsart`/`climate.*` von Heizkreis/Warmwasser zeigen jetzt
+  ein `hinweis`-Attribut, solange Anlage-Betriebsart "Aus" ist (Änderungen
+  wirken sich erst nach Umschalten auf Auto/Warmwasser aus - analog zum
+  ausgegrauten Feld am Original-Gerät).
 - ✅ Weitere native Felder ergänzt: Zirkulationspumpe Betriebsart
   (`select.*`, nicht installateurgesperrt) sowie Pellematic Regeltemperatur
   für "Smart"-Firmware (`number.*`, `frischwasser_soll_temp` - analog zum
