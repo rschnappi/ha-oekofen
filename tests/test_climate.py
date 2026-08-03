@@ -5,6 +5,7 @@ from homeassistant.components.climate import PRESET_BOOST, PRESET_NONE, HVACMode
 
 from custom_components.oekofen.climate import (
     HK_MODE_MAP,
+    PE_MODE_MAP,
     WW_MODE_MAP,
     OekofenClimate,
     build_climate_definitions,
@@ -14,7 +15,7 @@ from .conftest import FakeCoordinator, make_point
 
 
 def test_build_climate_definitions_one_per_circuit():
-    defs = build_climate_definitions({"hk": [0], "ww": [0]})
+    defs = build_climate_definitions({"hk": [0], "ww": [0], "pellematic": [0]})
     assert defs["hk0_climate"]["mode_parameter"] == "CAPPL:LOCAL.hk[0].betriebsart[0]"
     assert defs["hk0_climate"]["target_parameter"] == "CAPPL:LOCAL.hk[0].raumtemp_heizen"
     assert defs["hk0_climate"]["current_parameter"] == "CAPPL:LOCAL.L_hk[0].raumtemp_ist"
@@ -24,6 +25,11 @@ def test_build_climate_definitions_one_per_circuit():
     assert defs["ww0_climate"]["target_parameter"] == "CAPPL:LOCAL.ww[0].temp_heizen"
     assert defs["ww0_climate"]["mode_map"] is WW_MODE_MAP
 
+    assert defs["pe0_climate"]["mode_parameter"] == "CAPPL:FA[0].betriebsart_fa"
+    assert defs["pe0_climate"]["target_parameter"] == "CAPPL:FA[0].pe_kesseltemperatur_soll"
+    assert defs["pe0_climate"]["current_parameter"] == "CAPPL:FA[0].L_kesseltemperatur"
+    assert defs["pe0_climate"]["mode_map"] is PE_MODE_MAP
+
 
 def _hk_config():
     return build_climate_definitions({"hk": [0], "ww": []})["hk0_climate"]
@@ -31,6 +37,10 @@ def _hk_config():
 
 def _ww_config():
     return build_climate_definitions({"hk": [], "ww": [0]})["ww0_climate"]
+
+
+def _pe_config():
+    return build_climate_definitions({"hk": [], "ww": [], "pellematic": [0]})["pe0_climate"]
 
 
 def _make_entity(coordinator, config, key="hk0_climate", api=None):
@@ -96,6 +106,31 @@ async def test_async_set_preset_mode_none_cancels_active_boost():
     await entity.async_set_preset_mode(PRESET_NONE)
 
     api.set_data.assert_awaited_once_with(config["boost_parameter"], 0)
+    assert coord.refresh_calls == 1
+
+
+def test_pellematic_has_no_presets_and_no_boost_parameter():
+    entity = _make_entity(FakeCoordinator({}), _pe_config(), key="pe0_climate")
+    assert entity.preset_modes is None
+    assert entity._boost_parameter is None
+
+
+def test_pellematic_hvac_mode_for_ein():
+    config = _pe_config()
+    coord = FakeCoordinator({config["mode_parameter"]: make_point("2", format_texts="Aus|Auto|Ein")})
+    entity = _make_entity(coord, config, key="pe0_climate")
+    assert entity.hvac_mode == HVACMode.HEAT
+
+
+async def test_pellematic_async_set_temperature_writes_regeltemperatur():
+    config = _pe_config()
+    api = AsyncMock()
+    coord = FakeCoordinator({config["target_parameter"]: make_point("650", divisor="10")})
+    entity = _make_entity(coord, config, key="pe0_climate", api=api)
+
+    await entity.async_set_temperature(temperature=68.0)
+
+    api.set_data.assert_awaited_once_with(config["target_parameter"], 680)
     assert coord.refresh_calls == 1
 
 

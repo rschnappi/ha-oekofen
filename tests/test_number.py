@@ -15,6 +15,14 @@ def test_build_number_definitions_covers_all_circuit_types():
     assert defs["zirkp0_abschalttemp"]["parameter"] == "CAPPL:LOCAL.zirkp[0].ruecklauftemp_soll"
 
 
+def test_build_number_definitions_includes_vorlauftemp_per_circuit():
+    defs = build_number_definitions({"hk": [0, 1], "ww": [], "pellematic": [], "zirkp": []})
+    assert defs["hk0_vorlauftemp_max"]["parameter"] == "CAPPL:LOCAL.hk[0].vorlauftemp_max"
+    assert defs["hk0_vorlauftemp_min"]["parameter"] == "CAPPL:LOCAL.hk[0].vorlauftemp_min"
+    assert defs["hk1_vorlauftemp_max"]["parameter"] == "CAPPL:LOCAL.hk[1].vorlauftemp_max"
+    assert defs["hk1_vorlauftemp_min"]["parameter"] == "CAPPL:LOCAL.hk[1].vorlauftemp_min"
+
+
 def test_build_number_definitions_empty_for_absent_circuits():
     assert build_number_definitions({"hk": [], "ww": [], "pellematic": [], "zirkp": []}) == {}
 

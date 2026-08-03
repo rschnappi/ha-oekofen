@@ -94,6 +94,18 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
             "icon": "mdi:airplane",
             "temperature": True,
         }
+        defs[f"hk{idx}_vorlauftemp_max"] = {
+            "parameter": f"{base}.vorlauftemp_max",
+            "name": f"{label} Vorlauf Max",
+            "icon": "mdi:thermometer-chevron-up",
+            "temperature": True,
+        }
+        defs[f"hk{idx}_vorlauftemp_min"] = {
+            "parameter": f"{base}.vorlauftemp_min",
+            "name": f"{label} Vorlauf Min",
+            "icon": "mdi:thermometer-chevron-down",
+            "temperature": True,
+        }
 
     for idx in circuits.get("ww", []):
         base = f"CAPPL:LOCAL.ww[{idx}]"

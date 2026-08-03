@@ -193,12 +193,7 @@ Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashbo
 
 ### Werte direkt im Dashboard verändern
 
-Seit v0.6.0/v0.8.0 liefert die Integration native, direkt editierbare `number.*`/`select.*`/`switch.*`/`datetime.*`/`time.*`/`climate.*`-Entities für praktisch alle Sollwerte (Raumtemperatur, Heizkurve, Warmwassertemperatur, Zeitprogramm-Auswahl, Zeitprogramm-Zeiten und -Wochentage, Party-/Urlaubsprogramm, Betriebsarten als Thermostat-Karte, …). Ein Umweg über `input_number`/`input_select`-Helfer ist dafür **nicht mehr nötig**.
-
-Für die wenigen Felder, die (noch) nicht nativ abgedeckt sind, liegen zwei optionale Vorlagen bei:
-
-- [`helpers_example.yaml`](helpers_example.yaml) – `input_number`/`input_select`-Helfer, die im Dashboard editierbare Felder darstellen
-- [`automations_example.yaml`](automations_example.yaml) – Automatisierungen, die diese Helfer mit dem Gerät synchronisieren (lesen über den Sensor, schreiben über `oekofen.set_parameter`)
+Seit v0.6.0/v0.8.0 liefert die Integration native, direkt editierbare `number.*`/`select.*`/`switch.*`/`datetime.*`/`time.*`/`climate.*`/`text.*`-Entities für praktisch alle Sollwerte (Raumtemperatur, Vorlauf Max/Min, Heizkurve, Warmwassertemperatur, Zeitprogramm-Auswahl, Zeitprogramm-Zeiten und -Wochentage, Party-/Urlaubsprogramm, Betriebsarten als Thermostat-Karte, Mail/SMTP-Einstellungen, …). Ein Umweg über `input_number`/`input_select`-Helfer ist dafür **nicht mehr nötig** – es gibt inzwischen keine bekannten Lücken mehr, `helpers_example.yaml`/`automations_example.yaml` wurden entfernt.
 
 **Achtung** bei allen schreibbaren Entities gleichermaßen: Sie greifen unmittelbar in den laufenden Heizungsbetrieb ein – nach Änderungen zunächst mit einem unkritischen Wert testen.
 

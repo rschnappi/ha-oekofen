@@ -72,9 +72,17 @@ WW_MODE_MAP: Dict[str, Tuple[HVACMode, str]] = {
 }
 WW_MODE_FALLBACK = ["Aus", "Auto", "Ein"]
 
+# Pellematic (boiler unit) uses the exact same three-state model as Warmwasser.
+PE_MODE_MAP: Dict[str, Tuple[HVACMode, str]] = {
+    "Aus": (HVACMode.OFF, PRESET_NONE),
+    "Auto": (HVACMode.AUTO, PRESET_NONE),
+    "Ein": (HVACMode.HEAT, PRESET_NONE),
+}
+PE_MODE_FALLBACK = ["Aus", "Auto", "Ein"]
+
 
 def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
-    """Build one climate entity per heating circuit and warm-water circuit."""
+    """Build one climate entity per heating circuit, warm-water circuit and Pellematic unit."""
     defs: Dict[str, Dict[str, Any]] = {}
 
     for idx in circuits.get("hk", []):
@@ -109,6 +117,21 @@ def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[
             # betriebsart. Exposed as PRESET_BOOST here in addition to (not
             # instead of) the existing standalone switch entity.
             "boost_parameter": f"{base}.einmal_aufbereiten",
+        }
+
+    for idx in circuits.get("pellematic", []):
+        base = f"CAPPL:FA[{idx}]"
+        label = f"Pellematic {idx + 1}"
+        defs[f"pe{idx}_climate"] = {
+            "name": label,
+            "icon": "mdi:fire",
+            "mode_parameter": f"{base}.betriebsart_fa",
+            "target_parameter": f"{base}.pe_kesseltemperatur_soll",
+            "current_parameter": f"{base}.L_kesseltemperatur",
+            "mode_map": PE_MODE_MAP,
+            "mode_fallback": PE_MODE_FALLBACK,
+            "default_min_temp": 40.0,
+            "default_max_temp": 90.0,
         }
 
     return defs
