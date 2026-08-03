@@ -24,34 +24,20 @@
   "options": {
     "step": {
       "init": {
-        "title": "ÖkOfen Pellematic",
-        "menu_options": {
-          "edit": "Verbindung bearbeiten",
-          "remove": "Gerät entfernen"
-        }
-      },
-      "edit": {
         "title": "ÖkOfen Pellematic - Verbindung bearbeiten",
-        "description": "IP-Adresse, Zugangsdaten oder Sprache dieses Geräts ändern. Die Integration wird danach automatisch neu geladen.",
+        "description": "IP-Adresse, Zugangsdaten oder Sprache dieses Geräts ändern. Die Integration wird danach automatisch neu geladen. Zum Entfernen der Integration weiterhin das Drei-Punkte-Menü des Eintrags verwenden.",
         "data": {
           "host": "IP-Adresse oder Hostname",
           "username": "Benutzername",
           "password": "Passwort",
           "language": "Sprache"
         }
-      },
-      "remove": {
-        "title": "ÖkOfen Pellematic entfernen",
-        "description": "Diese Integration inklusive aller Entities und Geräte wirklich entfernen? Das entspricht dem Löschen über das Drei-Punkte-Menü der Integration und kann nicht rückgängig gemacht werden."
       }
     },
     "error": {
       "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte IP-Adresse und Netzwerkverbindung prüfen.",
       "invalid_auth": "Ungültiger Benutzername oder Passwort.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten. Bitte Logs prüfen."
-    },
-    "abort": {
-      "entry_removed": "Die ÖkOfen-Integration wurde entfernt."
     }
   }
 }

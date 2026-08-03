@@ -117,10 +117,6 @@ class OekofenOptionsFlow(config_entries.OptionsFlow):
         self._config_entry = config_entry
 
     async def async_step_init(self, user_input=None) -> FlowResult:
-        """Let the user pick between editing the connection or removing the device."""
-        return self.async_show_menu(step_id="init", menu_options=["edit", "remove"])
-
-    async def async_step_edit(self, user_input=None) -> FlowResult:
         errors = {}
         current = self._config_entry.data
 
@@ -151,16 +147,7 @@ class OekofenOptionsFlow(config_entries.OptionsFlow):
             vol.Required(CONF_PASSWORD, default=current.get(CONF_PASSWORD)): cv.string,
             vol.Required("language", default=current.get("language", "de")): vol.In(["de", "en", "fr", "it"]),
         })
-        return self.async_show_form(step_id="edit", data_schema=schema, errors=errors)
-
-    async def async_step_remove(self, user_input=None) -> FlowResult:
-        """Confirm and remove this config entry (same effect as deleting it via the three-dot menu)."""
-        if user_input is not None:
-            self.hass.async_create_task(
-                self.hass.config_entries.async_remove(self._config_entry.entry_id)
-            )
-            return self.async_abort(reason="entry_removed")
-        return self.async_show_form(step_id="remove")
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
 
 
 class AuthenticationError(Exception):
