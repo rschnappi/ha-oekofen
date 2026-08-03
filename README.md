@@ -22,12 +22,6 @@ Diese Integration bietet vollständige Kontrolle über Ihr ÖkOfen Heizsystem mi
 - **Headers**: `X-Requested-With: XMLHttpRequest` erforderlich
 - **Cookie**: Session-Cookie von Login muss mitgesendet werden
 
-### Wichtige Erkenntnisse
-- ✅ Neuere Firmware verwendet `username`/`password` (nicht `user`/`pass`)
-- ✅ Login verwendet Form-Daten, Datenabfrage verwendet JSON
-- ✅ Ohne Authentication leitet das Gerät auf `/login.cgi` um
-- ✅ Session-Cookie hat 600 Sekunden Timeout
-
 ## 🚀 Installation
 
 ### HACS (Empfohlen)
