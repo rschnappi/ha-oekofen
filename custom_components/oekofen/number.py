@@ -30,6 +30,18 @@ from datetime import timedelta
 
 SCAN_INTERVAL = timedelta(seconds=60)
 
+# These parameters sit behind the installer/technician PIN (main.codeebene
+# >= 1) in the vendor's own web UI (config.min.js) - they're writable via
+# the API, but changing them wrong can affect safety-relevant behavior
+# (e.g. Kessel-Abschalttemperatur, Abgastemp-Minimum). Kept editable here
+# rather than locked to read-only, but flagged clearly.
+INSTALLER_WARNING = (
+    "Installateur-Ebene am Original-Gerät (nur mit Techniker-Code "
+    "zugänglich). Falsche Werte können die Anlage beschädigen oder "
+    "Sicherheitsfunktionen beeinträchtigen - nur ändern, wenn du weißt, "
+    "was du tust."
+)
+
 
 def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
     """Build the writable-number definitions for the circuits present on this device."""
@@ -100,17 +112,19 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
         }
         defs[f"hk{idx}_vorlauftemp_max"] = {
             "parameter": f"{base}.vorlauftemp_max",
-            "name": f"{label} Vorlauf Max",
+            "name": f"⚠️ {label} Vorlauf Max",
             "icon": "mdi:thermometer-chevron-up",
             "temperature": True,
             "config": True,
+            "warning": INSTALLER_WARNING,
         }
         defs[f"hk{idx}_vorlauftemp_min"] = {
             "parameter": f"{base}.vorlauftemp_min",
-            "name": f"{label} Vorlauf Min",
+            "name": f"⚠️ {label} Vorlauf Min",
             "icon": "mdi:thermometer-chevron-down",
             "temperature": True,
             "config": True,
+            "warning": INSTALLER_WARNING,
         }
 
     for idx in circuits.get("ww", []):
@@ -130,18 +144,24 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
         }
         defs[f"ww{idx}_ueberhoehung"] = {
             "parameter": f"{base}.ueberhoehung",
-            "name": f"{label} Überhöhung",
+            "name": f"⚠️ {label} Überhöhung",
             "icon": "mdi:thermometer-plus",
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
         defs[f"ww{idx}_nachlaufzeit"] = {
             "parameter": f"{base}.nachlaufzeit",
-            "name": f"{label} Nachlaufzeit",
+            "name": f"⚠️ {label} Nachlaufzeit",
             "icon": "mdi:timer-outline",
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
         defs[f"ww{idx}_einschalthysterese"] = {
             "parameter": f"{base}.hysterese",
-            "name": f"{label} Einschalthysterese",
+            "name": f"⚠️ {label} Einschalthysterese",
             "icon": "mdi:thermometer",
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
 
     for idx in circuits.get("pellematic", []):
@@ -149,21 +169,27 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
         label = f"Pellematic {idx + 1}"
         defs[f"pe{idx}_kesseltemperatur_soll"] = {
             "parameter": f"{base}.pe_kesseltemperatur_soll",
-            "name": f"{label} Regeltemperatur",
+            "name": f"⚠️ {label} Regeltemperatur",
             "icon": "mdi:thermometer",
             "temperature": True,
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
         defs[f"pe{idx}_abschalttemperatur"] = {
             "parameter": f"{base}.pe_abschalttemperatur",
-            "name": f"{label} Abschalttemperatur",
+            "name": f"⚠️ {label} Abschalttemperatur",
             "icon": "mdi:thermometer-high",
             "temperature": True,
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
         defs[f"pe{idx}_agt_min"] = {
             "parameter": f"{base}.pe_agt_min",
-            "name": f"{label} Abgastemp Minimum",
+            "name": f"⚠️ {label} Abgastemp Minimum",
             "icon": "mdi:thermometer-low",
             "temperature": True,
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
         # "Leistungsstufe" is stored under one of two different parameter
         # names depending on whether the boiler runs classic or "Smart"
@@ -173,13 +199,17 @@ def build_number_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
         # that parameter for it), same as any other hardware-dependent field.
         defs[f"pe{idx}_leistungsstufe"] = {
             "parameter": f"{base}.pe_kesselleistung",
-            "name": f"{label} Leistungsstufe",
+            "name": f"⚠️ {label} Leistungsstufe",
             "icon": "mdi:fire",
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
         defs[f"pe{idx}_leistungsstufe_smart"] = {
             "parameter": f"{base}.pe_kesselleistung_smart",
-            "name": f"{label} Leistungsstufe (Smart)",
+            "name": f"⚠️ {label} Leistungsstufe (Smart)",
             "icon": "mdi:fire",
+            "config": True,
+            "warning": INSTALLER_WARNING,
         }
 
     for idx in circuits.get("zirkp", []):
@@ -274,12 +304,19 @@ class OekofenNumber(CoordinatorEntity, NumberEntity):
         # default on newer Home Assistant versions, so leaving it unset
         # raises AttributeError instead of returning None.
         self._attr_entity_category = EntityCategory.CONFIG if config.get("config") else None
+        self._warning: Optional[str] = config.get("warning")
         self._attr_device_info = {
             "identifiers": {("oekofen", entry_id)},
             "name": device_name,
             "manufacturer": "ÖkOfen",
             "model": "Pellematic",
         }
+
+    @property
+    def extra_state_attributes(self) -> Optional[Dict[str, Any]]:
+        if self._warning:
+            return {"warnhinweis": self._warning}
+        return None
 
     def _data_point(self) -> Optional[Dict[str, Any]]:
         return self.coordinator.data.get(self._parameter)

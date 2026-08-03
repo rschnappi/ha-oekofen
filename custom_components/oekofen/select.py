@@ -32,6 +32,15 @@ _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=60)
 
+# See number.py's INSTALLER_WARNING for context: these two parameters sit
+# behind the installer/technician PIN in the vendor's own web UI.
+INSTALLER_WARNING = (
+    "Installateur-Ebene am Original-Gerät (nur mit Techniker-Code "
+    "zugänglich). Falsche Werte können die Anlage beschädigen oder "
+    "Sicherheitsfunktionen beeinträchtigen - nur ändern, wenn du weißt, "
+    "was du tust."
+)
+
 
 def build_select_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
     """Build the select definitions for the circuits/units present on this device."""
@@ -77,15 +86,17 @@ def build_select_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
         }
         defs[f"ww{idx}_vorrang"] = {
             "parameter": f"{base}.prioritaet",
-            "name": f"{label} Vorrang",
+            "name": f"⚠️ {label} Vorrang",
             "icon": "mdi:priority-high",
             "fallback_options": ["Ein", "Aus"],
+            "warning": INSTALLER_WARNING,
         }
         defs[f"ww{idx}_legionellenschutz"] = {
             "parameter": f"{base}.legionellen_wochentag",
-            "name": f"{label} Legionellenschutz",
+            "name": f"⚠️ {label} Legionellenschutz",
             "icon": "mdi:shield-check",
             "fallback_options": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So", "Aus"],
+            "warning": INSTALLER_WARNING,
         }
 
     for idx in circuits.get("zirkp", []):
@@ -181,6 +192,7 @@ class OekofenModeSelect(CoordinatorEntity, SelectEntity):
         self._betriebsart_base = config.get("betriebsart_base")
         self._parameter = config.get("parameter")
         self._fallback_options = config.get("fallback_options", [])
+        self._warning: Optional[str] = config.get("warning")
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_name = config["name"]
         self._attr_icon = config.get("icon")
@@ -190,6 +202,12 @@ class OekofenModeSelect(CoordinatorEntity, SelectEntity):
             "manufacturer": "ÖkOfen",
             "model": "Pellematic",
         }
+
+    @property
+    def extra_state_attributes(self) -> Optional[Dict[str, Any]]:
+        if self._warning:
+            return {"warnhinweis": self._warning}
+        return None
 
     def _current_parameter(self) -> str:
         if self._betriebsart_base:
