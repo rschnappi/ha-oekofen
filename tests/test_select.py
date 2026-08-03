@@ -5,11 +5,33 @@ import pytest
 
 from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER
 from custom_components.oekofen.select import (
+    INSTALLER_WARNING,
     OekofenModeSelect,
     build_select_definitions,
 )
 
 from .conftest import FakeCoordinator, make_point
+
+
+def test_build_select_definitions_marks_installer_locked_fields_with_warning():
+    defs = build_select_definitions({"hk": [], "ww": [0], "zirkp": [], "pellematic": []})
+    assert defs["ww0_vorrang"]["warning"] == INSTALLER_WARNING
+    assert defs["ww0_vorrang"]["name"].startswith("⚠️ ")
+    assert defs["ww0_legionellenschutz"]["warning"] == INSTALLER_WARNING
+    assert defs["ww0_legionellenschutz"]["name"].startswith("⚠️ ")
+    assert "warning" not in defs["ww0_zeitprogramm"]
+
+
+def test_installer_warning_exposed_as_extra_state_attribute():
+    config = {"parameter": "P", "name": "N", "icon": None, "warning": INSTALLER_WARNING}
+    entity = OekofenModeSelect(FakeCoordinator({}), AsyncMock(), "k", config, entry_id="e1", device_name="Test")
+    assert entity.extra_state_attributes == {"warnhinweis": INSTALLER_WARNING}
+
+
+def test_no_warning_by_default():
+    config = {"parameter": "P", "name": "N", "icon": None}
+    entity = OekofenModeSelect(FakeCoordinator({}), AsyncMock(), "k", config, entry_id="e1", device_name="Test")
+    assert entity.extra_state_attributes is None
 
 
 def test_build_select_definitions_always_includes_system_mode():

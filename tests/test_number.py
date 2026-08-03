@@ -3,9 +3,47 @@ from unittest.mock import AsyncMock
 
 from homeassistant.const import EntityCategory
 
-from custom_components.oekofen.number import OekofenNumber, build_number_definitions
+from custom_components.oekofen.number import (
+    INSTALLER_WARNING,
+    OekofenNumber,
+    build_number_definitions,
+)
 
 from .conftest import FakeCoordinator, make_point
+
+
+def test_build_number_definitions_marks_installer_locked_fields_with_warning():
+    defs = build_number_definitions({"hk": [0], "ww": [0], "pellematic": [0], "zirkp": []})
+    for key in (
+        "hk0_vorlauftemp_max",
+        "hk0_vorlauftemp_min",
+        "ww0_ueberhoehung",
+        "ww0_nachlaufzeit",
+        "ww0_einschalthysterese",
+        "pe0_kesseltemperatur_soll",
+        "pe0_abschalttemperatur",
+        "pe0_agt_min",
+        "pe0_leistungsstufe",
+        "pe0_leistungsstufe_smart",
+    ):
+        assert defs[key]["warning"] == INSTALLER_WARNING
+        assert defs[key]["name"].startswith("⚠️ ")
+
+    # User-facing setpoints stay unflagged.
+    assert "warning" not in defs["hk0_raumtemp_heizen"]
+    assert "warning" not in defs["ww0_wassertemp_soll"]
+
+
+def test_installer_warning_exposed_as_extra_state_attribute():
+    config = {"parameter": "P", "name": "N", "icon": None, "warning": INSTALLER_WARNING}
+    entity = OekofenNumber(FakeCoordinator({}), AsyncMock(), "k", config, entry_id="e1", device_name="Test")
+    assert entity.extra_state_attributes == {"warnhinweis": INSTALLER_WARNING}
+
+
+def test_no_warning_by_default():
+    config = {"parameter": "P", "name": "N", "icon": None}
+    entity = OekofenNumber(FakeCoordinator({}), AsyncMock(), "k", config, entry_id="e1", device_name="Test")
+    assert entity.extra_state_attributes is None
 
 
 def test_build_number_definitions_covers_all_circuit_types():
