@@ -1,7 +1,7 @@
 """Tests for the climate platform (climate.py)."""
 from unittest.mock import AsyncMock
 
-from homeassistant.components.climate import PRESET_NONE, HVACMode
+from homeassistant.components.climate import PRESET_BOOST, PRESET_NONE, HVACMode
 
 from custom_components.oekofen.climate import (
     HK_MODE_MAP,
@@ -47,9 +47,56 @@ def test_hk_preset_modes_include_absenken():
     assert entity.preset_modes == [PRESET_NONE, "Absenken"]
 
 
-def test_ww_has_no_presets():
+def test_ww_has_no_mode_map_presets_but_has_boost():
     entity = _make_entity(FakeCoordinator({}), _ww_config(), key="ww0_climate")
-    assert entity.preset_modes is None
+    assert entity.preset_modes == [PRESET_NONE, PRESET_BOOST]
+
+
+def test_build_climate_definitions_ww_has_boost_parameter():
+    defs = build_climate_definitions({"hk": [0], "ww": [0]})
+    assert defs["ww0_climate"]["boost_parameter"] == "CAPPL:LOCAL.ww[0].einmal_aufbereiten"
+    assert "boost_parameter" not in defs["hk0_climate"]
+
+
+def test_preset_mode_boost_when_active():
+    config = _ww_config()
+    coord = FakeCoordinator({config["boost_parameter"]: make_point("1")})
+    entity = _make_entity(coord, config, key="ww0_climate")
+    assert entity.preset_mode == PRESET_BOOST
+
+
+def test_preset_mode_falls_back_to_mode_map_when_boost_inactive():
+    config = _ww_config()
+    coord = FakeCoordinator({
+        config["boost_parameter"]: make_point("0"),
+        config["mode_parameter"]: make_point("2", format_texts="Aus|Auto|Ein"),
+    })
+    entity = _make_entity(coord, config, key="ww0_climate")
+    assert entity.preset_mode == PRESET_NONE
+
+
+async def test_async_set_preset_mode_boost_writes_boost_parameter():
+    config = _ww_config()
+    api = AsyncMock()
+    coord = FakeCoordinator({config["boost_parameter"]: make_point("0")})
+    entity = _make_entity(coord, config, key="ww0_climate", api=api)
+
+    await entity.async_set_preset_mode(PRESET_BOOST)
+
+    api.set_data.assert_awaited_once_with(config["boost_parameter"], 1)
+    assert coord.refresh_calls == 1
+
+
+async def test_async_set_preset_mode_none_cancels_active_boost():
+    config = _ww_config()
+    api = AsyncMock()
+    coord = FakeCoordinator({config["boost_parameter"]: make_point("1")})
+    entity = _make_entity(coord, config, key="ww0_climate", api=api)
+
+    await entity.async_set_preset_mode(PRESET_NONE)
+
+    api.set_data.assert_awaited_once_with(config["boost_parameter"], 0)
+    assert coord.refresh_calls == 1
 
 
 def test_hvac_mode_and_preset_for_heizen():

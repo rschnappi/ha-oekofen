@@ -32,6 +32,7 @@ from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
+    PRESET_BOOST,
     PRESET_NONE,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -104,6 +105,10 @@ def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[
             "mode_fallback": WW_MODE_FALLBACK,
             "default_min_temp": 30.0,
             "default_max_temp": 65.0,
+            # "Einmal Aufbereiten": a one-off reheat cycle, independent of
+            # betriebsart. Exposed as PRESET_BOOST here in addition to (not
+            # instead of) the existing standalone switch entity.
+            "boost_parameter": f"{base}.einmal_aufbereiten",
         }
 
     return defs
@@ -126,6 +131,8 @@ async def async_setup_entry(
     parameters: List[str] = []
     for config in definitions.values():
         parameters += [config["mode_parameter"], config["target_parameter"], config["current_parameter"]]
+        if config.get("boost_parameter"):
+            parameters.append(config["boost_parameter"])
 
     coordinator = OekofenClimateCoordinator(hass, api, parameters)
     await coordinator.async_config_entry_first_refresh()
@@ -182,6 +189,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         self._mode_fallback: List[str] = config["mode_fallback"]
         self._default_min_temp = config["default_min_temp"]
         self._default_max_temp = config["default_max_temp"]
+        self._boost_parameter: Optional[str] = config.get("boost_parameter")
 
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_name = config["name"]
@@ -193,6 +201,8 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         self._attr_hvac_modes = [m for m in order if m in hvac_modes]
 
         presets = sorted({preset for _mode, preset in self._mode_map.values() if preset != PRESET_NONE})
+        if self._boost_parameter:
+            presets = presets + [PRESET_BOOST]
         features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TURN_ON | ClimateEntityFeature.TURN_OFF
         # Always assign _attr_preset_modes (None when there are no presets):
         # ClimateEntity's preset_modes property reads this attribute
@@ -294,8 +304,21 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         mapped = self._mode_map.get(label)
         return mapped[0] if mapped else None
 
+    def _is_boost_active(self) -> bool:
+        if not self._boost_parameter:
+            return False
+        point = self._point(self._boost_parameter)
+        if not point or point.get("value") in (None, ""):
+            return False
+        try:
+            return int(float(point["value"])) == 1
+        except (TypeError, ValueError):
+            return False
+
     @property
     def preset_mode(self) -> Optional[str]:
+        if self._is_boost_active():
+            return PRESET_BOOST
         label = self._mode_label()
         if label is None:
             return PRESET_NONE
@@ -333,6 +356,16 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
             await self._write_label(label)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
+        if self._boost_parameter and preset_mode == PRESET_BOOST:
+            await self.api.set_data(self._boost_parameter, 1)
+            await self.coordinator.async_request_refresh()
+            return
+
+        if self._boost_parameter and self._is_boost_active() and preset_mode == PRESET_NONE:
+            await self.api.set_data(self._boost_parameter, 0)
+            await self.coordinator.async_request_refresh()
+            return
+
         # Presets apply on top of HEAT in this device's model.
         label = self._label_for(hvac_mode=HVACMode.HEAT, preset_mode=preset_mode)
         if label:
