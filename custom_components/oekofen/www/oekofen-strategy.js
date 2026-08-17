@@ -372,8 +372,12 @@
     }
   }
 
-  if (typeof customElements !== "undefined" && !customElements.get("ll-strategy-dashboard-oekofen")) {
-    customElements.define("ll-strategy-dashboard-oekofen", OekofenStrategy);
+  // HA maps "type: custom:oekofen-strategy" to the custom element
+  // "ll-strategy-dashboard-oekofen-strategy" (the full string after
+  // "custom:", not "oekofen") - confirmed live after the mismatched name
+  // below caused "Timeout waiting for strategy element ... to be registered".
+  if (typeof customElements !== "undefined" && !customElements.get("ll-strategy-dashboard-oekofen-strategy")) {
+    customElements.define("ll-strategy-dashboard-oekofen-strategy", OekofenStrategy);
   }
 
   if (typeof window !== "undefined") {
