@@ -1,7 +1,13 @@
 pytest>=7.4
 pytest-asyncio>=0.21
-# aioresponses 0.7.9 (latest on PyPI) is incompatible with aiohttp>=3.10's
-# ClientResponse signature change - pin below that until aioresponses catches up.
-aiohttp>=3.8.0,<3.10
+# aioresponses (0.7.9, latest on PyPI as of this writing, declared support
+# up to aiohttp<4.0) is in practice still incompatible with aiohttp>=3.10's
+# ClientResponse signature change - confirmed by actually running the suite
+# against aiohttp 3.13/3.14 (TypeError: ClientResponse.__init__() missing
+# stream_writer). Pinned below 3.10 until aioresponses catches up.
+# Lower bound raised to 3.9.5 to exclude aiohttp CVEs fixed in that range
+# (CVE-2024-23334 directory traversal, CVE-2024-30251 DoS) - this is a
+# dev/test-only dependency, never installed on an end user's HA instance.
+aiohttp>=3.9.5,<3.10
 aioresponses>=0.7.4
 async-timeout>=4.0
