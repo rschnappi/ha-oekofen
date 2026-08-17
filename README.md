@@ -179,11 +179,34 @@ data:
 
 ## 📱 Dashboard
 
-Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashboard_example.yaml).
+Zwei Wege zu einem fertigen Dashboard:
 
-⚠️ **Wichtig zu den Entity-IDs**: Home Assistant leitet die Entity-ID aus dem Bereich (Area) und dem Gerätenamen ab, den das Gerät zum Zeitpunkt der ersten Registrierung trägt (Standard: "ÖkOfen \<IP\>", falls du es nicht umbenannt hast) – **nicht** aus Host/IP direkt. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `select.heizraum_ofen_anlage_betriebsart`, wenn dein Gerät im Bereich "Heizraum" liegt und auf "Ofen" umbenannt wurde) und hängen von deiner Bereichszuordnung und dem gewählten Gerätenamen ab. Ein paar sehr alte `sensor.*`-Entities aus Zeiten vor v0.6.0 können bei dir noch rein host-basierte IDs haben (z.B. `sensor.okofen_192_168_1_50_betriebsart`), falls du seither nie neu eingerichtet hast. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen"/deinem Gerätenamen, um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `PRAEFIX` in der YAML-Datei entsprechend.
+### Option A: Dashboard-Strategy (empfohlen)
 
-### Installation des Dashboards
+Die Integration bringt eine eigene [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/) mit, die das komplette Dashboard **automatisch aus den tatsächlich vorhandenen Entities generiert** - kein `PRAEFIX`-Suchen-und-Ersetzen, keine manuelle Pflege bei mehreren Heizkreisen. Sie erkennt beliebig viele Heizkreis-/Warmwasser-/Zirkulationspumpen-/Pellematic-Kreise und deren komplette Zeitprogramme (alle 3 Zeitblöcke, nicht nur Block 1 wie in `dashboard_example.yaml`) live zur Laufzeit im Browser.
+
+1. Neues Dashboard anlegen (**Einstellungen → Dashboards → + Dashboard hinzufügen**), **Neue Ansicht aus YAML erstellen**
+2. Als Inhalt:
+   ```yaml
+   strategy:
+     type: custom:oekofen-strategy
+   ```
+3. Bei mehreren ÖkOfen-Geräten in derselben HA-Instanz optional die Geräte-ID angeben (**Einstellungen → Geräte & Dienste → Gerät → URL enthält die ID**):
+   ```yaml
+   strategy:
+     type: custom:oekofen-strategy
+     device_id: <geraete-id>
+   ```
+
+Die Strategy wird automatisch als Frontend-Ressource registriert (`custom_components/oekofen/www/oekofen-strategy.js`, ausgeliefert unter `/oekofen_static/oekofen-strategy.js`) - kein manuelles Eintragen unter **Einstellungen → Dashboards → Ressourcen** nötig.
+
+### Option B: Statische YAML-Vorlage
+
+Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashboard_example.yaml) - handkuratiert, mit festen Icons/Anordnungen, deckt aber nur Heizkreis 1/Warmwasser 1 sowie Zeitblock 1 exemplarisch ab (weitere Kreise/Blöcke müssen manuell dupliziert werden).
+
+⚠️ **Wichtig zu den Entity-IDs** (nur für Option B relevant - die Strategy aus Option A erkennt Entities zur Laufzeit und braucht das nicht): Home Assistant leitet die Entity-ID aus dem Bereich (Area) und dem Gerätenamen ab, den das Gerät zum Zeitpunkt der ersten Registrierung trägt (Standard: "ÖkOfen \<IP\>", falls du es nicht umbenannt hast) – **nicht** aus Host/IP direkt. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `select.heizraum_ofen_anlage_betriebsart`, wenn dein Gerät im Bereich "Heizraum" liegt und auf "Ofen" umbenannt wurde) und hängen von deiner Bereichszuordnung und dem gewählten Gerätenamen ab. Ein paar sehr alte `sensor.*`-Entities aus Zeiten vor v0.6.0 können bei dir noch rein host-basierte IDs haben (z.B. `sensor.okofen_192_168_1_50_betriebsart`), falls du seither nie neu eingerichtet hast. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen"/deinem Gerätenamen, um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `PRAEFIX` in der YAML-Datei entsprechend.
+
+### Installation der YAML-Vorlage (Option B)
 1. Gehen Sie zu **Einstellungen** → **Dashboards**
 2. Klicken Sie auf **+ Dashboard hinzufügen**
 3. Wählen Sie **Neue Ansicht aus YAML erstellen**
@@ -313,6 +336,18 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ### Version 0.8.0
 
+- 🧩 **Neue Dashboard-Strategy** (`custom:oekofen-strategy`,
+  `custom_components/oekofen/www/oekofen-strategy.js`): generiert das
+  komplette Dashboard zur Laufzeit direkt aus den vorhandenen Entities -
+  erkennt beliebig viele Heizkreis-/Warmwasser-/Zirkulationspumpen-/
+  Pellematic-Kreise automatisch, inklusive aller 3 Zeitblöcke (nicht nur
+  Block 1 wie in der statischen YAML-Vorlage). Wird automatisch als
+  Frontend-Ressource registriert, kein `PRAEFIX`-Ersetzen nötig. Die
+  Gruppierungslogik ermittelt das gemeinsame Entity-ID-Präfix des Geräts
+  empirisch (längstes gemeinsames Präfix aller eigenen Entity-IDs) statt
+  es zu erraten, und ordnet Entities anhand ihres deutschen Namens-Suffix
+  zu (z.B. "heizkreis_1_betriebsart") - unabhängig davon, wie das Gerät
+  umbenannt wurde.
 - 📱 **`dashboard_example.yaml` grundlegend überarbeitet**: von 6 auf 8
   Ansichten erweitert (neu: Zeitprogramme, Einstellungen mit Mail/SMTP/
   Fernwartung/Diagnose), Pellematic bekommt jetzt ebenfalls eine
