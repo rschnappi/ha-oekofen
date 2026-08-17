@@ -181,21 +181,22 @@ data:
 
 Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashboard_example.yaml).
 
-⚠️ **Wichtig zu den Entity-IDs**: Diese Integration übernimmt Sensor-Namen direkt vom Gerät (in der Sprache, die du beim Einrichten gewählt hast), und Home Assistant leitet die Entity-ID daraus automatisch ab. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `sensor.okofen_192_168_1_50_betriebsart` statt eines festen Namens) und hängen von deinem Host, deiner Gerätesprache und ggf. dem zugewiesenen Bereich (Area) ab. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen", um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `DEINHOST` in der YAML-Datei entsprechend. Die neueren `number.*`/`select.*`/`switch.*`/`datetime.*`/`time.*`/`climate.*`-Entities sind dagegen **namensbasiert** (z.B. `climate.heizraum_okofen_pellematic_heizkreis_1`), nicht host-abhängig.
+⚠️ **Wichtig zu den Entity-IDs**: Home Assistant leitet die Entity-ID aus dem Bereich (Area) und dem Gerätenamen ab, den das Gerät zum Zeitpunkt der ersten Registrierung trägt (Standard: "ÖkOfen \<IP\>", falls du es nicht umbenannt hast) – **nicht** aus Host/IP direkt. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `select.heizraum_ofen_anlage_betriebsart`, wenn dein Gerät im Bereich "Heizraum" liegt und auf "Ofen" umbenannt wurde) und hängen von deiner Bereichszuordnung und dem gewählten Gerätenamen ab. Ein paar sehr alte `sensor.*`-Entities aus Zeiten vor v0.6.0 können bei dir noch rein host-basierte IDs haben (z.B. `sensor.okofen_192_168_1_50_betriebsart`), falls du seither nie neu eingerichtet hast. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen"/deinem Gerätenamen, um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `PRAEFIX` in der YAML-Datei entsprechend.
 
 ### Installation des Dashboards
 1. Gehen Sie zu **Einstellungen** → **Dashboards**
 2. Klicken Sie auf **+ Dashboard hinzufügen**
 3. Wählen Sie **Neue Ansicht aus YAML erstellen**
-4. Kopieren Sie den Inhalt aus `dashboard_example.yaml` und ersetzen Sie `DEINHOST` durch Ihre echten Entity-IDs
+4. Kopieren Sie den Inhalt aus `dashboard_example.yaml` und ersetzen Sie `PRAEFIX` durch Ihre echten Entity-IDs
 5. Das Dashboard zeigt (Kacheln-Layout, 2 pro Reihe für lesbare Beschriftungen):
-   - **Übersicht**: Betriebsarten (als Dropdown-Kacheln), wichtigste Sensoren, Party/Urlaub-Kurzstatus
-   - **Pellematic**: Kessel, Einstellungen (Sollwerte editierbar), Pellets, Störungen
+   - **Übersicht**: Betriebsarten (als Dropdown-Kacheln), wichtigste Sensoren, Fernwartungscodes, Party/Urlaub-Kurzstatus
+   - **Pellematic**: `thermostat`-Karte (Aus/Auto/Ein) oben, darunter Kessel-Sensorik, Einstellungen (Sollwerte editierbar), Pellet-System & Förderung, Störungen
    - **Heizkreis**: `thermostat`-Karte (Aus/Auto/Heizen + Preset "Absenken") oben, darunter Einstellungen und Party/Urlaub
    - **Warmwasser**: `thermostat`-Karte (Aus/Auto/Ein) oben, darunter Einstellungen
    - **Puffer & Pumpen**: Pufferspeicher und Pumpen (Pumpen-Zuordnung ist eine Vermutung, siehe Hinweis im Dashboard)
    - **Statistik**: Betriebsstunden, Verlaufs- und Langzeitgraphen
-   - **Zeitprogramme**: Wochentage als antippbare Kacheln je Zeitprogramm, Von-/Bis-Zeiten als Liste (Block 1; Block 2/3 sind bei Bedarf leicht ergänzbar)
+   - **Zeitprogramme**: Wochentage als antippbare Kacheln je Zeitprogramm, Von-/Bis-Zeiten als Liste (Zeit 1/2, Block 1; weitere Blöcke/Zeitprogramme sind bei Bedarf leicht ergänzbar)
+   - **Einstellungen**: Geräteuhrzeit, Mail/SMTP, Fernwartung, Diagnose (Glühstab-Zündzeit, Störmelderelais)
 
 ### Werte direkt im Dashboard verändern
 
@@ -312,6 +313,16 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ### Version 0.8.0
 
+- 📱 **`dashboard_example.yaml` grundlegend überarbeitet**: von 6 auf 8
+  Ansichten erweitert (neu: Zeitprogramme, Einstellungen mit Mail/SMTP/
+  Fernwartung/Diagnose), Pellematic bekommt jetzt ebenfalls eine
+  `thermostat`-Karte, Heizkreis/Warmwasser-Betriebsarten laufen über die
+  nativen `select.*`-Entities statt der veralteten `oekofen.set_*_mode`-
+  Services. Platzhalter-Schema von `DEINHOST` auf `PRAEFIX` umgestellt, da
+  Entity-IDs seit v0.6.0 von Bereich+Gerätename statt Host/IP abhängen
+  (siehe Abschnitt "Entity-IDs" oben - live an einer echten Anlage
+  nachvollzogen, nachdem sich beim Neuanlegen der Integration der
+  Gerätename geändert hatte).
 - ⚙️ **Verbindungsdaten nachträglich editierbar**: Neuer Options-Flow
   (Integration → "Konfigurieren") erlaubt das Ändern von IP-Adresse,
   Benutzername, Passwort und Sprache, ohne die Integration neu einrichten

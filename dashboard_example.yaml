@@ -1,524 +1,1033 @@
 # ÖkOfen Pellematic Dashboard
-# Copy this to your Home Assistant dashboards
-# or create a new dashboard and paste this YAML
+# Kopiere diese Datei in ein neues Home-Assistant-Dashboard (Rohes YAML
+# bearbeiten) oder als Ausgangspunkt für ein eigenes Dashboard.
 #
 # WICHTIG ZU DEN ENTITY-IDs:
-# Die Integration übernimmt Sensor-Namen und Einheiten direkt vom Gerät
-# (shortText/unitText aus der API), in der Sprache, die du beim Einrichten
-# gewählt hast. Home Assistant leitet die Entity-ID daraus automatisch ab.
-# Das bedeutet: Die tatsächlichen Entity-IDs sind NICHT z.B. "sensor.okofen_system_mode",
-# sondern hängen von Host/Gerätename und der Gerätesprache ab, z.B.
-# "sensor.okofen_192_168_1_50_betriebsart" oder "sensor.okofen_192_168_1_50_kesseltemperatur".
+# Seit v0.6.0/v0.8.0 sind praktisch alle Werte native number/select/switch/
+# climate/time/datetime/text-Entities (kein input_number/input_select-Umweg
+# mehr nötig). Home Assistant leitet die Entity-ID aus dem Gerätenamen +
+# dem zugewiesenen Bereich ab, NICHT (mehr) aus Host/IP - ein paar sehr
+# alte sensor.*-Entities aus Zeiten vor v0.6.0 können bei dir noch
+# host-basierte IDs haben (z.B. "sensor.okofen_192_168_1_50_..."), falls du
+# seither nie neu eingerichtet hast.
 #
-# So findest du deine echten Entity-IDs:
-#   Einstellungen → Geräte & Dienste → Entitäten → nach "okofen" suchen
+# Der Regelfall bei einer (Neu-)Einrichtung: die Entity-ID setzt sich aus
+# Bereich + Gerätename + Entity-Bezeichnung zusammen, z.B.
+# "select.heizraum_ofen_anlage_betriebsart", wenn das Gerät im Bereich
+# "Heizraum" liegt und in Einstellungen -> Geräte & Dienste -> Geräte auf
+# "Ofen" umbenannt wurde (Standardname ohne Umbenennung: "ÖkOfen <IP>").
+# Änderst du den Gerätenamen nachträglich, bekommen davon nur NEU
+# angelegte Entities die neue Bezeichnung - bereits registrierte
+# Entity-IDs bleiben stabil.
 #
-# In dieser Vorlage steht überall der Platzhalter DEINHOST für den
-# host-abhängigen Teil der Entity-ID. Ersetze ihn (z.B. per Suchen & Ersetzen)
-# durch das, was du in deiner Entitätenliste tatsächlich siehst.
+# In dieser Vorlage steht überall der Platzhalter PRAEFIX für den
+# Bereich+Gerätename-Teil der Entity-ID (z.B. "heizraum_ofen"). Ersetze ihn
+# per Suchen & Ersetzen durch das, was du in deiner Entitätenliste
+# tatsächlich siehst:
+#   Einstellungen -> Geräte & Dienste -> Entitäten -> nach "okofen"/deinem
+#   Gerätenamen suchen
+#
+# Diese Vorlage bildet 8 Ansichten ab, an einer realen Anlage erprobt:
+# Übersicht, Pellematic, Heizkreis, Warmwasser, Puffer & Pumpen, Statistik,
+# Zeitprogramme, Einstellungen. Sie deckt Heizkreis 1 und Warmwasser 1 ab -
+# für weitere Kreise (2, 3, ...) die jeweiligen Blöcke duplizieren und die
+# Ziffer entsprechend anpassen. Die Zeitprogramme-Ansicht enthält bewusst
+# nur Zeit 1 + Zeit 2, Block 1 pro Kreis als Beispiel (das Gerät hat bis zu
+# 3 Blöcke x 7 Tage x 2 Zeitprogramme x N Kreise an time-Entities - alle
+# aufzulisten wäre unübersichtlich); dupliziere die vertical-stack-Blöcke
+# nach demselben Muster für weitere Blöcke/Zeitprogramme.
+#
+# Felder mit Warnzeichen im Namen (number.*/select.* mit installateur-
+# gesperrten Originalwerten) tragen zusätzlich ein "warnhinweis"-Attribut,
+# sichtbar im Mehr-Info-Dialog der Entity - siehe README, Abschnitt
+# "Installateur-Ebene-Felder".
 
 title: ÖkOfen Heizung
 icon: mdi:pine-tree-fire
 views:
-  - title: Übersicht
-    path: overview
-    icon: mdi:home-thermometer
+- cards:
+  - cards:
+    - content: '## 🔧 Betriebsarten'
+      type: markdown
+    - cards:
+      - entity: select.PRAEFIX_anlage_betriebsart
+        icon: mdi:cog-outline
+        name: Anlage
+        type: tile
+      - entity: select.PRAEFIX_heizkreis_1_betriebsart
+        icon: mdi:radiator
+        name: Heizkreis
+        type: tile
+      - entity: select.PRAEFIX_warmwasser_1_betriebsart
+        icon: mdi:water-boiler
+        name: Warmwasser
+        type: tile
+      - entity: select.PRAEFIX_pellematic_1_betriebsart
+        icon: mdi:fire
+        name: Pellematic
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 🌡️ Allgemein'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_aussentemp_ist
+        icon: mdi:thermometer
+        name: Außentemperatur
+        type: tile
+      - entity: sensor.PRAEFIX_software_version
+        icon: mdi:chip
+        name: Software
+        type: tile
+      # HACS legt für die Integration selbst eine eigene update.*-Entity an
+      # (Update-Benachrichtigung bei neuer Repo-Version) - deren Entity-ID
+      # folgt nicht dem PRAEFIX-Schema oben, such sie separat unter
+      # "update" in deiner Entitätenliste, falls gewünscht.
+      - icon: mdi:remote-desktop
+        name: Fernwartungscode 1
+        type: tile
+        entity: sensor.PRAEFIX_fernwartungscode_1
+      - icon: mdi:remote-desktop
+        name: Fernwartungscode 2
+        type: tile
+        entity: sensor.PRAEFIX_fernwartungscode_2
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 📊 Kessel & Heizkreis auf einen Blick'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_kesselstatus
+        icon: mdi:fire
+        name: Kessel
+        type: tile
+      - entity: sensor.PRAEFIX_kesseltemperatur
+        icon: mdi:thermometer
+        name: Kessel °C
+        type: tile
+      - entity: sensor.PRAEFIX_raumtemperatur_ist
+        icon: mdi:home-thermometer
+        name: Raum °C
+        type: tile
+      - entity: sensor.PRAEFIX_vorlauftemperatur_ist
+        icon: mdi:thermometer-lines
+        name: Vorlauf °C
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 🎉 Party / 🛫 Urlaub'
+      type: markdown
+    - cards:
+      - entity: switch.PRAEFIX_heizkreis_1_partyprogramm
+        icon: mdi:party-popper
+        name: Party
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_urlaubsprogramm
+        icon: mdi:airplane
+        name: Urlaub
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  icon: mdi:home-thermometer
+  path: overview
+  title: Übersicht
+- cards:
+  - cards:
+    - content: '## 🔥 Kessel'
+      type: markdown
+    - entity: climate.PRAEFIX_pellematic_1
+      type: thermostat
+    - cards:
+      - entity: sensor.PRAEFIX_kesselstatus
+        icon: mdi:fire
+        name: Status
+        type: tile
+      - entity: sensor.PRAEFIX_betriebsart_fa
+        icon: mdi:cog
+        name: Betriebsart
+        type: tile
+      - entity: sensor.PRAEFIX_kesseltemperatur
+        icon: mdi:thermometer
+        name: Temp
+        type: tile
+      - entity: sensor.PRAEFIX_kesselsolltemperatur
+        icon: mdi:thermometer-high
+        name: Soll
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    - cards:
+      - entity: sensor.PRAEFIX_abgastemperatur
+        icon: mdi:thermometer-chevron-up
+        name: Abgastemperatur
+        type: tile
+      - entity: sensor.PRAEFIX_feuerraumtemperatur
+        icon: mdi:fire
+        name: Feuerraumtemp
+        type: tile
+      - entity: sensor.PRAEFIX_feuerraumtemperatur_soll
+        icon: mdi:fire
+        name: Feuerraum Soll
+        type: tile
+      - entity: sensor.PRAEFIX_unterdruck
+        icon: mdi:gauge
+        name: Unterdruck
+        type: tile
+      - entity: sensor.PRAEFIX_lufterdrehzahl
+        icon: mdi:fan
+        name: Lüfterdrehzahl
+        type: tile
+      - entity: sensor.PRAEFIX_abgasgeblasedrehzahl
+        icon: mdi:fan
+        name: Abgasgebläse
+        type: tile
+      - entity: sensor.PRAEFIX_drehzahl_umwalzpumpe
+        icon: mdi:pump
+        name: Umwälzpumpe
+        type: tile
+      - entity: sensor.PRAEFIX_brenneranforderung
+        icon: mdi:fire-alert
+        name: Brenneranforderung
+        type: tile
+      - entity: sensor.PRAEFIX_brennerschn_laufz
+        icon: mdi:screw-lag
+        name: Schneckenlaufzeit
+        type: tile
+      - entity: sensor.PRAEFIX_pausenzeit
+        icon: mdi:timer-pause
+        name: Pausenzeit
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## ⚙️ Einstellungen'
+      type: markdown
+    - cards:
+      - entity: number.PRAEFIX_pellematic_1_regeltemperatur
+        icon: mdi:thermometer
+        name: Regeltemperatur
+        type: tile
+      - entity: number.PRAEFIX_pellematic_1_regeltemperatur_smart
+        icon: mdi:thermometer
+        name: Regeltemp (Smart)
+        type: tile
+      - entity: number.PRAEFIX_pellematic_1_abschalttemperatur
+        icon: mdi:thermometer-high
+        name: Abschalttemp
+        type: tile
+      - entity: number.PRAEFIX_pellematic_1_abgastemp_minimum
+        icon: mdi:thermometer-low
+        name: Abgastemp Min
+        type: tile
+      - entity: number.PRAEFIX_pellematic_1_leistungsstufe
+        icon: mdi:fire
+        name: Leistungsstufe
+        type: tile
+      - entity: number.PRAEFIX_pellematic_1_leistungsstufe_smart
+        icon: mdi:fire
+        name: Leistung (Smart)
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 🌾 Pellet-System & Förderung'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_pelletsfullstand
+        icon: mdi:sack
+        name: Füllstand %
+        type: tile
+      - entity: sensor.PRAEFIX_aktueller_fullstand
+        icon: mdi:gauge
+        name: Füllstand kg
+        type: tile
+      - entity: sensor.PRAEFIX_fullstand_zwischenbehalter
+        icon: mdi:gauge
+        name: Zwischenbehälter
+        type: tile
+      - entity: sensor.PRAEFIX_drehzahl_schnecke_aschebox
+        icon: mdi:cog-clockwise
+        name: Schnecke Asche
+        type: tile
+      - entity: sensor.PRAEFIX_saugintervall
+        icon: mdi:timer-sand
+        name: Saugintervall
+        type: tile
+      - entity: sensor.PRAEFIX_motor_turbine
+        icon: mdi:fan
+        name: Turbine
+        type: tile
+      - entity: sensor.PRAEFIX_gluhstab
+        icon: mdi:heating-coil
+        name: Glühstab
+        type: tile
+      - entity: sensor.PRAEFIX_motor_reinigung
+        icon: mdi:broom
+        name: Reinigung
+        type: tile
+      - entity: sensor.PRAEFIX_motor_raumentnahme1
+        icon: mdi:engine
+        name: Raumentnahme 1
+        type: tile
+      - entity: sensor.PRAEFIX_motor_einschub
+        icon: mdi:engine
+        name: Einschub
+        type: tile
+      - entity: sensor.PRAEFIX_motor_aschebox
+        icon: mdi:delete-variant
+        name: Aschebox
+        type: tile
+      - entity: sensor.PRAEFIX_magnetventil
+        icon: mdi:valve
+        name: Magnetventil
+        type: tile
+      - entity: sensor.PRAEFIX_kapazitiver_sensor_ra
+        icon: mdi:leak
+        name: Sensor RA
+        type: tile
+      - entity: sensor.PRAEFIX_kapazitiver_sensor_zw
+        icon: mdi:leak
+        name: Sensor ZW
+        type: tile
+      - entity: sensor.PRAEFIX_bsk_status
+        icon: mdi:door
+        name: BSK Status
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## ⚠️ Störungen'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_stormelderelais
+        icon: mdi:alert-circle
+        name: Störmelderelais
+        type: tile
+      columns: 1
+      square: false
+      type: grid
+    type: vertical-stack
+  icon: mdi:fire
+  path: pellematic
+  title: Pellematic
+- cards:
+  - cards:
+    - content: '## 🏠 Heizkreis 1'
+      type: markdown
+    - entity: climate.PRAEFIX_heizkreis_1
+      type: thermostat
+    - cards:
+      - entity: sensor.PRAEFIX_pumpe
+        icon: mdi:pump
+        name: Pumpe
+        type: tile
+      - entity: select.PRAEFIX_heizkreis_1_aktives_zeitprogramm
+        icon: mdi:clock-outline
+        name: Zeitprogramm
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## ⚙️ Einstellungen Heizkreis 1'
+      type: markdown
+    - cards:
+      - entity: number.PRAEFIX_heizkreis_1_raumtemp_heizen
+        icon: mdi:thermometer-high
+        name: Raumtemp Heizen
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_raumtemp_absenken
+        icon: mdi:thermometer-low
+        name: Raumtemp Absenken
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_heizkurve_steigung
+        icon: mdi:chart-line
+        name: Heizkennlinie
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_heizkurve_fusspunkt
+        icon: mdi:chart-line-variant
+        name: Fußpunkt
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_heizgrenze_heizen
+        icon: mdi:thermometer-alert
+        name: Heizgrenze Heizen
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_heizgrenze_absenken
+        icon: mdi:thermometer-alert
+        name: Heizgrenze Absenken
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_vorhaltezeit
+        icon: mdi:timer-outline
+        name: Vorhaltezeit
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_raumfuhlereinfluss
+        icon: mdi:percent-outline
+        name: Raumfühlereinfluss
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_raumtemp_hysterese
+        icon: mdi:thermometer
+        name: Raumtemp Hysterese
+        type: tile
+      - icon: mdi:thermometer-chevron-up
+        name: Vorlauf Max
+        type: tile
+        entity: number.PRAEFIX_heizkreis_1_vorlauf_max
+      - icon: mdi:thermometer-chevron-down
+        name: Vorlauf Min
+        type: tile
+        entity: number.PRAEFIX_heizkreis_1_vorlauf_min
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 🎉 Party & 🛫 Urlaub'
+      type: markdown
+    - cards:
+      - entity: switch.PRAEFIX_heizkreis_1_partyprogramm
+        icon: mdi:party-popper
+        name: Party aktiv
+        type: tile
+      - entity: datetime.PRAEFIX_heizkreis_1_party_endzeit
+        icon: mdi:clock-end
+        name: Party Endzeit
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_urlaubsprogramm
+        icon: mdi:airplane
+        name: Urlaub aktiv
+        type: tile
+      - entity: number.PRAEFIX_heizkreis_1_raumtemp_urlaub
+        icon: mdi:thermometer
+        name: Raumtemp Urlaub
+        type: tile
+      - entity: datetime.PRAEFIX_heizkreis_1_urlaub_start
+        icon: mdi:airplane-takeoff
+        name: Urlaub Start
+        type: tile
+      - entity: datetime.PRAEFIX_heizkreis_1_urlaub_ende
+        icon: mdi:airplane-landing
+        name: Urlaub Ende
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  icon: mdi:radiator
+  path: heizkreis
+  title: Heizkreis
+- cards:
+  - type: vertical-stack
     cards:
-      # Betriebsarten (Operating Modes)
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🔧 Betriebsarten
+    - content: '## 💧 Warmwasser'
+      type: markdown
+    - entity: climate.PRAEFIX_warmwasser_1
+      type: thermostat
+    - cards:
+      - entity: sensor.PRAEFIX_pumpe_2
+        icon: mdi:pump
+        name: Pumpe
+        type: tile
+      - entity: select.PRAEFIX_warmwasser_1_aktives_zeitprogramm
+        icon: mdi:clock-outline
+        name: Zeitprogramm
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    - cards:
+      - entity: number.PRAEFIX_warmwasser_1_minimaltemperatur
+        icon: mdi:thermometer-low
+        name: Min-Temp
+        type: tile
+      - icon: mdi:water-boiler-auto
+        name: Einmal Aufbereiten
+        type: tile
+        entity: switch.PRAEFIX_warmwasser_1_einmal_aufbereiten
+      - entity: select.PRAEFIX_warmwasser_1_vorrang
+        icon: mdi:priority-high
+        name: Vorrang
+        type: tile
+      - entity: select.PRAEFIX_warmwasser_1_legionellenschutz
+        icon: mdi:shield-check
+        name: Legionellenschutz
+        type: tile
+      - entity: number.PRAEFIX_warmwasser_1_uberhohung
+        icon: mdi:altimeter
+        name: Überhöhung
+        type: tile
+      - entity: number.PRAEFIX_warmwasser_1_nachlaufzeit
+        icon: mdi:timer-outline
+        name: Nachlaufzeit
+        type: tile
+      - entity: number.PRAEFIX_warmwasser_1_einschalthysterese
+        icon: mdi:sine-wave
+        name: Einschalthysterese
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+  icon: mdi:water-boiler
+  path: warmwasser
+  title: Warmwasser
+- cards:
+  - cards:
+    - content: '## 🗄️ Pufferspeicher'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_einschaltfuhler_ist
+        icon: mdi:thermometer-chevron-up
+        name: Einschaltfühler (oben)
+        type: tile
+      - entity: sensor.PRAEFIX_ausschaltfuhler_ist
+        icon: mdi:thermometer-chevron-down
+        name: Ausschaltfühler (unten)
+        type: tile
+      - entity: sensor.PRAEFIX_tpm_ist
+        icon: mdi:thermometer
+        name: Puffer Mitte Ist
+        type: tile
+      - entity: sensor.PRAEFIX_tpm_soll
+        icon: mdi:thermometer
+        name: Puffer Mitte Soll
+        type: tile
+      - entity: sensor.PRAEFIX_tpo_ist
+        icon: mdi:thermometer-chevron-up
+        name: Puffer Oben Ist
+        type: tile
+      - entity: sensor.PRAEFIX_tpo_soll
+        icon: mdi:thermometer-chevron-up
+        name: Puffer Oben Soll
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 🔄 Pumpen
 
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_betriebsart
-                name: Anlage
-              - entity: sensor.okofen_DEINHOST_heizkreis_betriebsart
-                name: Heizkreis
-              - entity: sensor.okofen_DEINHOST_betriebsart_2
-                name: Warmwasser
-              - entity: sensor.okofen_DEINHOST_betriebsart_fa
-                name: Pellematic (Kessel)
+        *Hinweis: Das Gerät liefert für mehrere Pumpen denselben Namen "Pumpe" – die Zuordnung unten basiert
+        auf der Registrierungsreihenfolge (Heizkreis → Warmwasser → Zubringer → Puffer) und ist noch nicht
+        verifiziert.*'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_pumpe
+        icon: mdi:pump
+        name: Heizkreis (vermutlich)
+        type: tile
+      - entity: sensor.PRAEFIX_pumpe_2
+        icon: mdi:pump
+        name: Warmwasser (vermutlich)
+        type: tile
+      - entity: sensor.PRAEFIX_pumpe_3
+        icon: mdi:pump
+        name: Zubringer (vermutlich)
+        type: tile
+      - entity: sensor.PRAEFIX_pumpe_4
+        icon: mdi:pump
+        name: Puffer (vermutlich)
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  icon: mdi:water-pump
+  path: puffer
+  title: Puffer & Pumpen
+- cards:
+  - cards:
+    - content: '## ⏱️ Betriebsstunden & Zyklen'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_brennerlaufzeit
+        icon: mdi:clock-outline
+        name: Laufzeit gesamt
+        type: tile
+      - entity: sensor.PRAEFIX_mitllere_brennerlaufzeit
+        icon: mdi:clock-outline
+        name: Mittlere Laufzeit
+        type: tile
+      - entity: sensor.PRAEFIX_stillstandszeit
+        icon: mdi:clock-alert-outline
+        name: Stillstandszeit
+        type: tile
+      - entity: sensor.PRAEFIX_brennerstarts
+        icon: mdi:restart
+        name: Brennerstarts
+        type: tile
+      - entity: sensor.PRAEFIX_anzahl_zuendungen
+        icon: mdi:fire
+        name: Zündungen
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - entities:
+    - entity: sensor.PRAEFIX_aussentemp_ist
+      name: Außentemperatur
+    - entity: sensor.PRAEFIX_raumtemperatur_ist
+      name: Raum
+    - entity: sensor.PRAEFIX_vorlauftemperatur_ist
+      name: Vorlauf
+    - entity: sensor.PRAEFIX_kesseltemperatur
+      name: Kessel
+    hours_to_show: 24
+    refresh_interval: 60
+    title: Temperaturverlauf
+    type: history-graph
+  - days_to_show: 90
+    entities:
+    - entity: sensor.PRAEFIX_aussentemp_ist
+      name: Außentemperatur
+    - entity: sensor.PRAEFIX_raumtemperatur_ist
+      name: Raum
+    - entity: sensor.PRAEFIX_vorlauftemperatur_ist
+      name: Vorlauf
+    - entity: sensor.PRAEFIX_kesseltemperatur
+      name: Kessel
+    period: day
+    stat_types:
+    - mean
+    - min
+    - max
+    title: Temperaturverlauf (Langzeit, 90 Tage)
+    type: statistics-graph
+  - chart_type: bar
+    days_to_show: 60
+    entities:
+    - entity: sensor.PRAEFIX_brennerstarts
+      name: Brennerstarts
+    - entity: sensor.PRAEFIX_anzahl_zuendungen
+      name: Zündungen
+    period: day
+    stat_types:
+    - change
+    title: Brennerstarts & Zündungen pro Tag (Kurztakt-Trend)
+    type: statistics-graph
+  - chart_type: bar
+    days_to_show: 60
+    entities:
+    - entity: sensor.PRAEFIX_brennerlaufzeit
+      name: Laufzeit
+    period: day
+    stat_types:
+    - change
+    title: Brennerlaufzeit pro Tag (Stunden)
+    type: statistics-graph
+  icon: mdi:chart-line
+  path: statistik
+  title: Statistik
+- cards:
+  - content: '## 🕒 Zeitprogramme
 
-          # Services zum Ändern der Modi
-          - type: horizontal-stack
-            cards:
-              - type: button
-                name: Anlage Auto
-                icon: mdi:cog-outline
-                tap_action:
-                  action: call-service
-                  service: oekofen.set_system_mode
-                  service_data:
-                    mode: auto
-              - type: button
-                name: Heizung Auto
-                icon: mdi:radiator
-                tap_action:
-                  action: call-service
-                  service: oekofen.set_heating_mode
-                  service_data:
-                    circuit: 0
-                    mode: auto
-              - type: button
-                name: Warmwasser Auto
-                icon: mdi:water-boiler
-                tap_action:
-                  action: call-service
-                  service: oekofen.set_hot_water_mode
-                  service_data:
-                    circuit: 0
-                    mode: auto
-              - type: button
-                name: Kessel Auto
-                icon: mdi:fire
-                tap_action:
-                  action: call-service
-                  service: oekofen.set_pellematic_mode
-                  service_data:
-                    unit: 0
-                    mode: auto
-
-      # Allgemein (General)
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🌡️ Allgemein
-
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_aussentemp_ist
-                name: Außentemperatur
-              - entity: sensor.okofen_DEINHOST_software_version
-                name: Software Version
-              - entity: update.ofen_integration_update
-                name: Integration Update
-
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 📊 Kessel & Heizkreis auf einen Blick
-          - type: glance
-            entities:
-              - entity: sensor.okofen_DEINHOST_kesselstatus
-                name: Kessel
-              - entity: sensor.okofen_DEINHOST_kesseltemperatur
-                name: Kessel °C
-              - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
-                name: Raum °C
-              - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
-                name: Vorlauf °C
-
-  - title: Pellematic
-    path: pellematic
-    icon: mdi:fire
-    cards:
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🔥 Kessel
-          - type: glance
-            entities:
-              - entity: sensor.okofen_DEINHOST_kesselstatus
-                name: Status
-              - entity: sensor.okofen_DEINHOST_betriebsart_fa
-                name: Betriebsart
-              - entity: sensor.okofen_DEINHOST_kesseltemperatur
-                name: Temp
-              - entity: sensor.okofen_DEINHOST_kesselsolltemperatur
-                name: Soll
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_kesseltemperatur
-                name: Kesseltemperatur
-                icon: mdi:thermometer-high
-              - entity: sensor.okofen_DEINHOST_kesselsolltemperatur
-                name: Kesseltemperatur Soll
-                icon: mdi:thermometer-high
-              - entity: sensor.okofen_DEINHOST_abgastemperatur
-                name: Abgastemperatur
-                icon: mdi:thermometer-chevron-up
-              - entity: sensor.okofen_DEINHOST_feuerraumtemperatur
-                name: Feuerraumtemperatur
-                icon: mdi:fire
-              - entity: sensor.okofen_DEINHOST_feuerraumtemperatur_soll
-                name: Feuerraum Soll
-                icon: mdi:fire
-              - entity: sensor.okofen_DEINHOST_unterdruck
-                name: Unterdruck
-                icon: mdi:gauge
-              - entity: sensor.okofen_DEINHOST_lufterdrehzahl
-                name: Lüfterdrehzahl
-                icon: mdi:fan
-              - entity: sensor.okofen_DEINHOST_abgasgeblasedrehzahl
-                name: Abgasgebläsedrehzahl
-                icon: mdi:fan
-              - entity: sensor.okofen_DEINHOST_drehzahl_umwalzpumpe
-                name: Drehzahl Umwälzpumpe
-                icon: mdi:pump
-              - entity: sensor.okofen_DEINHOST_brenneranforderung
-                name: Brenneranforderung
-                icon: mdi:fire-alert
-
-      # Pellet System
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🌾 Pellet-System & Förderung
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_pelletsfullstand
-                name: Pelletsfüllstand
-                icon: mdi:sack
-              - entity: sensor.okofen_DEINHOST_aktueller_fullstand
-                name: Aktueller Füllstand
-                icon: mdi:gauge
-              - entity: sensor.okofen_DEINHOST_fullstand_zwischenbehalter
-                name: Füllstand Zwischenbehälter
-                icon: mdi:gauge
-              - entity: sensor.okofen_DEINHOST_drehzahl_schnecke_aschebox
-                name: Drehzahl Schnecke Aschebox
-                icon: mdi:cog-clockwise
-              - entity: sensor.okofen_DEINHOST_saugintervall
-                name: Saugintervall
-                icon: mdi:timer-sand
-
-      # Einstellungen - native number Entities seit v0.6.0. "Leistungsstufe"
-      # existiert je nach Kessel-Firmware nur unter einem der beiden
-      # Entity-Namen (klassisch vs. "Smart") - die jeweils nicht zutreffende
-      # bleibt "nicht verfügbar", das ist normal.
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## ⚙️ Einstellungen
-          - type: entities
-            entities:
-              - entity: number.pellematic_1_regeltemperatur
-                name: Regeltemperatur
-                icon: mdi:thermometer
-              - entity: number.pellematic_1_regeltemperatur_smart
-                name: Regeltemperatur (Smart)
-                icon: mdi:thermometer
-              - entity: number.pellematic_1_abschalttemperatur
-                name: Abschalttemperatur
-                icon: mdi:thermometer-high
-              - entity: number.pellematic_1_abgastemp_minimum
-                name: Abgastemp Minimum
-                icon: mdi:thermometer-low
-              - entity: number.pellematic_1_leistungsstufe
-                name: Leistungsstufe
-                icon: mdi:fire
-              - entity: number.pellematic_1_leistungsstufe_smart
-                name: Leistungsstufe (Smart)
-                icon: mdi:fire
-              - entity: select.pellematic_1_betriebsart
-                name: Betriebsart
-                icon: mdi:fire
-
-      # Störungen
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## ⚠️ Störungen
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_stormelderelais
-                name: Störmelderelais
-                icon: mdi:alert-circle
-
-  - title: Heizkreis
-    path: heizkreis
-    icon: mdi:radiator
-    cards:
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🏠 Heizkreis 1
-          - type: glance
-            entities:
-              - entity: sensor.okofen_DEINHOST_heizkreis_betriebsart
-                name: Modus
-              - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
-                name: Raum
-              - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
-                name: Vorlauf
-              - entity: sensor.okofen_DEINHOST_pumpe
-                name: Pumpe
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
-                name: Raumtemperatur
-                icon: mdi:home-thermometer
-              - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
-                name: Vorlauftemperatur
-                icon: mdi:thermometer-lines
-              - entity: sensor.okofen_DEINHOST_pumpe
-                name: Heizkreispumpe
-                icon: mdi:pump
-              # Zeit1/2-Umschalter - siehe automations_example.yaml + helpers_example.yaml
-              - entity: input_select.okofen_zeitprogramm_heizkreis
-                name: Aktives Zeitprogramm
-                icon: mdi:clock-outline
-
-      # Einstellungen Heizkreis - seit v0.6.0 native number/select Entities,
-      # keine input_number-Helfer/Automatisierungen mehr nötig. Entity-IDs
-      # sind namensbasiert (nicht host-abhängig) - prüfe unter Einstellungen →
-      # Geräte & Dienste → Entitäten → "heizkreis", falls Umlaute (ß, ü, ö)
-      # bei dir anders transliteriert werden als hier angenommen.
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## ⚙️ Einstellungen Heizkreis 1
-          - type: entities
-            entities:
-              - entity: number.heizkreis_1_raumtemp_heizen
-                name: Raumtemperatur Heizen (Soll)
-                icon: mdi:thermometer-high
-              - entity: number.heizkreis_1_raumtemp_absenken
-                name: Raumtemperatur Absenken (Soll)
-                icon: mdi:thermometer-low
-              - entity: number.heizkreis_1_heizkurve_steigung
-                name: Heizkennlinie
-                icon: mdi:chart-line
-              - entity: number.heizkreis_1_heizkurve_fusspunkt
-                name: Fußpunkt
-                icon: mdi:chart-line-variant
-              - entity: number.heizkreis_1_heizgrenze_heizen
-                name: Heizgrenze Heizen
-                icon: mdi:thermometer-alert
-              - entity: number.heizkreis_1_heizgrenze_absenken
-                name: Heizgrenze Absenken
-                icon: mdi:thermometer-alert
-              - entity: select.heizkreis_1_betriebsart
-                name: Betriebsart
-                icon: mdi:radiator
-              - entity: select.heizkreis_1_aktives_zeitprogramm
-                name: Aktives Zeitprogramm
-                icon: mdi:clock-outline
-
-      # Party- & Urlaubsprogramm - neu seit v0.6.0
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🎉 Party & 🛫 Urlaub
-          - type: entities
-            entities:
-              - entity: switch.heizkreis_1_partyprogramm
-                name: Partyprogramm aktiv
-                icon: mdi:party-popper
-              - entity: datetime.heizkreis_1_party_endzeit
-                name: Party Endzeit
-                icon: mdi:clock-end
-              - entity: switch.heizkreis_1_urlaubsprogramm
-                name: Urlaubsprogramm aktiv
-                icon: mdi:airplane
-              - entity: number.heizkreis_1_raumtemp_urlaub
-                name: Raumtemperatur Urlaub
-                icon: mdi:thermometer
-              - entity: datetime.heizkreis_1_urlaub_start
-                name: Urlaub Start
-                icon: mdi:airplane-takeoff
-              - entity: datetime.heizkreis_1_urlaub_ende
-                name: Urlaub Ende
-                icon: mdi:airplane-landing
-
-  - title: Warmwasser
-    path: warmwasser
-    icon: mdi:water-boiler
-    cards:
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 💧 Warmwasser
-          - type: glance
-            entities:
-              - entity: sensor.okofen_DEINHOST_betriebsart_2
-                name: Modus
-              - entity: number.warmwasser_1_solltemperatur
-                name: Solltemp
-              - entity: sensor.okofen_DEINHOST_temp_soll
-                name: Aktuelles Ziel
-              - entity: sensor.okofen_DEINHOST_pumpe_2
-                name: Pumpe
-          - type: entities
-            entities:
-              # Native number/select Entities seit v0.6.0 - direkt editierbar,
-              # keine Helfer/Automatisierungen mehr nötig.
-              - entity: number.warmwasser_1_solltemperatur
-                name: Wassertemperatur Soll
-                icon: mdi:thermometer
-              - entity: number.warmwasser_1_minimaltemperatur
-                name: Wassertemperatur Min
-                icon: mdi:thermometer-low
-              - entity: sensor.okofen_DEINHOST_pumpe_2
-                name: Warmwasserpumpe
-                icon: mdi:pump
-              - entity: select.warmwasser_1_betriebsart
-                name: Betriebsart
-                icon: mdi:water-boiler
-              - entity: select.warmwasser_1_aktives_zeitprogramm
-                name: Aktives Zeitprogramm
-                icon: mdi:clock-outline
-              - entity: sensor.okofen_DEINHOST_einmal_aufbereiten
-                name: Einmal Aufbereiten
-                icon: mdi:water-boiler-auto
-              - entity: select.warmwasser_1_vorrang
-                name: Vorrang
-                icon: mdi:priority-high
-              - entity: select.warmwasser_1_legionellenschutz
-                name: Legionellenschutz
-                icon: mdi:shield-check
-
-  - title: Puffer & Pumpen
-    path: puffer
-    icon: mdi:water-pump
-    cards:
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🗄️ Pufferspeicher
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_einschaltfuhler_ist
-                name: Einschaltfühler (oben)
-                icon: mdi:thermometer-chevron-up
-              - entity: sensor.okofen_DEINHOST_ausschaltfuhler_ist
-                name: Ausschaltfühler (unten)
-                icon: mdi:thermometer-chevron-down
-              # Native number Entities seit v0.6.0 - gehören zum
-              # Warmwasser-Kreis (ww[0]), nicht zum allgemeinen Kesselbetrieb.
-              - entity: number.warmwasser_1_uberhohung
-                name: Überhöhung (Warmwasser)
-                icon: mdi:altimeter
-              - entity: number.warmwasser_1_nachlaufzeit
-                name: Nachlaufzeit (Warmwasser)
-                icon: mdi:timer-outline
-              - entity: number.warmwasser_1_einschalthysterese
-                name: Hysterese (Warmwasser)
-                icon: mdi:sine-wave
-
-      # Zubringer-/Pufferpumpen
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## 🔄 Pumpen
-              *Hinweis: Das Gerät liefert für mehrere Pumpen denselben Namen
-              "Pumpe" - welche Entity zu welchem Kreis gehört, musst du bei dir
-              über Entity-ID-Nummerierung (pumpe, pumpe_2, pumpe_3, ...) und
-              Beobachtung zuordnen.*
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_pumpe
-                name: Pumpe 1
-                icon: mdi:pump
-              - entity: sensor.okofen_DEINHOST_pumpe_2
-                name: Pumpe 2
-                icon: mdi:pump
-              - entity: sensor.okofen_DEINHOST_pumpe_3
-                name: Pumpe 3
-                icon: mdi:pump
-              - entity: sensor.okofen_DEINHOST_pumpe_4
-                name: Pumpe 4
-                icon: mdi:pump
-
-  - title: Statistik
-    path: statistik
-    icon: mdi:chart-line
-    cards:
-      - type: vertical-stack
-        cards:
-          - type: markdown
-            content: |
-              ## ⏱️ Betriebsstunden & Zyklen
-          - type: entities
-            entities:
-              - entity: sensor.okofen_DEINHOST_brennerlaufzeit
-                name: Brennerlaufzeit gesamt
-                icon: mdi:clock-outline
-              - entity: sensor.okofen_DEINHOST_mitllere_brennerlaufzeit
-                name: Mittlere Brennerlaufzeit
-                icon: mdi:clock-outline
-              - entity: sensor.okofen_DEINHOST_stillstandszeit
-                name: Stillstandszeit
-                icon: mdi:clock-alert-outline
-              - entity: sensor.okofen_DEINHOST_brennerstarts
-                name: Brennerstarts
-                icon: mdi:restart
-              - entity: sensor.okofen_DEINHOST_anzahl_zuendungen
-                name: Anzahl Zündungen
-                icon: mdi:fire
-
-      - type: history-graph
-        title: Temperaturverlauf
-        hours_to_show: 24
-        refresh_interval: 60
-        entities:
-          - entity: sensor.okofen_DEINHOST_aussentemp_ist
-            name: Außentemperatur
-          - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
-            name: Raum
-          - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
-            name: Vorlauf
-          - entity: sensor.okofen_DEINHOST_kesseltemperatur
-            name: Kessel
-
-      # Langzeitstatistik (nutzt Home Assistants Long-Term-Statistics-Tabelle,
-      # die - anders als history-graph oben - nicht nach ~10 Tagen verfällt).
-      # Voraussetzung: die Sensoren haben bereits die passende state_class
-      # (measurement/total_increasing) - das ist in dieser Integration
-      # bereits der Fall, siehe sensor.py.
-      - type: statistics-graph
-        title: Temperaturverlauf (Langzeit, 90 Tage)
-        period: day
-        days_to_show: 90
-        stat_types:
-          - mean
-          - min
-          - max
-        entities:
-          - entity: sensor.okofen_DEINHOST_aussentemp_ist
-            name: Außentemperatur
-          - entity: sensor.okofen_DEINHOST_raumtemperatur_ist
-            name: Raum
-          - entity: sensor.okofen_DEINHOST_vorlauftemperatur_ist
-            name: Vorlauf
-          - entity: sensor.okofen_DEINHOST_kesseltemperatur
-            name: Kessel
-
-      - type: statistics-graph
-        title: Brennerstarts & Zündungen pro Tag (Kurztakt-Trend)
-        period: day
-        days_to_show: 60
-        chart_type: bar
-        stat_types:
-          - change
-        entities:
-          - entity: sensor.okofen_DEINHOST_brennerstarts
-            name: Brennerstarts
-          - entity: sensor.okofen_DEINHOST_anzahl_zuendungen
-            name: Zündungen
-
-      - type: statistics-graph
-        title: Brennerlaufzeit pro Tag (Stunden)
-        period: day
-        days_to_show: 60
-        chart_type: bar
-        stat_types:
-          - change
-        entities:
-          - entity: sensor.okofen_DEINHOST_brennerlaufzeit
-            name: Laufzeit
+      Wochentage jetzt als Kacheln zum Antippen. Die Von/Bis-Zeiten bleiben als Liste (168 Einzelkacheln
+      waeren unuebersichtlich).'
+    type: markdown
+  - cards:
+    - content: '## 🏠 Heizkreis 1 - Zeit 1 (Block 1)'
+      type: markdown
+    - cards:
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_1_sonntag_aktiv
+        icon: mdi:calendar-check
+        name: So
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_1_montag_aktiv
+        icon: mdi:calendar-check
+        name: Mo
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_1_dienstag_aktiv
+        icon: mdi:calendar-check
+        name: Di
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_1_mittwoch_aktiv
+        icon: mdi:calendar-check
+        name: Mi
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_1_donnerstag_aktiv
+        icon: mdi:calendar-check
+        name: Do
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_1_freitag_aktiv
+        icon: mdi:calendar-check
+        name: Fr
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_1_samstag_aktiv
+        icon: mdi:calendar-check
+        name: Sa
+        type: tile
+      columns: 7
+      square: false
+      type: grid
+    - entities:
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_sonntag_block_1_von
+        icon: mdi:clock-start
+        name: So Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_sonntag_block_1_bis
+        icon: mdi:clock-end
+        name: So Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_montag_block_1_von
+        icon: mdi:clock-start
+        name: Mo Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_montag_block_1_bis
+        icon: mdi:clock-end
+        name: Mo Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_dienstag_block_1_von
+        icon: mdi:clock-start
+        name: Di Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_dienstag_block_1_bis
+        icon: mdi:clock-end
+        name: Di Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_mittwoch_block_1_von
+        icon: mdi:clock-start
+        name: Mi Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_mittwoch_block_1_bis
+        icon: mdi:clock-end
+        name: Mi Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_donnerstag_block_1_von
+        icon: mdi:clock-start
+        name: Do Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_donnerstag_block_1_bis
+        icon: mdi:clock-end
+        name: Do Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_freitag_block_1_von
+        icon: mdi:clock-start
+        name: Fr Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_freitag_block_1_bis
+        icon: mdi:clock-end
+        name: Fr Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_samstag_block_1_von
+        icon: mdi:clock-start
+        name: Sa Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_1_samstag_block_1_bis
+        icon: mdi:clock-end
+        name: Sa Bis
+      type: entities
+    type: vertical-stack
+  - cards:
+    - content: '## 🏠 Heizkreis 1 - Zeit 2 (Block 1)'
+      type: markdown
+    - cards:
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_2_sonntag_aktiv
+        icon: mdi:calendar-check
+        name: So
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_2_montag_aktiv
+        icon: mdi:calendar-check
+        name: Mo
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_2_dienstag_aktiv
+        icon: mdi:calendar-check
+        name: Di
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_2_mittwoch_aktiv
+        icon: mdi:calendar-check
+        name: Mi
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_2_donnerstag_aktiv
+        icon: mdi:calendar-check
+        name: Do
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_2_freitag_aktiv
+        icon: mdi:calendar-check
+        name: Fr
+        type: tile
+      - entity: switch.PRAEFIX_heizkreis_1_zeit_2_samstag_aktiv
+        icon: mdi:calendar-check
+        name: Sa
+        type: tile
+      columns: 7
+      square: false
+      type: grid
+    - entities:
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_sonntag_block_1_von
+        icon: mdi:clock-start
+        name: So Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_sonntag_block_1_bis
+        icon: mdi:clock-end
+        name: So Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_montag_block_1_von
+        icon: mdi:clock-start
+        name: Mo Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_montag_block_1_bis
+        icon: mdi:clock-end
+        name: Mo Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_dienstag_block_1_von
+        icon: mdi:clock-start
+        name: Di Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_dienstag_block_1_bis
+        icon: mdi:clock-end
+        name: Di Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_mittwoch_block_1_von
+        icon: mdi:clock-start
+        name: Mi Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_mittwoch_block_1_bis
+        icon: mdi:clock-end
+        name: Mi Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_donnerstag_block_1_von
+        icon: mdi:clock-start
+        name: Do Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_donnerstag_block_1_bis
+        icon: mdi:clock-end
+        name: Do Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_freitag_block_1_von
+        icon: mdi:clock-start
+        name: Fr Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_freitag_block_1_bis
+        icon: mdi:clock-end
+        name: Fr Bis
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_samstag_block_1_von
+        icon: mdi:clock-start
+        name: Sa Von
+      - entity: time.PRAEFIX_heizkreis_1_zeit_2_samstag_block_1_bis
+        icon: mdi:clock-end
+        name: Sa Bis
+      type: entities
+    type: vertical-stack
+  - cards:
+    - content: '## 💧 Warmwasser 1 - Zeit 1 (Block 1)'
+      type: markdown
+    - cards:
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_1_sonntag_aktiv
+        icon: mdi:calendar-check
+        name: So
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_1_montag_aktiv
+        icon: mdi:calendar-check
+        name: Mo
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_1_dienstag_aktiv
+        icon: mdi:calendar-check
+        name: Di
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_1_mittwoch_aktiv
+        icon: mdi:calendar-check
+        name: Mi
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_1_donnerstag_aktiv
+        icon: mdi:calendar-check
+        name: Do
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_1_freitag_aktiv
+        icon: mdi:calendar-check
+        name: Fr
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_1_samstag_aktiv
+        icon: mdi:calendar-check
+        name: Sa
+        type: tile
+      columns: 7
+      square: false
+      type: grid
+    - entities:
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_sonntag_block_1_von
+        icon: mdi:clock-start
+        name: So Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_sonntag_block_1_bis
+        icon: mdi:clock-end
+        name: So Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_montag_block_1_von
+        icon: mdi:clock-start
+        name: Mo Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_montag_block_1_bis
+        icon: mdi:clock-end
+        name: Mo Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_dienstag_block_1_von
+        icon: mdi:clock-start
+        name: Di Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_dienstag_block_1_bis
+        icon: mdi:clock-end
+        name: Di Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_mittwoch_block_1_von
+        icon: mdi:clock-start
+        name: Mi Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_mittwoch_block_1_bis
+        icon: mdi:clock-end
+        name: Mi Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_donnerstag_block_1_von
+        icon: mdi:clock-start
+        name: Do Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_donnerstag_block_1_bis
+        icon: mdi:clock-end
+        name: Do Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_freitag_block_1_von
+        icon: mdi:clock-start
+        name: Fr Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_freitag_block_1_bis
+        icon: mdi:clock-end
+        name: Fr Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_samstag_block_1_von
+        icon: mdi:clock-start
+        name: Sa Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_1_samstag_block_1_bis
+        icon: mdi:clock-end
+        name: Sa Bis
+      type: entities
+    type: vertical-stack
+  - cards:
+    - content: '## 💧 Warmwasser 1 - Zeit 2 (Block 1)'
+      type: markdown
+    - cards:
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_2_sonntag_aktiv
+        icon: mdi:calendar-check
+        name: So
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_2_montag_aktiv
+        icon: mdi:calendar-check
+        name: Mo
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_2_dienstag_aktiv
+        icon: mdi:calendar-check
+        name: Di
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_2_mittwoch_aktiv
+        icon: mdi:calendar-check
+        name: Mi
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_2_donnerstag_aktiv
+        icon: mdi:calendar-check
+        name: Do
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_2_freitag_aktiv
+        icon: mdi:calendar-check
+        name: Fr
+        type: tile
+      - entity: switch.PRAEFIX_warmwasser_1_zeit_2_samstag_aktiv
+        icon: mdi:calendar-check
+        name: Sa
+        type: tile
+      columns: 7
+      square: false
+      type: grid
+    - entities:
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_sonntag_block_1_von
+        icon: mdi:clock-start
+        name: So Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_sonntag_block_1_bis
+        icon: mdi:clock-end
+        name: So Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_montag_block_1_von
+        icon: mdi:clock-start
+        name: Mo Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_montag_block_1_bis
+        icon: mdi:clock-end
+        name: Mo Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_dienstag_block_1_von
+        icon: mdi:clock-start
+        name: Di Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_dienstag_block_1_bis
+        icon: mdi:clock-end
+        name: Di Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_mittwoch_block_1_von
+        icon: mdi:clock-start
+        name: Mi Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_mittwoch_block_1_bis
+        icon: mdi:clock-end
+        name: Mi Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_donnerstag_block_1_von
+        icon: mdi:clock-start
+        name: Do Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_donnerstag_block_1_bis
+        icon: mdi:clock-end
+        name: Do Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_freitag_block_1_von
+        icon: mdi:clock-start
+        name: Fr Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_freitag_block_1_bis
+        icon: mdi:clock-end
+        name: Fr Bis
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_samstag_block_1_von
+        icon: mdi:clock-start
+        name: Sa Von
+      - entity: time.PRAEFIX_warmwasser_1_zeit_2_samstag_block_1_bis
+        icon: mdi:clock-end
+        name: Sa Bis
+      type: entities
+    type: vertical-stack
+  icon: mdi:calendar-clock
+  path: zeitprogramme
+  title: Zeitprogramme
+- cards:
+  - cards:
+    - content: '## 🕒 Datum & Uhrzeit'
+      type: markdown
+    - cards:
+      - name: Geräteuhrzeit
+        type: tile
+        entity: datetime.PRAEFIX_gerateuhrzeit
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 📧 Mail / SMTP'
+      type: markdown
+    - entities:
+      - entity: text.PRAEFIX_mail_anlagenbezeichnung
+        name: Anlagenbezeichnung
+      - entity: text.PRAEFIX_mail_smtp_server
+        name: SMTP-Server
+      - entity: text.PRAEFIX_mail_smtp_benutzer
+        name: SMTP-Benutzer
+      - entity: text.PRAEFIX_mail_smtp_passwort
+        name: SMTP-Passwort
+      - name: Empfänger 1
+        entity: text.PRAEFIX_mail_empfanger_1
+      - name: Empfänger 2
+        entity: text.PRAEFIX_mail_empfanger_2
+      - name: Empfänger 3
+        entity: text.PRAEFIX_mail_empfanger_3
+      - name: Empfänger 4
+        entity: text.PRAEFIX_mail_empfanger_4
+      - name: Empfänger 5
+        entity: text.PRAEFIX_mail_empfanger_5
+      - entity: switch.PRAEFIX_mail_testmail_senden
+        name: Testmail senden
+      type: entities
+    type: vertical-stack
+  - cards:
+    - content: '## 🔑 Fernwartung'
+      type: markdown
+    - cards:
+      - entity: sensor.PRAEFIX_fernwartungscode_1
+        name: Fernwartungscode 1
+        type: tile
+      - entity: sensor.PRAEFIX_fernwartungscode_2
+        name: Fernwartungscode 2
+        type: tile
+      columns: 2
+      square: false
+      type: grid
+    type: vertical-stack
+  - cards:
+    - content: '## 🪛 Diagnose'
+      type: markdown
+    - entities:
+      - entity: sensor.PRAEFIX_gluhstab_zundzeit
+        name: Glühstab Zündzeit
+      - entity: number.PRAEFIX_gluhstab_warnschwelle
+        name: Glühstab Warnschwelle
+      - entity: sensor.PRAEFIX_stormelderelais
+        name: Störmelderelais
+      type: entities
+    type: vertical-stack
+  icon: mdi:cog-outline
+  path: einstellungen
+  title: Einstellungen
