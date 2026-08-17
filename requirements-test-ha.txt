@@ -3,4 +3,15 @@
 # classes. requirements-test.txt alone (no homeassistant) is enough for
 # test_pellematic_api.py, which has no Home Assistant dependency at all.
 -r requirements-test.txt
-homeassistant
+# Pinned (not left floating) because homeassistant hard-pins an exact aiohttp
+# version per release, and requirements-test.txt's aiohttp>=3.9.5,<3.10 range
+# only overlaps a narrow band of releases - an unpinned "homeassistant" makes
+# pip backtrack all the way to pre-2021 releases whose transitive deps (old
+# PyYAML) don't build on modern Python, breaking CI. 2024.4.4 is the oldest
+# release whose exact aiohttp pin (3.9.5) satisfies that floor.
+homeassistant==2024.4.4
+# homeassistant's frontend -> onboarding -> http -> hass_nabucasa import
+# chain pulls in the acme library, which still calls the pre-2.0 josepy API
+# (ComparableX509) that homeassistant doesn't itself pin a compatible
+# version for. Cap it so pip doesn't pick a josepy that breaks that import.
+josepy<2
