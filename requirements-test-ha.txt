@@ -9,7 +9,7 @@
 # pip backtrack all the way to pre-2021 releases whose transitive deps (old
 # PyYAML) don't build on modern Python, breaking CI. 2024.4.4 is the oldest
 # release whose exact aiohttp pin (3.9.5) satisfies that floor.
-homeassistant==2024.4.4
+homeassistant==2026.6.0
 # homeassistant's frontend -> onboarding -> http -> hass_nabucasa import
 # chain pulls in the acme library, which still calls the pre-2.0 josepy API
 # (ComparableX509) that homeassistant doesn't itself pin a compatible
