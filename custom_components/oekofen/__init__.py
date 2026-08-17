@@ -1,6 +1,9 @@
 """The ÖkOfen Pellematic integration."""
 import logging
+from pathlib import Path
+
 import voluptuous as vol
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -13,6 +16,8 @@ from .pellematic_api import PellematicAPI
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "oekofen"
+STRATEGY_URL_PATH = "/oekofen_static/oekofen-strategy.js"
+_FRONTEND_KEY = "_frontend_registered"
 PLATFORMS = [
     Platform.SENSOR,
     Platform.NUMBER,
@@ -56,6 +61,32 @@ SERVICE_SET_PELLEMATIC_MODE_SCHEMA = vol.Schema({
 })
 
 
+async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
+    """Serve the bundled ÖkOfen dashboard-strategy JS and register it with the
+    frontend, so `strategy: {type: custom:oekofen-strategy}` works without the
+    user manually adding a Lovelace resource. Idempotent across config
+    entries/reloads.
+    """
+    if hass.data.setdefault(DOMAIN, {}).get(_FRONTEND_KEY):
+        return
+    hass.data[DOMAIN][_FRONTEND_KEY] = True
+
+    js_path = str(Path(__file__).parent / "www" / "oekofen-strategy.js")
+    try:
+        # HA >= ~2024.7: async, avoids the "blocking call" warning the sync
+        # register_static_path below triggers on newer versions.
+        from homeassistant.components.http import StaticPathConfig
+
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(STRATEGY_URL_PATH, js_path, cache_headers=False)]
+        )
+    except ImportError:
+        # Older HA doesn't have StaticPathConfig/async_register_static_paths yet.
+        hass.http.register_static_path(STRATEGY_URL_PATH, js_path, cache_headers=False)
+
+    add_extra_js_url(hass, STRATEGY_URL_PATH)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ÖkOfen from a config entry."""
     
@@ -93,7 +124,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "api": api,
         "circuits": circuits,
     }
-    
+
+    await _async_register_frontend_resources(hass)
+
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
