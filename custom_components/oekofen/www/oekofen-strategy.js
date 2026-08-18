@@ -350,7 +350,12 @@
     };
   }
 
-  function buildOverviewView(circuits, leftoverEntityIds, hass) {
+  /**
+   * Übersicht plus two dedicated views split out of it: Diagnose (sensor
+   * leftovers) and Mail/SMTP (text leftovers) each get long entity lists
+   * that don't belong sharing a page with everything else.
+   */
+  function buildOverviewViews(circuits, leftoverEntityIds, hass) {
     const cards = [];
     const modeCards = [];
     for (const circuit of circuits) {
@@ -365,29 +370,48 @@
       cards.push(stack([markdown("## \u{1F527} Betriebsarten"), grid(modeCards, 2)]));
     }
 
-    if (leftoverEntityIds.length) {
-      const bySensorDomain = new Map();
-      for (const entityId of leftoverEntityIds) {
-        const d = domainOf(entityId);
-        if (!bySensorDomain.has(d)) bySensorDomain.set(d, []);
-        bySensorDomain.get(d).push(entityId);
-      }
-      const domainTitles = {
-        sensor: "\u{1F321}️ Sensoren & Diagnose",
-        select: "\u{1F39B}️ Weitere Betriebsarten",
-        number: "⚙️ Weitere Einstellungen",
-        switch: "\u{1F50C} Weitere Schalter",
-        text: "\u{1F4E7} Mail / SMTP",
-        datetime: "\u{1F552} Datum & Uhrzeit",
-      };
-      for (const [domain, ids] of bySensorDomain.entries()) {
-        cards.push(
-          stack([markdown(`## ${domainTitles[domain] || domain}`), { type: "entities", entities: ids.map((e) => ({ entity: e })) }])
-        );
-      }
+    const bySensorDomain = new Map();
+    for (const entityId of leftoverEntityIds) {
+      const d = domainOf(entityId);
+      if (!bySensorDomain.has(d)) bySensorDomain.set(d, []);
+      bySensorDomain.get(d).push(entityId);
+    }
+    const domainTitles = {
+      select: "\u{1F39B}️ Weitere Betriebsarten",
+      number: "⚙️ Weitere Einstellungen",
+      switch: "\u{1F50C} Weitere Schalter",
+      datetime: "\u{1F552} Datum & Uhrzeit",
+    };
+    for (const [domain, ids] of bySensorDomain.entries()) {
+      if (!domainTitles[domain]) continue;
+      cards.push(
+        stack([markdown(`## ${domainTitles[domain]}`), { type: "entities", entities: ids.map((e) => ({ entity: e })) }])
+      );
     }
 
-    return { title: "Übersicht", path: "overview", icon: "mdi:home-thermometer", cards };
+    const views = [{ title: "Übersicht", path: "overview", icon: "mdi:home-thermometer", cards }];
+
+    const diagnoseIds = bySensorDomain.get("sensor");
+    if (diagnoseIds && diagnoseIds.length) {
+      views.push({
+        title: "Diagnose",
+        path: "diagnose",
+        icon: "mdi:magnify-scan",
+        cards: [{ type: "entities", entities: diagnoseIds.map((e) => ({ entity: e })) }],
+      });
+    }
+
+    const mailIds = bySensorDomain.get("text");
+    if (mailIds && mailIds.length) {
+      views.push({
+        title: "Mail / SMTP",
+        path: "mail-smtp",
+        icon: "mdi:email-outline",
+        cards: [{ type: "entities", entities: mailIds.map((e) => ({ entity: e })) }],
+      });
+    }
+
+    return views;
   }
 
   function pufferPumpenLabel(suffix) {
@@ -534,13 +558,19 @@
           }
         }
 
-        const deviceViews = [buildOverviewView(circuits, trueLeftover, hass)];
+        // buildOverviewViews returns [Übersicht, Diagnose?, Mail/SMTP?] -
+        // keep Übersicht first, but push Diagnose/Mail-SMTP to the end
+        // (after the circuits/Statistik), they're reference/meta pages
+        // rather than something checked as often as the circuit views.
+        const [overviewView, ...trailingViews] = buildOverviewViews(circuits, trueLeftover, hass);
+        const deviceViews = [overviewView];
         if (pufferPumpenIds.length) {
           deviceViews.push(buildPufferPumpenView(pufferPumpenIds, prefix));
         }
         deviceViews.push(...circuits.map((c) => buildCircuitView(c, hass)));
         const statistikView = buildStatistikView(entityIds, hass);
         if (statistikView) deviceViews.push(statistikView);
+        deviceViews.push(...trailingViews);
         if (multipleDevices) {
           for (const view of deviceViews) {
             view.title = `${deviceLabel}: ${view.title}`;
