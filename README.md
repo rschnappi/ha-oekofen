@@ -1,26 +1,8 @@
 # ÖkOfen Pellematic Home Assistant Integration
 
-Eine custom Home Assistant Integration für ÖkOfen Pellematic Heizsysteme, die auf umfangreichen Tests und Analysen basiert.
+Eine Custom Home Assistant Integration für ÖkOfen Pellematic Heizsysteme (Kessel, Heizkreise, Warmwasser, Pufferspeicher, Zirkulationspumpen). Liest über 80 Werte aus und stellt praktisch alle Sollwerte des Geräts als native, direkt editierbare Home-Assistant-Entities bereit (`number`/`select`/`switch`/`climate`/`time`/`datetime`/`text`) - kein Umweg über `input_number`/`input_select`-Helfer nötig. Dazu gibt es ein fertiges, automatisch generiertes Dashboard (siehe Abschnitt "📱 Dashboard" weiter unten).
 
-## 🔥 Version 0.4.0 - Mit Sprachunterstützung und Services
-
-Diese Integration bietet vollständige Kontrolle über Ihr ÖkOfen Heizsystem mit über 80 Sensoren, Services zum Ändern der Betriebsarten und mehrsprachiger Unterstützung.
-
-## ✅ Getestete und funktionierende Konfiguration (November 2025)
-
-### Authentifizierung (VERIFIZIERT ✓)
-- **Endpoint**: `POST /index.cgi`
-- **Content-Type**: `application/x-www-form-urlencoded`
-- **Parameter**: `username`, `password`, `language=de`, `submit=Anmelden`
-- **Erfolg**: HTTP 303 Redirect + `Set-Cookie: pksession=XXXXX` + `LoginError=0`
-- **Session**: Cookie-basiert (`pksession`)
-
-### Datenabfrage
-- **Endpoint**: `POST /?action=get&attr=1`
-- **Content-Type**: `application/json`
-- **Body**: JSON-Array der Parameter, z.B. `["CAPPL:LOCAL.L_aussentemperatur_ist"]`
-- **Headers**: `X-Requested-With: XMLHttpRequest` erforderlich
-- **Cookie**: Session-Cookie von Login muss mitgesendet werden
+Basiert auf umfangreichen Tests gegen ein echtes Gerät sowie einer Analyse der Original-JS-Weboberfläche (`app.min.js`/`config.min.js`), um Verhalten nachzubilden, das die rohe API nicht dokumentiert (z.B. installateur-gesperrte Felder, die Slot-Struktur der Heizkreis-Betriebsart).
 
 ## 🚀 Installation
 
@@ -52,11 +34,11 @@ Die gewählte Sprache bestimmt die Sensornamen und Werte, die von der API zurüc
 
 ### Verbindungsdaten nachträglich ändern
 
-Über **Einstellungen** → **Geräte & Dienste** → ÖkOfen-Integration → **Konfigurieren** lassen sich IP-Adresse, Benutzername, Passwort und Sprache jederzeit anpassen (z.B. nach einem IP-Wechsel), ohne die Integration entfernen und neu einrichten zu müssen. Nach dem Speichern wird die Integration automatisch neu geladen. Zum Entfernen der Integration weiterhin das Drei-Punkte-Menü des Eintrags verwenden (eigene Option dafür im Konfigurieren-Dialog wurde nach einem Vorfall mit fehlerhaft dargestellten, unbeschrifteten Menüzeilen wieder entfernt).
+Über **Einstellungen** → **Geräte & Dienste** → ÖkOfen-Integration → **Konfigurieren** lassen sich IP-Adresse, Benutzername, Passwort und Sprache jederzeit anpassen (z.B. nach einem IP-Wechsel), ohne die Integration entfernen und neu einrichten zu müssen. Nach dem Speichern wird die Integration automatisch neu geladen. Zum Entfernen der Integration weiterhin das Drei-Punkte-Menü des Eintrags verwenden (eigene Option dafür im Konfigurieren-Dialog wurde nach einem Vorfall mit fehlerhaft dargestellten, unbeschrifteten Menüzeilen wieder entfernt - siehe Changelog).
 
 ## 📊 Verfügbare Sensoren
 
-Die Integration stellt über 80 Sensoren zur Verfügung, organisiert nach Kategorien:
+Über 80 Sensoren, organisiert nach Kategorien:
 
 ### 🔧 Betriebsarten
 - Anlage Betriebsart (Aus/Auto/Warmwasser)
@@ -67,6 +49,7 @@ Die Integration stellt über 80 Sensoren zur Verfügung, organisiert nach Katego
 ### 🌡️ Allgemein
 - Außentemperatur
 - Software Version
+- Fernwartungscode 1/2 (diagnostisch)
 
 ### 🔥 Pellematic (Kessel)
 - Kesselstatus
@@ -76,9 +59,10 @@ Die Integration stellt über 80 Sensoren zur Verfügung, organisiert nach Katego
 - Pelletverbrauch (heute, gestern, gesamt)
 - Pelletvorrat
 - Aschelade Status
-- Störungsnummer & Störungsmeldung
+- Störungsnummer & Störungsmeldung (löst zusätzlich eine `persistent_notification` aus, wenn das Störmelderelais auslöst)
 - Betriebsstunden (gesamt, Heizen, Warmwasser)
 - Starts (gesamt, erfolglos)
+- Glühstab-Zündzeit (Diagnose, mit konfigurierbarer Warnschwelle als `number.*`, überlebt HA-Neustarts)
 
 ### 🏠 Heizkreis
 - Raumtemperatur
@@ -98,7 +82,7 @@ Die Integration stellt über 80 Sensoren zur Verfügung, organisiert nach Katego
 - Pufferpumpen Status
 - Zubringerpumpe Modus & Status
 
-## 🎚️ Steuerbare Entities (number/select/switch/datetime/time/climate)
+## 🎚️ Steuerbare Entities (number/select/switch/datetime/time/climate/text)
 
 Neben den reinen Sensoren stellt die Integration seit v0.6.0 zunehmend
 **schreibbare** Standard-HA-Entities bereit, die direkt in Dashboards,
@@ -108,23 +92,34 @@ Automatisierungen und Skripten nutzbar sind - keine `input_number`/
 - **`number.*`** – Sollwerte (Raumtemp Heizen/Absenken/Urlaub, Heizkennlinie,
   Fußpunkt, Heizgrenzen, Vorhaltezeit, Raumfühlereinfluss, Hysterese;
   Warmwasser-Solltemp/Min/Überhöhung/Nachlaufzeit/Hysterese; Pellematic
-  Regel-/Abschalttemperatur, Abgastemp-Minimum, Leistungsstufe)
-- **`select.*`** – Betriebsarten (Anlage/Heizkreis/Warmwasser/Pellematic),
-  aktives Zeitprogramm, Warmwasser-Vorrang & Legionellenschutz
+  Regel-/Abschalttemperatur (klassisch + Smart-Firmware), Abgastemp-Minimum,
+  Leistungsstufe (klassisch + Smart); Zirkulationspumpe Abschalttemperatur/
+  Hysterese; Glühstab-Warnschwelle)
+- **`select.*`** – Betriebsarten (Anlage/Heizkreis/Warmwasser/Pellematic/
+  Zirkulationspumpe), aktives Zeitprogramm, Warmwasser-Vorrang &
+  Legionellenschutz
 - **`switch.*`** – Party-/Urlaubsprogramm, Warmwasser "Einmal Aufbereiten",
-  sowie je ein Schalter pro Wochentag und Zeitprogramm-Block
+  Testmail senden, sowie je ein Schalter pro Wochentag und Zeitprogramm-Block
   (`<kreis>_zeit_<1|2>_<wochentag>_aktiv`)
-- **`datetime.*`** – Party-Endzeit, Urlaub-Start/-Ende
+- **`datetime.*`** – Geräteuhrzeit, Party-Endzeit, Urlaub-Start/-Ende
 - **`time.*`** – Von-/Bis-Uhrzeiten der Zeitprogramme (3 Blöcke × 7 Tage ×
-  2 Zeitprogramme × Heizkreis/Warmwasser)
-- **`climate.*`** *(neu in v0.8.0)* – Ein Climate-Entity pro Heizkreis und
-  pro Warmwasser-Kreis, kompatibel mit HA's Standard-Thermostat-Karte:
+  2 Zeitprogramme × Heizkreis/Warmwasser/Zirkulationspumpe)
+- **`text.*`** – Mail/SMTP-Einstellungen für die Fernwartung
+  (Anlagenbezeichnung, SMTP-Server/-Benutzer/-Passwort, bis zu 5 Empfänger)
+- **`climate.*`** – Ein Climate-Entity pro Heizkreis, Warmwasser- und
+  Pellematic-Kreis, kompatibel mit HA's Standard-Thermostat-Karte:
   - Heizkreis: `off` / `auto` / `heat`, plus Preset **"Absenken"**
   - Warmwasser: `off` / `auto` / `heat` (kein Preset, da keine
-    Absenken-Stufe am Gerät vorhanden ist)
+    Absenken-Stufe am Gerät vorhanden ist), plus Preset **"Boost"** für
+    "Einmal Aufbereiten" (zusätzlich zum eigenständigen `switch.*`)
+  - Pellematic: `off` / `auto` / `heat`, gleiches Modell wie Warmwasser
 
   Ist-/Solltemperatur und Min/Max stammen aus denselben Parametern wie die
   zugehörigen `sensor.*`/`number.*`-Entities - keine doppelte Datenquelle.
+
+⚠️ Ein Teil dieser Felder ist am Original-Gerät hinter dem Installateur-Code
+versteckt und entsprechend markiert - siehe Abschnitt "⚠️ Installateur-Ebene-Felder"
+weiter unten.
 
 ## 🎛️ Services
 
@@ -179,43 +174,59 @@ data:
 
 ## 📱 Dashboard
 
-Zwei Wege zu einem fertigen Dashboard:
+Zwei Wege zu einem fertigen Dashboard - für die meisten reicht **Option A**.
 
 ### Option A: Dashboard-Strategy (empfohlen)
 
-Die Integration bringt eine eigene [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/) mit, die das komplette Dashboard **automatisch aus den tatsächlich vorhandenen Entities generiert** - kein `PRAEFIX`-Suchen-und-Ersetzen, keine manuelle Pflege bei mehreren Heizkreisen. Sie erkennt beliebig viele Heizkreis-/Warmwasser-/Zirkulationspumpen-/Pellematic-Kreise und deren komplette Zeitprogramme (alle 3 Zeitblöcke, nicht nur Block 1 wie in `dashboard_example.yaml`) live zur Laufzeit im Browser.
+Die Integration bringt eine eigene [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/) mit (`custom_components/oekofen/www/oekofen-strategy.js`), die das komplette Dashboard **automatisch aus den tatsächlich vorhandenen Entities generiert** - kein Suchen-und-Ersetzen von Platzhaltern, keine manuelle Pflege bei mehreren Heizkreisen. Kein manuelles Eintragen unter **Einstellungen → Dashboards → Ressourcen** nötig, die Integration registriert die Ressource beim Start selbst.
 
-1. Neues Dashboard anlegen (**Einstellungen → Dashboards → + Dashboard hinzufügen**), **Neue Ansicht aus YAML erstellen**
-2. Als Inhalt:
+**So richtest du es ein:**
+1. **Einstellungen → Dashboards → + Dashboard hinzufügen**
+2. **Neue Ansicht aus YAML erstellen**
+3. Den Beispiel-Inhalt der neuen Ansicht komplett löschen und stattdessen einfügen:
    ```yaml
    strategy:
      type: custom:oekofen-strategy
    ```
-3. Bei mehreren ÖkOfen-Geräten in derselben HA-Instanz optional die Geräte-ID angeben (**Einstellungen → Geräte & Dienste → Gerät → URL enthält die ID**):
-   ```yaml
-   strategy:
-     type: custom:oekofen-strategy
-     device_id: <geraete-id>
-   ```
+4. Speichern - das Dashboard baut sich jetzt automatisch auf.
 
-Die Strategy wird automatisch als Frontend-Ressource registriert (`custom_components/oekofen/www/oekofen-strategy.js`, ausgeliefert unter `/oekofen_static/oekofen-strategy.js`) - kein manuelles Eintragen unter **Einstellungen → Dashboards → Ressourcen** nötig.
+Bei **mehreren ÖkOfen-Geräten** in derselben HA-Instanz werden die Ansichten aller Geräte automatisch mit Gerätename präfixiert (Titel und URL-Pfad), du musst nichts weiter tun. Um die Strategy stattdessen auf ein einzelnes Gerät zu beschränken, dessen Geräte-ID angeben (**Einstellungen → Geräte & Dienste → Gerät auswählen → die ID steht in der URL**):
+```yaml
+strategy:
+  type: custom:oekofen-strategy
+  device_id: <geraete-id>
+```
+
+**Was die Strategy generiert** (pro Gerät, automatisch angepasst an die vorhandene Hardware):
+- **Übersicht**: Betriebsarten aller Kreise als Kacheln, plus alles, was keinem Kreis zugeordnet werden konnte (z.B. Anlage-Betriebsart, weitere Schalter/Datum-Zeit-Felder)
+- **Puffer & Pumpen** *(nur wenn vorhanden)*: Puffertemperatur-Fühler und Umwälz-/Zirkulationspumpen-Sensoren
+- **Je eine Ansicht pro Kreis** - Heizkreis 1, 2, ...; Warmwasser 1, ...; Pellematic 1, ...; Zirkulationspumpe 1, ... (nur was am Gerät wirklich existiert):
+  - `thermostat`-Karte (bei Heizkreis/Warmwasser/Pellematic)
+  - Schnellzugriff auf Betriebsart/Zeitprogramm
+  - Einstellungen-Kachelraster (alle `number.*`/`select.*` des Kreises)
+  - Eigener **⚠️ Installateur-Ebene**-Bereich für installateur-gesperrte Felder dieses Kreises, mit dem Warnhinweis als Überschrift
+  - Party/Urlaub-Karte (Heizkreis) bzw. Einmal-Aufbereiten/Vorrang/Legionellenschutz (Warmwasser), falls vorhanden
+  - Vollständiger Zeitprogramm-Bereich: Wochentage als antippbare Kacheln je Zeitprogramm (Zeit 1/2), Von-/Bis-Uhrzeiten für **alle 3 Zeitblöcke** als Liste
+- **Statistik**: Verlaufs- und Langzeitstatistik-Karten, automatisch anhand `device_class`/`state_class`/Einheit der Sensoren zusammengestellt (Temperaturverläufe, Betriebsstunden/Ereignisse pro Tag) - nicht anhand fester Entity-Namen, funktioniert also auch bei künftig hinzukommenden Sensoren
+- **Diagnose**: alle übrig gebliebenen `sensor.*`-Entities als Liste
+- **Mail / SMTP**: alle `text.*`-Entities (Fernwartungs-Mailkonfiguration) als Liste
 
 ### Option B: Statische YAML-Vorlage
 
-Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashboard_example.yaml) - handkuratiert, mit festen Icons/Anordnungen, deckt aber nur Heizkreis 1/Warmwasser 1 sowie Zeitblock 1 exemplarisch ab (weitere Kreise/Blöcke müssen manuell dupliziert werden).
+Ein handkuratiertes Beispiel-Dashboard liegt in [`dashboard_example.yaml`](dashboard_example.yaml) - feste Icons/Anordnung, deckt aber nur Heizkreis 1/Warmwasser 1 sowie Zeitblock 1 exemplarisch ab (weitere Kreise/Blöcke müssen manuell dupliziert werden). Sinnvoll als Ausgangspunkt für individuelle Anpassungen, für die die generierte Strategy zu starr ist.
 
 ⚠️ **Wichtig zu den Entity-IDs** (nur für Option B relevant - die Strategy aus Option A erkennt Entities zur Laufzeit und braucht das nicht): Home Assistant leitet die Entity-ID aus dem Bereich (Area) und dem Gerätenamen ab, den das Gerät zum Zeitpunkt der ersten Registrierung trägt (Standard: "ÖkOfen \<IP\>", falls du es nicht umbenannt hast) – **nicht** aus Host/IP direkt. Die tatsächlichen Entity-IDs sind deshalb **nicht** vorhersagbar (z.B. `select.heizraum_ofen_anlage_betriebsart`, wenn dein Gerät im Bereich "Heizraum" liegt und auf "Ofen" umbenannt wurde) und hängen von deiner Bereichszuordnung und dem gewählten Gerätenamen ab. Ein paar sehr alte `sensor.*`-Entities aus Zeiten vor v0.6.0 können bei dir noch rein host-basierte IDs haben (z.B. `sensor.okofen_192_168_1_50_betriebsart`), falls du seither nie neu eingerichtet hast. Suche unter **Einstellungen → Geräte & Dienste → Entitäten** nach "okofen"/deinem Gerätenamen, um deine echten Entity-IDs zu finden, und ersetze den Platzhalter `PRAEFIX` in der YAML-Datei entsprechend.
 
-### Installation der YAML-Vorlage (Option B)
+**Installation:**
 1. Gehen Sie zu **Einstellungen** → **Dashboards**
 2. Klicken Sie auf **+ Dashboard hinzufügen**
 3. Wählen Sie **Neue Ansicht aus YAML erstellen**
 4. Kopieren Sie den Inhalt aus `dashboard_example.yaml` und ersetzen Sie `PRAEFIX` durch Ihre echten Entity-IDs
 5. Das Dashboard zeigt (Kacheln-Layout, 2 pro Reihe für lesbare Beschriftungen):
    - **Übersicht**: Betriebsarten (als Dropdown-Kacheln), wichtigste Sensoren, Fernwartungscodes, Party/Urlaub-Kurzstatus
-   - **Pellematic**: `thermostat`-Karte (Aus/Auto/Ein) oben, darunter Kessel-Sensorik, Einstellungen (Sollwerte editierbar), Pellet-System & Förderung, Störungen
+   - **Pellematic**: `thermostat`-Karte oben, darunter Kessel-Sensorik, Einstellungen (Sollwerte editierbar), Pellet-System & Förderung, Störungen
    - **Heizkreis**: `thermostat`-Karte (Aus/Auto/Heizen + Preset "Absenken") oben, darunter Einstellungen und Party/Urlaub
-   - **Warmwasser**: `thermostat`-Karte (Aus/Auto/Ein) oben, darunter Einstellungen
+   - **Warmwasser**: `thermostat`-Karte oben, darunter Einstellungen
    - **Puffer & Pumpen**: Pufferspeicher und Pumpen (Pumpen-Zuordnung ist eine Vermutung, siehe Hinweis im Dashboard)
    - **Statistik**: Betriebsstunden, Verlaufs- und Langzeitgraphen
    - **Zeitprogramme**: Wochentage als antippbare Kacheln je Zeitprogramm, Von-/Bis-Zeiten als Liste (Zeit 1/2, Block 1; weitere Blöcke/Zeitprogramme sind bei Bedarf leicht ergänzbar)
@@ -223,13 +234,13 @@ Ein vorgefertigtes Dashboard ist verfügbar in [`dashboard_example.yaml`](dashbo
 
 ### Werte direkt im Dashboard verändern
 
-Seit v0.6.0/v0.8.0 liefert die Integration native, direkt editierbare `number.*`/`select.*`/`switch.*`/`datetime.*`/`time.*`/`climate.*`/`text.*`-Entities für praktisch alle Sollwerte (Raumtemperatur, Vorlauf Max/Min, Heizkurve, Warmwassertemperatur, Zeitprogramm-Auswahl, Zeitprogramm-Zeiten und -Wochentage, Party-/Urlaubsprogramm, Betriebsarten als Thermostat-Karte, Mail/SMTP-Einstellungen, …). Ein Umweg über `input_number`/`input_select`-Helfer ist dafür **nicht mehr nötig** – es gibt inzwischen keine bekannten Lücken mehr, `helpers_example.yaml`/`automations_example.yaml` wurden entfernt.
+Seit v0.6.0/v0.8.0 liefert die Integration native, direkt editierbare `number.*`/`select.*`/`switch.*`/`datetime.*`/`time.*`/`climate.*`/`text.*`-Entities für praktisch alle Sollwerte (Raumtemperatur, Vorlauf Max/Min, Heizkurve, Warmwassertemperatur, Zeitprogramm-Auswahl, Zeitprogramm-Zeiten und -Wochentage, Party-/Urlaubsprogramm, Betriebsarten als Thermostat-Karte, Mail/SMTP-Einstellungen, …). Ein Umweg über `input_number`/`input_select`-Helfer ist dafür **nicht mehr nötig**.
 
 **Achtung** bei allen schreibbaren Entities gleichermaßen: Sie greifen unmittelbar in den laufenden Heizungsbetrieb ein – nach Änderungen zunächst mit einem unkritischen Wert testen.
 
 ### ⚠️ Installateur-Ebene-Felder
 
-Ein Teil der Sollwerte ist am Original-Gerät selbst **hinter dem Installateur-/Techniker-Code** (`main.codeebene`) versteckt – am Touchdisplay bzw. in der Geräte-Weboberfläche kommt man ohne diesen Code gar nicht an sie heran. Diese Integration liest das Gerät über dieselbe API an, die auch die Weboberfläche nutzt, und kann diese Werte deshalb technisch trotzdem schreiben. Sie sind bewusst **nicht** auf reinen Lesezugriff beschränkt (falls du sie doch mal brauchst), aber in Name (Präfix "⚠️") und Icon markiert und tragen ein `warnhinweis`-Attribut (sichtbar in Entwicklertools → Zustand bzw. im Mehr-Info-Dialog der Entity):
+Ein Teil der Sollwerte ist am Original-Gerät selbst **hinter dem Installateur-/Techniker-Code** (`main.codeebene`) versteckt – am Touchdisplay bzw. in der Geräte-Weboberfläche kommt man ohne diesen Code gar nicht an sie heran. Diese Integration liest das Gerät über dieselbe API an, die auch die Weboberfläche nutzt, und kann diese Werte deshalb technisch trotzdem schreiben. Sie sind bewusst **nicht** auf reinen Lesezugriff beschränkt (falls du sie doch mal brauchst), aber in Name (Präfix "⚠️") und Icon markiert und tragen ein `warnhinweis`-Attribut (sichtbar in Entwicklertools → Zustand bzw. im Mehr-Info-Dialog der Entity). Die Dashboard-Strategy (Option A oben) fasst sie zusätzlich in einem eigenen "⚠️ Installateur-Ebene"-Bereich pro Kreis zusammen, mit dem Warnhinweis direkt als Überschrift:
 
 - Heizkreis: Vorlauf Max, Vorlauf Min
 - Warmwasser: Vorrang, Überhöhung, Nachlaufzeit, Einschalthysterese, Legionellenschutz
@@ -243,7 +254,7 @@ Am Original-Gerät ist die Heizkreis-/Warmwasser-Betriebsart (`select.*_betriebs
 
 ### Langzeitstatistik
 
-Sensoren mit numerischem Wert haben bereits die passende `state_class` (measurement bzw. total_increasing), wodurch Home Assistant automatisch **Langzeitstatistiken** führt (im Gegensatz zur normalen Historie verfallen diese nicht nach ein paar Tagen). Für echte Langzeit-Trends (z.B. Temperaturverlauf über Monate, oder Brennerstarts pro Tag zur Kurztakt-Analyse) nutzt `dashboard_example.yaml` dafür `statistics-graph`-Karten statt `history-graph`.
+Sensoren mit numerischem Wert haben bereits die passende `state_class` (measurement bzw. total_increasing), wodurch Home Assistant automatisch **Langzeitstatistiken** führt (im Gegensatz zur normalen Historie verfallen diese nicht nach ein paar Tagen). Für echte Langzeit-Trends (z.B. Temperaturverlauf über Monate, oder Brennerstarts pro Tag zur Kurztakt-Analyse) nutzen sowohl die Dashboard-Strategy als auch `dashboard_example.yaml` dafür `statistics-graph`-Karten statt `history-graph`.
 
 ⚠️ **Wichtig bei einem Update von Version < 0.4.0**: Diese Version hat das `unique_id`-Schema der Sensoren geändert (siehe Changelog), wodurch sich auch die Entity-IDs ändern. Das **unterbricht die Kontinuität bereits gesammelter Langzeitstatistiken** – die alten Sensoren behalten ihre Historie, werden aber nicht mehr aktualisiert; die neuen Sensoren starten bei null. Um die Historie zu erhalten, kannst du nach dem Update die alte, verwaiste Entity löschen und die neue Entity in **Einstellungen → Entitäten → [Entity] → Einstellungen → Entity-ID** auf die alte ID umbenennen – Home Assistant führt die Statistik dann unter derselben Statistik-ID (die am Entity-ID-String hängt) nahtlos weiter.
 
@@ -284,6 +295,9 @@ curl -X POST "http://IHR_OEKOFEN_IP/index.cgi" \
   -d '{"user":"IHR_USERNAME","pass":"IHR_PASSWORD","submit":"Anmelden"}'
 ```
 
+#### Dashboard-Strategy zeigt "Error loading the dashboard strategy"
+Meist ein veralteter Frontend-Cache nach einem Update der Integration - Browser-Cache leeren bzw. Seite mit Strg/Cmd+Shift+R neu laden, dann Home Assistant neu starten (die Integration registriert die JS-Ressource erneut beim Start). Falls die Fehlermeldung ausdrücklich einen `ll-strategy-dashboard-...`-Elementnamen nennt, der nie registriert wurde, ist das ein Hinweis auf eine Versionsinkonsistenz zwischen `www/oekofen-strategy.js` und der geladenen Frontend-Ressource - Integration einmal komplett deaktivieren/aktivieren.
+
 ### Debug-Informationen sammeln
 
 Aktivieren Sie Debug-Logging und überprüfen Sie die Logs:
@@ -299,30 +313,33 @@ logger:
 
 ### Tests
 
-Es gibt automatisierte Tests für `pellematic_api.py` (Login, Session-Handling, Re-Authentifizierung), die bei jedem Push/PR per GitHub Actions laufen. Lokal ausführen:
+Automatisierte Tests laufen bei jedem Push/PR per GitHub Actions (`.github/workflows/test.yml`, Python 3.14 - dieselbe Python-Version, die die aktuell gepinnte `homeassistant`-Release voraussetzt). Lokal ausführen:
 
 ```bash
-pip install -r requirements-test.txt
+pip install -r requirements-test-ha.txt   # zieht requirements-test.txt automatisch mit
 pytest tests/ -v
 ```
 
-Die Tests brauchen kein Home Assistant und keine echte Verbindung zum Gerät (HTTP wird mit `aioresponses` gemockt).
+`requirements-test.txt` allein (ohne Home Assistant) reicht für `test_pellematic_api.py`, das keine HA-Abhängigkeit hat. Für die Plattform-Tests (number/select/switch/climate/time/datetime), die echte HA-Entity-Basisklassen erben, wird zusätzlich `requirements-test-ha.txt` gebraucht - es pinnt `homeassistant` exakt auf die Version, die auch live läuft, statt gegen einen zunehmend veralteten Mock zu testen.
+
+`test_pellematic_api.py` mockt die Geräte-API nicht mit `aioresponses` (das an aiohttps internen `ClientResponse`-Konstruktor gekoppelt und bei neueren aiohttp-Versionen kaputt ist), sondern startet einen echten lokalen `aiohttp.web`-Server (`aiohttp.test_utils.TestServer`) und lässt `PellematicAPI` real dagegen sprechen - dadurch bleiben die Tests unabhängig von der jeweils installierten aiohttp-Version lauffähig.
 
 ### Getestete Konfiguration
-- **ÖkOfen Pellematic 2012** - Vollständig getestet
-- **Home Assistant 2024.x** - Kompatibel
-- **aiohttp >= 3.8.0** - Erforderlich
+- **ÖkOfen Pellematic 2012** - Vollständig getestet, inkl. Firmware-Varianten ("klassisch" vs. "Smart" bei Leistungsstufe/Regeltemperatur)
+- **Home Assistant** - CI und Live-Betrieb laufen gegen aktuelle Releases; die Integration ist zusätzlich defensiv gegen HA-API-Änderungen aus früheren Versionen abgesichert (z.B. `OptionsFlow.config_entry`-Property-Wechsel, `StaticPathConfig` vs. älteres `register_static_path`)
 
 ### API-Endpoints (Dokumentiert und getestet)
 ```python
 # Anmeldung
 POST /index.cgi
-Content-Type: application/json
-{"user": "username", "pass": "password", "submit": "Anmelden"}
+Content-Type: application/x-www-form-urlencoded
+username=...&password=...&language=de&submit=Anmelden
+# Erfolg: HTTP 303 Redirect + Set-Cookie: pksession=XXXXX + LoginError=0
 
 # Datenabfrage
-POST /?action=get&attr=1  
+POST /?action=get&attr=1
 Content-Type: application/json
+X-Requested-With: XMLHttpRequest
 ["CAPPL:LOCAL.L_aussentemperatur_ist", "CAPPL:FA[0].L_kesseltemperatur"]
 ```
 
@@ -336,7 +353,7 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ### Version 0.8.0
 
-- 🧩 **Neue Dashboard-Strategy** (`custom:oekofen-strategy`,
+- 🧩 **Dashboard-Strategy** (`custom:oekofen-strategy`,
   `custom_components/oekofen/www/oekofen-strategy.js`): generiert das
   komplette Dashboard zur Laufzeit direkt aus den vorhandenen Entities -
   erkennt beliebig viele Heizkreis-/Warmwasser-/Zirkulationspumpen-/
@@ -348,6 +365,20 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
   es zu erraten, und ordnet Entities anhand ihres deutschen Namens-Suffix
   zu (z.B. "heizkreis_1_betriebsart") - unabhängig davon, wie das Gerät
   umbenannt wurde.
+  🐛 Erste Version registrierte das Custom-Element unter dem falschen
+  Namen (`ll-strategy-dashboard-oekofen` statt `...-oekofen-strategy` -
+  HA hängt den kompletten String nach `custom:` an, nicht nur die
+  Domain) und schlug live mit *"Timeout waiting for strategy element ...
+  to be registered"* fehl - behoben.
+  Danach schrittweise ausgebaut: eigene **Puffer & Pumpen**-Ansicht für
+  Fühler/Pumpen-Sensoren ohne Kreis-Zuordnung, eine **Statistik**-Ansicht
+  (Verlaufs-/Langzeitgraphen rein anhand `device_class`/`state_class`/
+  Einheit zusammengestellt, nicht anhand fester Namen), Installateur-
+  Ebene-Felder bekommen einen eigenen, klar markierten Warnbereich pro
+  Kreis statt zwischen den normalen Einstellungen zu stehen, und
+  **Diagnose**/**Mail & SMTP** wurden aus der Übersicht in eigene
+  Ansichten ausgelagert, damit die Übersicht nicht mit langen Listen
+  überladen wird.
 - 📱 **`dashboard_example.yaml` grundlegend überarbeitet**: von 6 auf 8
   Ansichten erweitert (neu: Zeitprogramme, Einstellungen mit Mail/SMTP/
   Fernwartung/Diagnose), Pellematic bekommt jetzt ebenfalls eine
@@ -393,21 +424,40 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
   Normalfall) wurde damit ein veralteter, inaktiver Slot angezeigt und
   Änderungen gingen ins Leere. Neues `betriebsart.py` löst den aktiven
   Slot jetzt live anhand von `CAPPL:LOCAL.anlage_betriebsart` auf.
-- ✅ **Climate-Plattform** (`climate.py`, neu): Heizkreis und Warmwasser
-  bekommen echte `climate.*`-Entities für Thermostat-Karten in HA, statt nur
-  Sensoren/Number-Feldern. Mode-Mapping ist pro Kreistyp konfigurierbar
-  (`mode_map`), da Heizkreis und Warmwasser unterschiedliche Betriebsarten
+- ✅ **Climate-Plattform** (`climate.py`, neu): Heizkreis, Warmwasser und
+  Pellematic bekommen echte `climate.*`-Entities für Thermostat-Karten in
+  HA, statt nur Sensoren/Number-Feldern. Mode-Mapping ist pro Kreistyp
+  konfigurierbar (`mode_map`), da die Kreise unterschiedliche Betriebsarten
   am Gerät haben:
   - **Heizkreis:** Aus → `off`, Auto → `auto`, Heizen → `heat`,
     Absenken → `heat` + Preset "Absenken" (kein HA-Standardmodus, daher als
     Preset statt als eigener hvac_mode).
-  - **Warmwasser:** Aus → `off`, Auto → `auto`, Ein → `heat` (kein Preset,
-    dieser Kreis hat keine Absenken-Stufe am Gerät).
+  - **Warmwasser:** Aus → `off`, Auto → `auto`, Ein → `heat`, plus Preset
+    "Boost" für "Einmal Aufbereiten" (zusätzlich zum eigenständigen `switch.*`).
+  - **Pellematic:** Aus → `off`, Auto → `auto`, Ein → `heat` (gleiches
+    3-Zustands-Modell wie Warmwasser, kein Preset).
   - Ist-/Solltemperatur und Min/Max-Grenzen kommen aus denselben
     CAPPL-Parametern wie die bestehenden Sensor-/Number-Entities für den
     jeweiligen Kreis - keine Doppelquelle für dieselben Werte.
 - 🐛 Korrektur: Preset heißt jetzt wörtlich **"Absenken"** statt des
   irreführenden generischen HA-Begriffs "Eco".
+- 🧪 **Testinfrastruktur**: `test_pellematic_api.py` mockt die Geräte-API
+  jetzt über einen echten lokalen `aiohttp.web`-Server statt über
+  `aioresponses` (das an aiohttps internen `ClientResponse`-Konstruktor
+  gekoppelt und seit aiohttp 3.10+ kaputt ist - `TypeError:
+  ClientResponse.__init__() missing 'stream_writer'`, live reproduziert).
+  Damit entfällt der künstliche `aiohttp<3.10`-Deckel, der sich zuvor mit
+  Home Assistants eigenem exaktem aiohttp-Pin gebissen und das Testen
+  gegen aktuelle, nicht-verwundbare HA-Releases blockiert hat. CI
+  (`.github/workflows/test.yml`) läuft jetzt auf Python 3.14 gegen ein
+  fest gepinntes, aktuelles `homeassistant`-Release (dieselbe Version, die
+  auch live eingesetzt wird), statt gegen ein unversioniert "neuestes"
+  `homeassistant`, das zuvor mangels passender Python-Version auf einem
+  veralteten, teils verwundbaren Release landete.
+- 🐛 Glühstab-Zündzeit (`sensor.*_gluhstab_zundzeit`) verlor ihren Wert bei
+  jedem HA-Neustart (fiel auf "unknown" zurück, obwohl der letzte reale
+  Zündvorgang oft Stunden/Tage zurücklag) - Entity nutzt jetzt
+  `RestoreSensor` und stellt den letzten bekannten Wert beim Start wieder her.
 
 ### Version 0.6.2 – 0.6.3
 
@@ -444,10 +494,7 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
   Abgastemp-Minimum, Leistungsstufe (klassisch & Smart) (`number.*`).
 - ✅ **Heizkreis** zusätzlich editierbar: Raumtemperatur Urlaub (`number.*`).
 - 🧹 Alle neuen Entities sind namensbasiert (nicht host-abhängig) und
-  benötigen keine `input_number`/`input_select`-Helfer mehr - die
-  entsprechenden Abschnitte in `dashboard_example.yaml` wurden auf die
-  nativen Entities umgestellt. `helpers_example.yaml`/`automations_example.yaml`
-  bleiben nur noch für Felder relevant, die (noch) nicht nativ abgedeckt sind.
+  benötigen keine `input_number`/`input_select`-Helfer mehr.
 
 ### Version 0.4.0
 - ⚠️ **Breaking**: `unique_id` der Sensoren ist jetzt pro Config-Entry eindeutig (`<entry_id>_<sensor_key>` statt `oekofen_<sensor_key>`), damit mehrere ÖkOfen-Geräte in derselben Home-Assistant-Instanz nicht kollidieren. Nach dem Update legt Home Assistant die Entities neu an; alte, verwaiste Entities können unter **Einstellungen → Geräte & Dienste → Entitäten** entfernt werden, falls nötig.
@@ -489,6 +536,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.4.0  
-**Letzte Aktualisierung**: November 2025  
-**Status**: Stabil - Basierend auf umfangreichen Tests
+**Version**: 0.8.0
+**Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
