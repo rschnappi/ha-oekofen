@@ -186,20 +186,39 @@
     return circuit.entities.get(`${domain}:${suffix}`) || null;
   }
 
-  /** Settings grid: every number/select entity of the circuit not already used elsewhere. */
-  function buildSettingsGrid(circuit, usedEntityIds) {
+  /** The Python platform (number.py/select.py) tags installer-only fields
+   * (protected by a technician PIN on the real device) with a "warnhinweis"
+   * state attribute - surface it here instead of leaving it buried in the
+   * entity's attributes, where nobody but a Developer Tools user would ever
+   * see it. */
+  function installerWarningOf(entityId, hass) {
+    const state = hass && hass.states && hass.states[entityId];
+    return (state && state.attributes && state.attributes.warnhinweis) || null;
+  }
+
+  /** Settings grid: every number/select entity of the circuit not already
+   * used elsewhere, split into normal fields and installer-only ones. */
+  function buildSettingsGrid(circuit, usedEntityIds, hass) {
     const used = new Set(usedEntityIds.filter(Boolean));
-    const cards = [];
+    const normal = [];
+    const warned = [];
+    let warningText = null;
     for (const domain of ["number", "select"]) {
       for (const entityId of domainEntities(circuit, domain)) {
         if (used.has(entityId)) continue;
         // Zeitprogramm/day-schedule entities are handled in their own section.
         const suffix = entityId.slice(entityId.indexOf(".") + 1);
         if (/_zeit_\d+_/.test(suffix)) continue;
-        cards.push(tile(entityId));
+        const hint = installerWarningOf(entityId, hass);
+        if (hint) {
+          warned.push(entityId);
+          if (!warningText) warningText = hint;
+        } else {
+          normal.push(entityId);
+        }
       }
     }
-    return cards;
+    return { cards: normal.map((id) => tile(id)), warnedIds: warned, warningText };
   }
 
   function buildZeitprogrammSection(circuit) {
@@ -231,7 +250,7 @@
     return cards.length > 1 ? [stack(cards)] : [];
   }
 
-  function buildCircuitView(circuit) {
+  function buildCircuitView(circuit, hass) {
     const meta = CIRCUIT_META[circuit.type];
     const title = `${meta.label} ${circuit.index}`;
     const usedForSettings = [];
@@ -260,13 +279,15 @@
 
     const cardStacks = [stack(topCards)];
 
-    const settingsCards = buildSettingsGrid(circuit, usedForSettings);
-    if (settingsCards.length) {
-      cardStacks.push(stack([markdown(`## ⚙️ Einstellungen ${title}`), grid(settingsCards, 2)]));
-    }
-
-    // Party/Urlaub (Heizkreis) and Einmal Aufbereiten (Warmwasser), if present.
+    // Party/Urlaub (Heizkreis) and Einmal Aufbereiten (Warmwasser) fields,
+    // if present - looked up (and reserved via usedForSettings) *before*
+    // buildSettingsGrid runs below, so it doesn't also render them as
+    // generic settings tiles. Installer-only fields among these (e.g.
+    // Vorrang, Legionellenschutz) go into the warning section instead of
+    // the Party/Urlaub card.
     const extraCards = [];
+    const extraWarnedIds = [];
+    let extraWarningText = null;
     for (const [suffix, name, icon] of [
       ["partyprogramm", "Party aktiv", "mdi:party-popper"],
       ["party_endzeit", "Party Endzeit", "mdi:clock-end"],
@@ -282,10 +303,37 @@
         circuitEntity(circuit, "datetime", suffix) ||
         circuitEntity(circuit, "select", suffix);
       if (entityId) {
-        extraCards.push(tile(entityId, name, icon));
+        const hint = installerWarningOf(entityId, hass);
+        if (hint) {
+          extraWarnedIds.push(entityId);
+          if (!extraWarningText) extraWarningText = hint;
+        } else {
+          extraCards.push(tile(entityId, name, icon));
+        }
         usedForSettings.push(entityId);
       }
     }
+
+    const { cards: settingsCards, warnedIds, warningText: settingsWarningText } = buildSettingsGrid(
+      circuit,
+      usedForSettings,
+      hass
+    );
+    if (settingsCards.length) {
+      cardStacks.push(stack([markdown(`## ⚙️ Einstellungen ${title}`), grid(settingsCards, 2)]));
+    }
+    warnedIds.push(...extraWarnedIds);
+    const warningText = settingsWarningText || extraWarningText;
+
+    if (warnedIds.length) {
+      cardStacks.push(
+        stack([
+          markdown(`## ⚠️ Installateur-Ebene ${title}\n\n${warningText}`),
+          grid(warnedIds.map((id) => tile(id)), 2),
+        ])
+      );
+    }
+
     if (extraCards.length) {
       cardStacks.push(stack([markdown("## \u{1F389} Party / Urlaub"), grid(extraCards, 2)]));
     }
@@ -490,7 +538,7 @@
         if (pufferPumpenIds.length) {
           deviceViews.push(buildPufferPumpenView(pufferPumpenIds, prefix));
         }
-        deviceViews.push(...circuits.map(buildCircuitView));
+        deviceViews.push(...circuits.map((c) => buildCircuitView(c, hass)));
         const statistikView = buildStatistikView(entityIds, hass);
         if (statistikView) deviceViews.push(statistikView);
         if (multipleDevices) {
