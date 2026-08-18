@@ -52,6 +52,23 @@
     zirkulationspumpe: { label: "Zirkulationspumpe", icon: "mdi:pump", emoji: "\u{1F504}", hasZeitprogramm: true, hasClimate: false },
   };
 
+  // Buffer-tank probes and circulation pumps are top-level sensors with no
+  // "<type>_<index>_" structure (e.g. "tpm_ist", "pumpe_2"), so they never
+  // match a circuit and would otherwise get dumped into the Übersicht's
+  // generic sensor list. Pull them into their own view instead - matched by
+  // name since, unlike device_class/state_class, nothing in the entity
+  // registry distinguishes "this sensor is about the buffer tank".
+  const PUFFER_PUMPEN_RE = /^(puffer\w*|pumpe(_\d+)?|einschaltfuhler\w*|ausschaltfuhler\w*|tpm\w*|tpo\w*)$/;
+  const PUFFER_PUMPEN_LABELS = {
+    tpm_ist: "Puffer Mitte Ist",
+    tpm_soll: "Puffer Mitte Soll",
+    tpo_ist: "Puffer Oben Ist",
+    tpo_soll: "Puffer Oben Soll",
+    einschaltfuhler_ist: "Einschaltfühler",
+    ausschaltfuhler_ist: "Ausschaltfühler",
+  };
+  const DURATION_UNITS = new Set(["h", "min", "s", "zs"]);
+
   function domainOf(entityId) {
     return entityId.slice(0, entityId.indexOf("."));
   }
@@ -325,6 +342,106 @@
     return { title: "Übersicht", path: "overview", icon: "mdi:home-thermometer", cards };
   }
 
+  function pufferPumpenLabel(suffix) {
+    if (PUFFER_PUMPEN_LABELS[suffix]) return PUFFER_PUMPEN_LABELS[suffix];
+    const m = suffix.match(/^pumpe_(\d+)$/);
+    if (m) return `Pumpe ${m[1]}`;
+    if (suffix === "pumpe") return "Pumpe";
+    return suffix.replace(/_/g, " ");
+  }
+
+  /** Buffer-tank probes and circulation-pump sensors, split out of the leftover bucket. */
+  function buildPufferPumpenView(entityIds, prefix) {
+    const cards = entityIds.map((entityId) => {
+      const suffix = objectIdOf(entityId).slice(prefix.length);
+      const icon = suffix.startsWith("pumpe") ? "mdi:pump" : "mdi:thermometer";
+      return tile(entityId, pufferPumpenLabel(suffix), icon);
+    });
+    return {
+      title: "Puffer & Pumpen",
+      path: "puffer-pumpen",
+      icon: "mdi:water-pump",
+      cards: [stack([markdown("## \u{1F5C4}️ Puffer & Pumpen"), grid(cards, 2)])],
+    };
+  }
+
+  /**
+   * History/statistics graphs, derived purely from each sensor's
+   * device_class/state_class/unit (via hass.states) - not from entity
+   * names, so it generalizes to whatever sensors a given device exposes.
+   */
+  function buildStatistikView(entityIds, hass) {
+    const states = hass.states || {};
+    const sensorIds = entityIds.filter((id) => domainOf(id) === "sensor" && states[id]);
+
+    const tempIds = sensorIds
+      .filter((id) => states[id].attributes.device_class === "temperature")
+      .sort();
+    const counterIds = sensorIds.filter((id) => states[id].attributes.state_class === "total_increasing");
+    const counterCountIds = counterIds.filter((id) => !states[id].attributes.unit_of_measurement).sort();
+    const counterTimeIds = counterIds
+      .filter((id) => DURATION_UNITS.has(states[id].attributes.unit_of_measurement))
+      .sort();
+    const statsTileIds = sensorIds
+      .filter((id) => {
+        const a = states[id].attributes;
+        if (a.device_class === "temperature") return false;
+        return a.device_class === "duration" || DURATION_UNITS.has(a.unit_of_measurement) || a.state_class === "total_increasing";
+      })
+      .sort();
+
+    if (!tempIds.length && !statsTileIds.length) return null;
+
+    const cards = [];
+
+    if (statsTileIds.length) {
+      cards.push(stack([markdown("## ⏱️ Betriebsstunden & Zyklen"), grid(statsTileIds.map((id) => tile(id)), 2)]));
+    }
+
+    if (tempIds.length) {
+      cards.push({
+        type: "history-graph",
+        title: "Temperaturverlauf",
+        hours_to_show: 24,
+        refresh_interval: 60,
+        entities: tempIds.map((id) => ({ entity: id })),
+      });
+      cards.push({
+        type: "statistics-graph",
+        title: "Temperaturverlauf (Langzeit, 90 Tage)",
+        entities: tempIds.map((id) => ({ entity: id })),
+        days_to_show: 90,
+        period: "day",
+        stat_types: ["mean", "min", "max"],
+      });
+    }
+
+    if (counterCountIds.length) {
+      cards.push({
+        type: "statistics-graph",
+        title: "Ereignisse pro Tag",
+        chart_type: "bar",
+        entities: counterCountIds.map((id) => ({ entity: id })),
+        days_to_show: 60,
+        period: "day",
+        stat_types: ["change"],
+      });
+    }
+    if (counterTimeIds.length) {
+      cards.push({
+        type: "statistics-graph",
+        title: "Laufzeit pro Tag",
+        chart_type: "bar",
+        entities: counterTimeIds.map((id) => ({ entity: id })),
+        days_to_show: 60,
+        period: "day",
+        stat_types: ["change"],
+      });
+    }
+
+    return { title: "Statistik", path: "statistik", icon: "mdi:chart-line", cards };
+  }
+
   class OekofenStrategy {
     static async generate(config, hass) {
       const devices = Object.values(hass.devices || {});
@@ -354,11 +471,28 @@
 
       for (const device of targetDevices) {
         const entityIds = allEntities.filter((e) => e.device_id === device.id).map((e) => e.entity_id);
-        const { circuits, leftover } = analyzeEntities(entityIds);
+        const { prefix, circuits, leftover } = analyzeEntities(entityIds);
         const deviceLabel = device.name_by_user || device.name || device.id;
         const deviceSlug = String(deviceLabel).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-        const deviceViews = [buildOverviewView(circuits, leftover, hass), ...circuits.map(buildCircuitView)];
+        const pufferPumpenIds = [];
+        const trueLeftover = [];
+        for (const entityId of leftover) {
+          const suffix = objectIdOf(entityId).slice(prefix.length);
+          if (domainOf(entityId) === "sensor" && PUFFER_PUMPEN_RE.test(suffix)) {
+            pufferPumpenIds.push(entityId);
+          } else {
+            trueLeftover.push(entityId);
+          }
+        }
+
+        const deviceViews = [buildOverviewView(circuits, trueLeftover, hass)];
+        if (pufferPumpenIds.length) {
+          deviceViews.push(buildPufferPumpenView(pufferPumpenIds, prefix));
+        }
+        deviceViews.push(...circuits.map(buildCircuitView));
+        const statistikView = buildStatistikView(entityIds, hass);
+        if (statistikView) deviceViews.push(statistikView);
         if (multipleDevices) {
           for (const view of deviceViews) {
             view.title = `${deviceLabel}: ${view.title}`;
@@ -385,6 +519,14 @@
   }
 
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { OekofenStrategy, analyzeEntities, commonPrefix, objectIdOf, domainOf };
+    module.exports = {
+      OekofenStrategy,
+      analyzeEntities,
+      commonPrefix,
+      objectIdOf,
+      domainOf,
+      buildPufferPumpenView,
+      buildStatistikView,
+    };
   }
 })();
