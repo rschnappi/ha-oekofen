@@ -1,13 +1,15 @@
 pytest>=7.4
 pytest-asyncio>=0.21
-# aioresponses (0.7.9, latest on PyPI as of this writing, declared support
-# up to aiohttp<4.0) is in practice still incompatible with aiohttp>=3.10's
-# ClientResponse signature change - confirmed by actually running the suite
-# against aiohttp 3.13/3.14 (TypeError: ClientResponse.__init__() missing
-# stream_writer). Pinned below 3.10 until aioresponses catches up.
-# Lower bound raised to 3.9.5 to exclude aiohttp CVEs fixed in that range
-# (CVE-2024-23334 directory traversal, CVE-2024-30251 DoS) - this is a
-# dev/test-only dependency, never installed on an end user's HA instance.
-aiohttp>=3.9.5,<3.10
-aioresponses>=0.7.4
+# No standalone aiohttp/aioresponses pins here on purpose: aioresponses
+# patches aiohttp's ClientResponse internals directly and is broken as of
+# aiohttp>=3.10 (confirmed: TypeError: ClientResponse.__init__() missing
+# 'stream_writer'), which previously forced an aiohttp<3.10 cap that fought
+# with homeassistant's own exact aiohttp pin and blocked using any
+# non-vulnerable homeassistant release. test_pellematic_api.py now drives
+# PellematicAPI's real aiohttp.ClientSession against a real local
+# aiohttp.web server (aiohttp.test_utils.TestServer) instead, so it only
+# depends on aiohttp's public web/client APIs and floats freely with
+# whatever aiohttp version homeassistant (or a bare `pip install aiohttp`)
+# resolves.
+aiohttp
 async-timeout>=4.0
