@@ -31,8 +31,8 @@ from homeassistant.components.persistent_notification import (
     async_create as async_create_notification,
 )
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
-    SensorEntity,
     SensorStateClass,
 )
 from homeassistant.const import EntityCategory, UnitOfTime
@@ -93,8 +93,14 @@ def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAUL
     return default
 
 
-class OekofenGluehstabZuendzeit(CoordinatorEntity, SensorEntity):
-    """Duration of the boiler's last "Zuendung" (ignition) Kesselstatus phase."""
+class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
+    """Duration of the boiler's last "Zuendung" (ignition) Kesselstatus phase.
+
+    Restores its value across HA restarts (RestoreSensor) - it's only
+    updated once per completed ignition, which can be hours or days apart,
+    so without restoring it the sensor would drop to "unknown" on every
+    restart until the next ignition happens to complete.
+    """
 
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -114,6 +120,12 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, SensorEntity):
         }
         self._zuendung_since: Optional[datetime] = None
         self._last_is_zuendung: Optional[bool] = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_data = await self.async_get_last_sensor_data()
+        if last_data is not None and last_data.native_value is not None:
+            self._attr_native_value = last_data.native_value
 
     def _handle_coordinator_update(self) -> None:
         point = self.coordinator.data.get(KESSELSTATUS_PARAMETER)
