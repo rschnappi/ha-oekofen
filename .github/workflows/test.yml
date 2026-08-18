@@ -13,8 +13,8 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          # homeassistant>=2024.4 requires Python 3.12+.
-          python-version: "3.12"
+          # homeassistant 2026.8.2 requires Python 3.14+.
+          python-version: "3.14"
 
       - name: Install test dependencies
         run: pip install -r requirements-test-ha.txt
