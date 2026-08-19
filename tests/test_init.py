@@ -10,12 +10,14 @@ transient failure can't wedge the config entry into a permanent
 SETUP_ERROR. test_platforms_forwarded_before_first_coordinator_refresh
 below is a direct regression test for that ordering.
 """
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from custom_components.oekofen import (
     DOMAIN,
+    _async_register_frontend_resources,
     async_reload_entry,
     async_setup_entry,
     async_unload_entry,
@@ -121,6 +123,41 @@ async def test_platforms_forwarded_before_first_coordinator_refresh(mocks):
 
     assert result is True
     assert order == ["forward", "refresh"]
+
+
+async def test_concurrent_frontend_registration_second_caller_waits_for_first():
+    """Two ÖkOfen config entries set up concurrently both call
+    _async_register_frontend_resources as their first step. The second
+    caller must not return until the first has actually finished
+    registering - otherwise it (and whatever set up right after it) could
+    proceed while the JS resource still isn't really registered yet,
+    reopening the "Timeout waiting for strategy element" race in miniature."""
+    hass = MagicMock()
+    hass.data = {}
+    started = asyncio.Event()
+    release = asyncio.Event()
+    order = []
+
+    async def slow_register(*args, **kwargs):
+        started.set()
+        await release.wait()
+        order.append("registered")
+
+    hass.http.async_register_static_paths = slow_register
+
+    with patch("custom_components.oekofen.add_extra_js_url"):
+        task1 = asyncio.create_task(_async_register_frontend_resources(hass))
+        await started.wait()
+
+        task2 = asyncio.create_task(_async_register_frontend_resources(hass))
+        await asyncio.sleep(0)
+        assert not task2.done()  # second caller is waiting, not racing past
+
+        release.set()
+        await task1
+        await task2
+
+    assert order == ["registered"]
 
 
 async def test_first_refresh_uses_async_refresh_not_config_entry_first_refresh(mocks):
