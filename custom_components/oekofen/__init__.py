@@ -1,4 +1,5 @@
 """The ÖkOfen Pellematic integration."""
+import json
 import logging
 from pathlib import Path
 
@@ -19,6 +20,10 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "oekofen"
 STRATEGY_URL_PATH = "/oekofen_static/oekofen-strategy.js"
 _FRONTEND_KEY = "_frontend_registered"
+
+# Read once at import time (module import already runs off the event loop),
+# not inside the async setup below, to avoid HA's blocking-call detector.
+_MANIFEST_VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
 PLATFORMS = [
     Platform.SENSOR,
     Platform.NUMBER,
@@ -85,7 +90,10 @@ async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
         # Older HA doesn't have StaticPathConfig/async_register_static_paths yet.
         hass.http.register_static_path(STRATEGY_URL_PATH, js_path, cache_headers=False)
 
-    add_extra_js_url(hass, STRATEGY_URL_PATH)
+    # Cache-bust with the integration version, so browsers fetch the new JS
+    # after an update instead of serving a stale cached copy of the module
+    # under the same URL until the user manually clears their cache.
+    add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={_MANIFEST_VERSION}")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
