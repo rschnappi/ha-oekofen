@@ -77,8 +77,134 @@ def _register_fault_relay_watcher(hass: HomeAssistant, coordinator: OekofenCoord
 
 # Sensor definitions based on config.min.js JavaScript from ÖkOfen device
 # Organized by device menu categories: Allgemein, Pellematic, Heizkreis, Warmwasser, Zubringerpumpe
+#
+# The Pellematic/Heizkreis/Warmwasser sections below used to hardcode index 0
+# (FA[0]/hk[0]/ww[0]) - every other platform (climate.py, number.py,
+# select.py, switch.py, time.py, datetime.py) already builds its entities
+# per discovered circuit (see discovery.py), but this file never consulted
+# `circuits` at all, so a second heating/hot-water circuit or Pellematic
+# unit silently got no sensors at all. build_sensor_definitions(circuits)
+# below scales those three sections to however many of each the device
+# actually has. The first (idx==0) instance of each keeps its original,
+# un-suffixed key/name so existing single-circuit installs keep their
+# entity_ids/history unchanged; additional instances get a numbered
+# key/name matching the idx+1 convention already used elsewhere.
 
-SENSOR_DEFINITIONS = {
+_PELLEMATIC_TEMPLATES = [
+    {"key": "pellematic_mode", "name": "Pellematic Operating Mode", "param": "betriebsart_fa", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:cog", "category": "Betriebsart"},
+    {"key": "boiler_status", "name": "Boiler Status", "param": "L_kesselstatus", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:fire", "category": "Pellematic"},
+    {"key": "boiler_temperature", "name": "Boiler Temperature", "param": "L_kesseltemperatur", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:thermometer-high", "category": "Pellematic"},
+    {"key": "boiler_target_temperature", "name": "Boiler Target Temperature", "param": "L_kesseltemperatur_soll_anzeige", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:thermometer-high", "category": "Pellematic"},
+    {"key": "exhaust_temperature", "name": "Exhaust Temperature", "param": "L_abgastemperatur", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:thermometer-chevron-up", "category": "Pellematic"},
+    {"key": "firebox_temperature", "name": "Firebox Temperature", "param": "L_feuerraumtemperatur", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:fire", "category": "Pellematic"},
+    {"key": "firebox_target_temperature", "name": "Firebox Target Temperature", "param": "L_feuerraumtemperatur_soll", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:fire", "category": "Pellematic"},
+    {"key": "feed_runtime", "name": "Feed Runtime", "param": "L_einschublaufzeit", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "s", "icon": "mdi:timer", "category": "Pellematic"},
+    {"key": "feed_pause", "name": "Feed Pause", "param": "L_pausenzeit", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "s", "icon": "mdi:timer-pause", "category": "Pellematic"},
+    {"key": "fan_speed", "name": "Fan Speed", "param": "L_luefterdrehzahl", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "%", "icon": "mdi:fan", "category": "Pellematic"},
+    {"key": "exhaust_fan_speed", "name": "Exhaust Fan Speed", "param": "L_saugzugdrehzahl", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "%", "icon": "mdi:fan", "category": "Pellematic"},
+    {"key": "underpressure", "name": "Underpressure", "param": "L_unterdruck", "device_class": SensorDeviceClass.PRESSURE, "state_class": SensorStateClass.MEASUREMENT, "unit": "Pa", "icon": "mdi:gauge", "category": "Pellematic"},
+    {"key": "circulation_pump_speed", "name": "Circulation Pump Speed", "param": "L_drehzahl_uw_ist", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "%", "icon": "mdi:pump", "category": "Pellematic"},
+    {"key": "burner_contact", "name": "Burner Contact", "param": "L_br1", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:fire-circle", "category": "Pellematic"},
+    {"key": "hopper_sensor", "name": "Hopper Sensor", "param": "L_kap_sensor_raumentnahme", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:clipboard-check", "category": "Pellematic"},
+    {"key": "intermediate_tank_sensor", "name": "Intermediate Tank Sensor", "param": "L_kap_sensor_zwischenbehaelter", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:clipboard-check", "category": "Pellematic"},
+    {"key": "fire_damper", "name": "Fire Damper", "param": "L_bsk_status", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:valve", "category": "Pellematic"},
+    {"key": "fill_level_current", "name": "Pellet Fill Level", "param": "L_fuellstand_aktuell", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "kg", "icon": "mdi:gauge", "category": "Pellematic"},
+    {"key": "intermediate_tank_fill_level", "name": "Intermediate Tank Fill Level", "param": "L_zwischenbehaelter_aktuell", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "kg", "icon": "mdi:gauge", "category": "Pellematic"},
+    {"key": "pellets_fill_percent", "name": "Pellets Fill Percentage", "param": "L_pelletsfuellstand", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "%", "icon": "mdi:gauge", "category": "Pellematic"},
+    {"key": "ash_removal_speed", "name": "Ash Removal Speed", "param": "L_drehzahl_ascheschnecke_ist", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "%", "icon": "mdi:delete-sweep", "category": "Pellematic"},
+    {"key": "burner_starts", "name": "Burner Starts", "param": "L_brennerstarts", "device_class": None, "state_class": SensorStateClass.TOTAL_INCREASING, "unit": None, "icon": "mdi:counter", "category": "Pellematic", "entity_category": "diagnostic"},
+    {"key": "burner_runtime", "name": "Burner Runtime", "param": "L_brennerlaufzeit_anzeige", "device_class": None, "state_class": SensorStateClass.TOTAL_INCREASING, "unit": "h", "icon": "mdi:clock-time-eight", "category": "Pellematic", "entity_category": "diagnostic"},
+    {"key": "average_runtime", "name": "Average Runtime", "param": "L_mittlere_laufzeit", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "h", "icon": "mdi:clock-outline", "category": "Pellematic", "entity_category": "diagnostic"},
+    {"key": "standby_time", "name": "Standby Time", "param": "L_sillstandszeit", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "h", "icon": "mdi:clock-outline", "category": "Pellematic", "entity_category": "diagnostic"},
+    {"key": "ignition_count", "name": "Ignition Count", "param": "L_anzahl_zuendung", "device_class": None, "state_class": SensorStateClass.TOTAL_INCREASING, "unit": None, "icon": "mdi:counter", "category": "Pellematic", "entity_category": "diagnostic"},
+    {"key": "suction_interval", "name": "Suction Interval", "param": "L_saugintervall", "device_class": None, "state_class": SensorStateClass.MEASUREMENT, "unit": "s", "icon": "mdi:timer", "category": "Pellematic"},
+    {"key": "motor_suction_turbine", "name": "Suction Turbine", "param": "ausgang_motor[0]", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:fan", "category": "Pellematic"},
+    {"key": "motor_igniter", "name": "Igniter", "param": "ausgang_motor[1]", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:electric-switch", "category": "Pellematic"},
+    {"key": "motor_cleaning", "name": "Cleaning Motor", "param": "ausgang_motor[5]", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:broom", "category": "Pellematic"},
+    {"key": "motor_hopper_auger", "name": "Hopper Auger", "param": "ausgang_motor[8]", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:screw-machine-round-top", "category": "Pellematic"},
+    {"key": "motor_feed_auger", "name": "Feed Auger", "param": "ausgang_motor[11]", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:screw-machine-round-top", "category": "Pellematic"},
+    {"key": "motor_ash_removal", "name": "Ash Removal Motor", "param": "ausgang_motor[2]", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:delete-sweep", "category": "Pellematic"},
+    {"key": "magnet_valve", "name": "Magnet Valve", "param": "ausgang_motor[4]", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:valve", "category": "Pellematic"},
+    {"key": "fault_relay", "name": "Fault Relay", "param": "ausgang_stoermelderelais", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:alert-circle", "category": "Pellematic", "entity_category": "diagnostic"},
+]
+
+_HEIZKREIS_TEMPLATES = [
+    {"key": "flow_temperature", "name": "Flow Temperature", "param": "vorlauftemp_ist", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:thermometer-lines", "category": "Heizkreis"},
+    {"key": "flow_target_temperature", "name": "Flow Target Temperature", "param": "vorlauftemp_soll", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:thermometer-lines", "category": "Heizkreis"},
+    {"key": "room_temperature", "name": "Room Temperature", "param": "raumtemp_ist", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:home-thermometer", "category": "Heizkreis"},
+    {"key": "room_target_temperature", "name": "Room Target Temperature", "param": "raumtemp_soll", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:home-thermometer", "category": "Heizkreis"},
+    {"key": "pump", "name": "Pump", "param": "pumpe", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:pump", "category": "Heizkreis"},
+]
+
+_WARMWASSER_TEMPLATES = [
+    {"key": "temperature", "name": "Hot Water Temperature", "name_suffix": "Temperature", "param": "einschaltfuehler_ist", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:water-thermometer", "category": "Warmwasser"},
+    {"key": "target_temperature", "name": "Hot Water Target Temperature", "name_suffix": "Target Temperature", "param": "temp_soll", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:water-thermometer", "category": "Warmwasser"},
+    {"key": "off_temperature", "name": "Hot Water Off Temperature", "name_suffix": "Off Temperature", "param": "ausschaltfuehler_ist", "device_class": SensorDeviceClass.TEMPERATURE, "state_class": SensorStateClass.MEASUREMENT, "unit": UnitOfTemperature.CELSIUS, "icon": "mdi:water-thermometer", "category": "Warmwasser"},
+    {"key": "pump", "name": "Hot Water Pump", "name_suffix": "Pump", "param": "pumpe", "device_class": None, "state_class": None, "unit": None, "icon": "mdi:pump", "category": "Warmwasser"},
+]
+
+
+def _circuit_sensor_defs(
+    templates: list,
+    circuit_idx: int,
+    base_parameter: str,
+    key_fmt: str,
+    name_fmt: str,
+    key_bare_for_first: bool,
+    name_bare_for_first: bool,
+) -> Dict[str, Dict[str, Any]]:
+    """One circuit index's worth of sensor definitions from a template list.
+
+    key_fmt/name_fmt build a numbered key/name (n=circuit_idx+1, matching
+    the idx+1 convention already used by climate.py/number.py/select.py).
+    key_bare_for_first/name_bare_for_first control whether idx==0 instead
+    keeps the template's own bare key/name - needed because the three
+    sections being merged here disagree on whether their *original*,
+    already-shipped idx==0 key/name had a "1"/index in it at all (Pellematic:
+    neither did; Heizkreis: both did; Warmwasser: only the key did) - so
+    single-circuit installs keep the exact entity_id/name they already have.
+    """
+    defs: Dict[str, Dict[str, Any]] = {}
+    n = circuit_idx + 1
+    for tpl in templates:
+        config = {k: v for k, v in tpl.items() if k not in ("key", "name", "name_suffix", "param")}
+        config["parameter"] = f"{base_parameter}.{tpl['param']}"
+        key = tpl["key"] if (circuit_idx == 0 and key_bare_for_first) else key_fmt.format(n=n, key=tpl["key"])
+        if circuit_idx == 0 and name_bare_for_first:
+            config["name"] = tpl["name"]
+        else:
+            config["name"] = name_fmt.format(n=n, name=tpl.get("name_suffix", tpl["name"]))
+        defs[key] = config
+    return defs
+
+
+def build_sensor_definitions(circuits: Dict[str, list]) -> Dict[str, Dict[str, Any]]:
+    """Build the full sensor-definitions dict, scaled to the circuits this
+    device actually has (see discovery.py) instead of hardcoding index 0."""
+    defs: Dict[str, Dict[str, Any]] = dict(_STATIC_SENSOR_DEFINITIONS)
+
+    for idx in circuits.get("pellematic", [0]):
+        defs.update(_circuit_sensor_defs(
+            _PELLEMATIC_TEMPLATES, idx, f"CAPPL:FA[{idx}]",
+            key_fmt="pe{n}_{key}", name_fmt="Pellematic {n} {name}",
+            key_bare_for_first=True, name_bare_for_first=True,
+        ))
+    for idx in circuits.get("hk", [0]):
+        defs.update(_circuit_sensor_defs(
+            _HEIZKREIS_TEMPLATES, idx, f"CAPPL:LOCAL.L_hk[{idx}]",
+            key_fmt="hk{n}_{key}", name_fmt="HK{n} {name}",
+            key_bare_for_first=False, name_bare_for_first=False,
+        ))
+    for idx in circuits.get("ww", [0]):
+        defs.update(_circuit_sensor_defs(
+            _WARMWASSER_TEMPLATES, idx, f"CAPPL:LOCAL.L_ww[{idx}]",
+            key_fmt="ww{n}_{key}", name_fmt="Hot Water {n} {name}",
+            key_bare_for_first=False, name_bare_for_first=True,
+        ))
+    return defs
+
+
+_STATIC_SENSOR_DEFINITIONS = {
     # ========== BETRIEBSART (Operating Mode) ==========
     "system_mode": {
         "name": "System Operating Mode",
@@ -89,16 +215,7 @@ SENSOR_DEFINITIONS = {
         "icon": "mdi:cog",
         "category": "Betriebsart",
     },
-    "pellematic_mode": {
-        "name": "Pellematic Operating Mode",
-        "parameter": "CAPPL:FA[0].betriebsart_fa",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:cog",
-        "category": "Betriebsart",
-    },
-    
+
     # ========== ALLGEMEIN (General) ==========
     "outside_temperature": {
         "name": "Outside Temperature",
@@ -138,419 +255,6 @@ SENSOR_DEFINITIONS = {
         "icon": "mdi:remote-desktop",
         "category": "Allgemein",
         "entity_category": "diagnostic",
-    },
-
-    # ========== PELLEMATIC (Boiler) ==========
-    "boiler_status": {
-        "name": "Boiler Status",
-        "parameter": "CAPPL:FA[0].L_kesselstatus",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:fire",
-        "category": "Pellematic",
-    },
-    "boiler_temperature": {
-        "name": "Boiler Temperature",
-        "parameter": "CAPPL:FA[0].L_kesseltemperatur",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:thermometer-high",
-        "category": "Pellematic",
-    },
-    "boiler_target_temperature": {
-        "name": "Boiler Target Temperature",
-        "parameter": "CAPPL:FA[0].L_kesseltemperatur_soll_anzeige",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:thermometer-high",
-        "category": "Pellematic",
-    },
-    "exhaust_temperature": {
-        "name": "Exhaust Temperature",
-        "parameter": "CAPPL:FA[0].L_abgastemperatur",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:thermometer-chevron-up",
-        "category": "Pellematic",
-    },
-    "firebox_temperature": {
-        "name": "Firebox Temperature",
-        "parameter": "CAPPL:FA[0].L_feuerraumtemperatur",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:fire",
-        "category": "Pellematic",
-    },
-    "firebox_target_temperature": {
-        "name": "Firebox Target Temperature",
-        "parameter": "CAPPL:FA[0].L_feuerraumtemperatur_soll",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:fire",
-        "category": "Pellematic",
-    },
-    
-    # Pellet Feed System
-    "feed_runtime": {
-        "name": "Feed Runtime",
-        "parameter": "CAPPL:FA[0].L_einschublaufzeit",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "s",
-        "icon": "mdi:timer",
-        "category": "Pellematic",
-    },
-    "feed_pause": {
-        "name": "Feed Pause",
-        "parameter": "CAPPL:FA[0].L_pausenzeit",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "s",
-        "icon": "mdi:timer-pause",
-        "category": "Pellematic",
-    },
-    
-    # Fan and Suction System
-    "fan_speed": {
-        "name": "Fan Speed",
-        "parameter": "CAPPL:FA[0].L_luefterdrehzahl",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "%",
-        "icon": "mdi:fan",
-        "category": "Pellematic",
-    },
-    "exhaust_fan_speed": {
-        "name": "Exhaust Fan Speed",
-        "parameter": "CAPPL:FA[0].L_saugzugdrehzahl",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "%",
-        "icon": "mdi:fan",
-        "category": "Pellematic",
-    },
-    "underpressure": {
-        "name": "Underpressure",
-        "parameter": "CAPPL:FA[0].L_unterdruck",
-        "device_class": SensorDeviceClass.PRESSURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "Pa",
-        "icon": "mdi:gauge",
-        "category": "Pellematic",
-    },
-    "circulation_pump_speed": {
-        "name": "Circulation Pump Speed",
-        "parameter": "CAPPL:FA[0].L_drehzahl_uw_ist",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "%",
-        "icon": "mdi:pump",
-        "category": "Pellematic",
-    },
-    
-    # Status Sensors
-    "burner_contact": {
-        "name": "Burner Contact",
-        "parameter": "CAPPL:FA[0].L_br1",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:fire-circle",
-        "category": "Pellematic",
-    },
-    "hopper_sensor": {
-        "name": "Hopper Sensor",
-        "parameter": "CAPPL:FA[0].L_kap_sensor_raumentnahme",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:clipboard-check",
-        "category": "Pellematic",
-    },
-    "intermediate_tank_sensor": {
-        "name": "Intermediate Tank Sensor",
-        "parameter": "CAPPL:FA[0].L_kap_sensor_zwischenbehaelter",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:clipboard-check",
-        "category": "Pellematic",
-    },
-    "fire_damper": {
-        "name": "Fire Damper",
-        "parameter": "CAPPL:FA[0].L_bsk_status",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:valve",
-        "category": "Pellematic",
-    },
-    
-    # Pellet Fill Level
-    "fill_level_current": {
-        "name": "Pellet Fill Level",
-        "parameter": "CAPPL:FA[0].L_fuellstand_aktuell",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "kg",
-        "icon": "mdi:gauge",
-        "category": "Pellematic",
-    },
-    "intermediate_tank_fill_level": {
-        "name": "Intermediate Tank Fill Level",
-        "parameter": "CAPPL:FA[0].L_zwischenbehaelter_aktuell",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "kg",
-        "icon": "mdi:gauge",
-        "category": "Pellematic",
-    },
-    "pellets_fill_percent": {
-        "name": "Pellets Fill Percentage",
-        "parameter": "CAPPL:FA[0].L_pelletsfuellstand",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "%",
-        "icon": "mdi:gauge",
-        "category": "Pellematic",
-    },
-    
-    # Ash Removal
-    "ash_removal_speed": {
-        "name": "Ash Removal Speed",
-        "parameter": "CAPPL:FA[0].L_drehzahl_ascheschnecke_ist",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "%",
-        "icon": "mdi:delete-sweep",
-        "category": "Pellematic",
-    },
-    
-    # Statistics
-    "burner_starts": {
-        "name": "Burner Starts",
-        "parameter": "CAPPL:FA[0].L_brennerstarts",
-        "device_class": None,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": None,
-        "icon": "mdi:counter",
-        "category": "Pellematic",
-        "entity_category": "diagnostic",
-    },
-    "burner_runtime": {
-        "name": "Burner Runtime",
-        "parameter": "CAPPL:FA[0].L_brennerlaufzeit_anzeige",
-        "device_class": None,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": "h",
-        "icon": "mdi:clock-time-eight",
-        "category": "Pellematic",
-        "entity_category": "diagnostic",
-    },
-    "average_runtime": {
-        "name": "Average Runtime",
-        "parameter": "CAPPL:FA[0].L_mittlere_laufzeit",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "h",
-        "icon": "mdi:clock-outline",
-        "category": "Pellematic",
-        "entity_category": "diagnostic",
-    },
-    "standby_time": {
-        "name": "Standby Time",
-        "parameter": "CAPPL:FA[0].L_sillstandszeit",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "h",
-        "icon": "mdi:clock-outline",
-        "category": "Pellematic",
-        "entity_category": "diagnostic",
-    },
-    "ignition_count": {
-        "name": "Ignition Count",
-        "parameter": "CAPPL:FA[0].L_anzahl_zuendung",
-        "device_class": None,
-        "state_class": SensorStateClass.TOTAL_INCREASING,
-        "unit": None,
-        "icon": "mdi:counter",
-        "category": "Pellematic",
-        "entity_category": "diagnostic",
-    },
-    "suction_interval": {
-        "name": "Suction Interval",
-        "parameter": "CAPPL:FA[0].L_saugintervall",
-        "device_class": None,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": "s",
-        "icon": "mdi:timer",
-        "category": "Pellematic",
-    },
-    
-    # Motor Status
-    "motor_suction_turbine": {
-        "name": "Suction Turbine",
-        "parameter": "CAPPL:FA[0].ausgang_motor[0]",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:fan",
-        "category": "Pellematic",
-    },
-    "motor_igniter": {
-        "name": "Igniter",
-        "parameter": "CAPPL:FA[0].ausgang_motor[1]",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:electric-switch",
-        "category": "Pellematic",
-    },
-    "motor_cleaning": {
-        "name": "Cleaning Motor",
-        "parameter": "CAPPL:FA[0].ausgang_motor[5]",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:broom",
-        "category": "Pellematic",
-    },
-    "motor_hopper_auger": {
-        "name": "Hopper Auger",
-        "parameter": "CAPPL:FA[0].ausgang_motor[8]",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:screw-machine-round-top",
-        "category": "Pellematic",
-    },
-    "motor_feed_auger": {
-        "name": "Feed Auger",
-        "parameter": "CAPPL:FA[0].ausgang_motor[11]",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:screw-machine-round-top",
-        "category": "Pellematic",
-    },
-    "motor_ash_removal": {
-        "name": "Ash Removal Motor",
-        "parameter": "CAPPL:FA[0].ausgang_motor[2]",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:delete-sweep",
-        "category": "Pellematic",
-    },
-    "magnet_valve": {
-        "name": "Magnet Valve",
-        "parameter": "CAPPL:FA[0].ausgang_motor[4]",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:valve",
-        "category": "Pellematic",
-    },
-    "fault_relay": {
-        "name": "Fault Relay",
-        "parameter": "CAPPL:FA[0].ausgang_stoermelderelais",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:alert-circle",
-        "category": "Pellematic",
-        "entity_category": "diagnostic",
-    },
-    
-    # ========== HEIZKREIS (Heating Circuit) ==========
-    "hk1_flow_temperature": {
-        "name": "HK1 Flow Temperature",
-        "parameter": "CAPPL:LOCAL.L_hk[0].vorlauftemp_ist",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:thermometer-lines",
-        "category": "Heizkreis",
-    },
-    "hk1_flow_target_temperature": {
-        "name": "HK1 Flow Target Temperature",
-        "parameter": "CAPPL:LOCAL.L_hk[0].vorlauftemp_soll",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:thermometer-lines",
-        "category": "Heizkreis",
-    },
-    "hk1_room_temperature": {
-        "name": "HK1 Room Temperature",
-        "parameter": "CAPPL:LOCAL.L_hk[0].raumtemp_ist",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:home-thermometer",
-        "category": "Heizkreis",
-    },
-    "hk1_room_target_temperature": {
-        "name": "HK1 Room Target Temperature",
-        "parameter": "CAPPL:LOCAL.L_hk[0].raumtemp_soll",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:home-thermometer",
-        "category": "Heizkreis",
-    },
-    "hk1_pump": {
-        "name": "HK1 Pump",
-        "parameter": "CAPPL:LOCAL.L_hk[0].pumpe",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:pump",
-        "category": "Heizkreis",
-    },
-
-    # ========== WARMWASSER (Hot Water) ==========
-    "ww1_temperature": {
-        "name": "Hot Water Temperature",
-        "parameter": "CAPPL:LOCAL.L_ww[0].einschaltfuehler_ist",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:water-thermometer",
-        "category": "Warmwasser",
-    },
-    "ww1_target_temperature": {
-        "name": "Hot Water Target Temperature",
-        "parameter": "CAPPL:LOCAL.L_ww[0].temp_soll",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:water-thermometer",
-        "category": "Warmwasser",
-    },
-    "ww1_off_temperature": {
-        "name": "Hot Water Off Temperature",
-        "parameter": "CAPPL:LOCAL.L_ww[0].ausschaltfuehler_ist",
-        "device_class": SensorDeviceClass.TEMPERATURE,
-        "state_class": SensorStateClass.MEASUREMENT,
-        "unit": UnitOfTemperature.CELSIUS,
-        "icon": "mdi:water-thermometer",
-        "category": "Warmwasser",
-    },
-    "ww1_pump": {
-        "name": "Hot Water Pump",
-        "parameter": "CAPPL:LOCAL.L_ww[0].pumpe",
-        "device_class": None,
-        "state_class": None,
-        "unit": None,
-        "icon": "mdi:pump",
-        "category": "Warmwasser",
     },
 
     # ========== ZUBRINGERPUMPE (Supply Pump) ==========
@@ -622,13 +326,15 @@ async def async_setup_entry(
 
     entry_data = hass.data["oekofen"][config_entry.entry_id]
     coordinator: OekofenCoordinator = entry_data["coordinator"]
-    coordinator.add_parameters(config["parameter"] for config in SENSOR_DEFINITIONS.values())
+    circuits = entry_data["circuits"]
+    sensor_definitions = build_sensor_definitions(circuits)
+    coordinator.add_parameters(config["parameter"] for config in sensor_definitions.values())
 
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
 
     # Create sensor entities
     entities = []
-    for sensor_key, sensor_config in SENSOR_DEFINITIONS.items():
+    for sensor_key, sensor_config in sensor_definitions.items():
         entities.append(
             OekofenSensor(
                 coordinator=coordinator,

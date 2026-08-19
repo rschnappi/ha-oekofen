@@ -11,6 +11,7 @@ from custom_components.oekofen.sensor import (
     OekofenSensor,
     _is_relay_active,
     _register_fault_relay_watcher,
+    build_sensor_definitions,
 )
 
 from .conftest import FakeCoordinator, make_point
@@ -113,6 +114,61 @@ def test_watcher_does_not_repeat_notification_while_still_active():
         coord.fire()
 
         assert mock_pn.async_create.call_count == 1
+
+
+# --- build_sensor_definitions (Pellematic/Heizkreis/Warmwasser scaling) ---
+
+def test_single_circuit_reproduces_original_bare_keys_and_names():
+    """Default single-circuit install (the only shape live-tested so far)
+    must come out byte-for-byte identical to the pre-refactor hardcoded
+    dict, so existing entity_ids/history are untouched."""
+    defs = build_sensor_definitions({"hk": [0], "ww": [0], "pellematic": [0]})
+
+    assert len(defs) == 55
+    assert defs["boiler_status"]["parameter"] == "CAPPL:FA[0].L_kesselstatus"
+    assert defs["boiler_status"]["name"] == "Boiler Status"
+    assert defs["pellematic_mode"]["parameter"] == "CAPPL:FA[0].betriebsart_fa"
+    assert defs["hk1_flow_temperature"]["parameter"] == "CAPPL:LOCAL.L_hk[0].vorlauftemp_ist"
+    assert defs["hk1_flow_temperature"]["name"] == "HK1 Flow Temperature"
+    assert defs["ww1_temperature"]["parameter"] == "CAPPL:LOCAL.L_ww[0].einschaltfuehler_ist"
+    assert defs["ww1_temperature"]["name"] == "Hot Water Temperature"
+    # Non-circuit sensors always present regardless of circuits.
+    assert defs["system_mode"]["parameter"] == "CAPPL:LOCAL.anlage_betriebsart"
+    assert defs["supply_pump"]["parameter"] == "CAPPL:LOCAL.L_zubrp[0].pumpe"
+    assert defs["buffer_pump"]["parameter"] == "CAPPL:LOCAL.L_pu[0].pumpe"
+
+
+def test_second_pellematic_unit_gets_numbered_key_and_parameter():
+    defs = build_sensor_definitions({"hk": [0], "ww": [0], "pellematic": [0, 1]})
+    assert "boiler_status" in defs  # first unit keeps its bare key
+    assert defs["pe2_boiler_status"]["parameter"] == "CAPPL:FA[1].L_kesselstatus"
+    assert defs["pe2_boiler_status"]["name"] == "Pellematic 2 Boiler Status"
+
+
+def test_third_heating_circuit_uses_its_real_device_index_not_list_position():
+    """circuits['hk'] holds actual device slot indices, not a dense
+    0..n range - hk[2] present without hk[1] must produce hk3_*, matching
+    the idx+1 convention climate.py/number.py/select.py already use."""
+    defs = build_sensor_definitions({"hk": [0, 2], "ww": [0], "pellematic": [0]})
+    assert defs["hk3_flow_temperature"]["parameter"] == "CAPPL:LOCAL.L_hk[2].vorlauftemp_ist"
+    assert defs["hk3_flow_temperature"]["name"] == "HK3 Flow Temperature"
+
+
+def test_second_hot_water_circuit_gets_numbered_key_and_name():
+    defs = build_sensor_definitions({"hk": [0], "ww": [0, 1], "pellematic": [0]})
+    assert defs["ww1_temperature"]["name"] == "Hot Water Temperature"  # unchanged
+    assert defs["ww2_temperature"]["parameter"] == "CAPPL:LOCAL.L_ww[1].einschaltfuehler_ist"
+    assert defs["ww2_temperature"]["name"] == "Hot Water 2 Temperature"
+    assert defs["ww2_pump"]["name"] == "Hot Water 2 Pump"
+
+
+def test_missing_circuit_type_falls_back_to_index_zero():
+    """entry_data['circuits'] always comes from discovery.py, but the
+    builder shouldn't hard-crash if a key happens to be absent."""
+    defs = build_sensor_definitions({})
+    assert "boiler_status" in defs
+    assert "hk1_flow_temperature" in defs
+    assert "ww1_temperature" in defs
 
 
 # --- native_value ---------------------------------------------------------
