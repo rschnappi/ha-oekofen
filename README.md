@@ -306,6 +306,19 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.4
+
+- 🐛 **Fix: "Timeout waiting for strategy element ... to be registered"
+  direkt nach einem HA-Neustart.** War keine Cache-Sache, wie zuerst
+  angenommen: `_async_register_frontend_resources()` (registriert die
+  Dashboard-Strategy-JS) lief bisher *nach* der Geräte-Authentifizierung
+  und Kreis-Discovery - beides echte Netzwerk-Roundtrips zum Kessel, die
+  ein paar Sekunden dauern können. Lädt ein Client (z.B. ein Tablet, das
+  sofort nach Erreichbarkeit von HA/Frontend neu verbindet) das Dashboard
+  in diesem Fenster, bekommt er die Seite noch ohne das Script-Tag
+  ausgeliefert. Die Registrierung läuft jetzt als Erstes in
+  `async_setup_entry`, vor jeglichem Netzwerkzugriff.
+
 ### Version 0.8.3
 
 - 🎛️ **Preset-Buttons direkt auf der Thermostat-Karte**: Bei Heizkreis/
@@ -549,5 +562,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.3
+**Version**: 0.8.4
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

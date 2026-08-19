@@ -64,13 +64,25 @@ async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ÖkOfen from a config entry."""
-    
+
+    # Register the dashboard-strategy JS first, before any network I/O to
+    # the device below (authenticate/discover circuits) - those can easily
+    # take a few seconds, and a dashboard loading a "strategy:
+    # custom:oekofen-strategy" view in that window (e.g. a kiosk tablet
+    # reconnecting as soon as HA/frontend is reachable, which can happen
+    # before this integration's own setup finishes) gets HA's frontend
+    # index.html rendered without our script tag yet - "Timeout waiting for
+    # strategy element ... to be registered", unrelated to browser caching.
+    # This call has no dependency on api/circuits/coordinator, so it's safe
+    # to run first.
+    await _async_register_frontend_resources(hass)
+
     # Extract configuration
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
     language = entry.data.get("language", "de")
-    
+
     # Ensure URL format
     if not host.startswith(('http://', 'https://')):
         host = f"http://{host}"
@@ -106,8 +118,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "circuits": circuits,
         "coordinator": coordinator,
     }
-
-    await _async_register_frontend_resources(hass)
 
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

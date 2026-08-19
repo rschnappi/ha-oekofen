@@ -70,6 +70,34 @@ def mocks():
         }
 
 
+async def test_frontend_resources_registered_before_any_device_network_io(mocks):
+    """A dashboard loading "strategy: custom:oekofen-strategy" needs the JS
+    resource registered before it renders - e.g. a kiosk tablet reconnecting
+    as soon as HA/frontend is reachable, which can happen before this
+    integration finishes its own setup. authenticate()/async_discover_
+    circuits() are real network round-trips to the device that can easily
+    take a few seconds, so the frontend registration (a purely local,
+    hass-only operation) must happen before them, not after - see
+    __init__.py's comment on the "Timeout waiting for strategy element ...
+    to be registered" error this caused."""
+    order = []
+
+    async def _authenticate():
+        order.append("authenticate")
+        return True
+
+    def _add_extra_js_url(*args, **kwargs):
+        order.append("register_frontend")
+
+    hass = _make_hass()
+    mocks["api"].authenticate.side_effect = _authenticate
+
+    with patch("custom_components.oekofen.add_extra_js_url", side_effect=_add_extra_js_url):
+        await async_setup_entry(hass, _make_entry())
+
+    assert order == ["register_frontend", "authenticate"]
+
+
 async def test_platforms_forwarded_before_first_coordinator_refresh(mocks):
     """Regression test for the SETUP_ERROR bug: entities are added inside
     each platform's async_setup_entry, so all platforms must finish
