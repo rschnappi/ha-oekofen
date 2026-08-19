@@ -306,6 +306,14 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.6
+
+- ℹ️ **Versionsnummer im Dashboard**: Neuer diagnostischer Sensor
+  "Integration Version" (liest `manifest.json` beim Start, kein
+  Geräte-Parameter) - die Dashboard-Strategy zeigt ihn jetzt als kleine
+  Notiz ganz oben in der Übersicht ("ÖkOfen Integration vX.Y.Z"), damit
+  auf einen Blick klar ist, welche Version tatsächlich läuft.
+
 ### Version 0.8.5
 
 - 🎛️ **hvac_mode-Buttons direkt auf der Thermostat-Karte**: 0.8.3 hatte nur
@@ -571,5 +579,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.5
+**Version**: 0.8.6
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

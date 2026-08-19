@@ -7,6 +7,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 from custom_components.oekofen.sensor import (
     FAULT_RELAY_PARAMETER,
+    OekofenIntegrationVersion,
     OekofenSensor,
     _is_relay_active,
     _register_fault_relay_watcher,
@@ -91,6 +92,13 @@ def test_watcher_dismisses_notification_when_relay_clears():
         coord.fire()
 
         mock_pn.async_dismiss.assert_called_once_with(hass, "oekofen_stoermelderelais_entry1")
+
+
+def test_integration_version_reads_manifest_and_is_diagnostic():
+    entity = OekofenIntegrationVersion("e1", "Test")
+    assert entity.native_value  # non-empty version string from manifest.json
+    assert entity._attr_entity_category == EntityCategory.DIAGNOSTIC
+    assert entity.unique_id == "e1_integration_version"
 
 
 def test_watcher_does_not_repeat_notification_while_still_active():

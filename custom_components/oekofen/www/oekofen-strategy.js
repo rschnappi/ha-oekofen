@@ -370,6 +370,21 @@
    */
   function buildOverviewViews(circuits, leftoverEntityIds, hass) {
     const cards = [];
+
+    // Surface the installed integration version at the very top of the
+    // dashboard instead of leaving it buried in the generic Diagnose list -
+    // lets you confirm at a glance which version is actually running
+    // (relevant after an update, given the strategy JS itself is served
+    // from a cache-busted-by-version URL - see __init__.py).
+    const versionId = leftoverEntityIds.find((id) => /integration_version$/.test(objectIdOf(id)));
+    if (versionId) {
+      leftoverEntityIds = leftoverEntityIds.filter((id) => id !== versionId);
+      const state = (hass.states || {})[versionId];
+      if (state) {
+        cards.push(markdown(`*ÖkOfen Integration v${state.state}*`));
+      }
+    }
+
     const modeCards = [];
     for (const circuit of circuits) {
       const modeSelect = circuitEntity(circuit, "select", "betriebsart");
