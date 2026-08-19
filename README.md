@@ -357,6 +357,26 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.1
+
+- 🐛 **Hotfix**: Der geteilte `OekofenCoordinator` aus 0.8.0 ließ `coordinator.data`
+  bis zum ersten Refresh `None` statt `{}` - da Plattformen ihre Entities schon
+  vorher anlegen, crashten alle Verfügbarkeits-Checks beim Start und jede
+  Entity blieb dauerhaft "nicht verfügbar". Behoben durch `self.data = {}` direkt
+  nach der Coordinator-Initialisierung.
+- 📊 **Feuerraumtemperatur eigenes Chart**: Lief bisher zusammen mit allen
+  anderen Temperatur-Sensoren im "Temperaturverlauf"-Chart der Statistik-Ansicht -
+  da Feuerraumtemperatur (Ist + Soll) 0-1000°C erreicht, während alles andere
+  (Kessel/Vorlauf/Raum/Außentemp etc.) unter ~100°C bleibt, quetschte das die
+  restlichen Kurven zu einer unlesbaren Linie am unteren Rand. Jetzt eigenes
+  "Feuerraumtemperatur"-Chart (Ist + Soll zusammen, weiterhin vergleichbar).
+- 🔄 **Cache-Busting für die Dashboard-Strategy-JS**: Wurde bisher unter einer
+  fixen URL ausgeliefert, wodurch Browser nach einem Integrations-Update
+  teils noch die alte, zwischengespeicherte Version geladen haben (sichtbar
+  z.B. als "Timeout waiting for strategy element ... to be registered"). Die
+  JS-Datei wird jetzt mit der Versionsnummer als Query-Parameter ausgeliefert,
+  sodass jeder Versions-Bump automatisch einen frischen Download erzwingt.
+
 ### Version 0.8.0
 
 - ⚡ **Coordinator-Konsolidierung**: Alle Plattformen (select/number/
@@ -555,5 +575,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.0
+**Version**: 0.8.1
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
