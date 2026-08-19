@@ -449,6 +449,13 @@
     const tempIds = sensorIds
       .filter((id) => states[id].attributes.device_class === "temperature")
       .sort();
+    // Feuerraumtemperatur (combustion-chamber probe) and its setpoint run
+    // 0-1000 degC, an order of magnitude above every other temperature
+    // sensor (Kessel/Vorlauf/Raum/Aussentemp etc. all stay under ~100 degC)
+    // - sharing one chart's y-axis flattens those into an unreadable
+    // straight line. Split it into its own chart instead.
+    const feuerraumIds = tempIds.filter((id) => /feuerraumtemperatur/.test(objectIdOf(id)));
+    const normalTempIds = tempIds.filter((id) => !feuerraumIds.includes(id));
     const counterIds = sensorIds.filter((id) => states[id].attributes.state_class === "total_increasing");
     const counterCountIds = counterIds.filter((id) => !states[id].attributes.unit_of_measurement).sort();
     const counterTimeIds = counterIds
@@ -470,18 +477,36 @@
       cards.push(stack([markdown("## ⏱️ Betriebsstunden & Zyklen"), grid(statsTileIds.map((id) => tile(id)), 2)]));
     }
 
-    if (tempIds.length) {
+    if (normalTempIds.length) {
       cards.push({
         type: "history-graph",
         title: "Temperaturverlauf",
         hours_to_show: 24,
         refresh_interval: 60,
-        entities: tempIds.map((id) => ({ entity: id })),
+        entities: normalTempIds.map((id) => ({ entity: id })),
       });
       cards.push({
         type: "statistics-graph",
         title: "Temperaturverlauf (Langzeit, 90 Tage)",
-        entities: tempIds.map((id) => ({ entity: id })),
+        entities: normalTempIds.map((id) => ({ entity: id })),
+        days_to_show: 90,
+        period: "day",
+        stat_types: ["mean", "min", "max"],
+      });
+    }
+
+    if (feuerraumIds.length) {
+      cards.push({
+        type: "history-graph",
+        title: "Feuerraumtemperatur",
+        hours_to_show: 24,
+        refresh_interval: 60,
+        entities: feuerraumIds.map((id) => ({ entity: id })),
+      });
+      cards.push({
+        type: "statistics-graph",
+        title: "Feuerraumtemperatur (Langzeit, 90 Tage)",
+        entities: feuerraumIds.map((id) => ({ entity: id })),
         days_to_show: 90,
         period: "day",
         stat_types: ["mean", "min", "max"],
