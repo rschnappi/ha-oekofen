@@ -306,6 +306,21 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.7
+
+- 🐛 **"Puffer & Pumpen"-Dashboard-Ansicht war toter Code**: Der Matching-
+  Regex in der Strategy-JS erwartete deutsche Namensfragmente
+  (`puffer…`/`pumpe…`/`tpm…`/`tpo…`), während `sensor.py`'s
+  Puffer-/Pumpen-Sensoren tatsächlich englisch benannt sind
+  (`buffer_top_temperature`, `buffer_pump`, `supply_pump`,
+  `circulation_pump_speed`). Der Regex matchte dadurch **nie** - diese
+  Sensoren landeten auf jeder Installation im generischen
+  Diagnose-Karton statt in einer eigenen Ansicht. Regex/Labels an die
+  tatsächlichen Sensor-Keys angepasst.
+- 🔋 Zwei rein lokale, nie pollende Entities (`Integration Version`,
+  `Glühstab Warnschwelle`) markieren sich jetzt korrekt als
+  `should_poll = False`.
+
 ### Version 0.8.6
 
 - ℹ️ **Versionsnummer im Dashboard**: Neuer diagnostischer Sensor
@@ -579,5 +594,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.6
+**Version**: 0.8.7
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
