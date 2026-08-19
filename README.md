@@ -306,6 +306,15 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.3
+
+- 🎛️ **Preset-Buttons direkt auf der Thermostat-Karte**: Bei Heizkreis/
+  Warmwasser war die Preset-Auswahl (Absenken bzw. Boost) bisher nur über
+  den Mehr-Info-Dialog der Entity erreichbar. Die Dashboard-Strategy
+  fügt der `thermostat`-Karte jetzt ein `climate-preset-modes`-Feature
+  hinzu, das die Preset-Buttons direkt anzeigt. Pellematic bleibt
+  unverändert (hat keine Presets).
+
 ### Version 0.8.2
 
 - 💥 **Breaking: die 5 `oekofen.*`-Services entfernt** (`set_parameter`,
@@ -540,5 +549,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.2
+**Version**: 0.8.3
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
