@@ -248,6 +248,16 @@ class TestSetData:
         sent = [r for r in device.requests if r["path"] == "/"][-1]
         assert sent["json"] == {"CAPPL:LOCAL.hk[0].raumtemp_heizen": 200}
 
+    async def test_divisor_rounds_rather_than_truncates(self, api, device):
+        """2.3 * 100 == 229.99999999999997 in IEEE 754 float - int() would
+        truncate that to 229, one raw unit low. Must round instead."""
+        api._authenticated = True
+        device.queue_set(status=200, payload=[{"status": "OK", "value": "230"}])
+        await api.set_data("CAPPL:X", 2.3, divisor=100)
+
+        sent = [r for r in device.requests if r["path"] == "/"][-1]
+        assert sent["json"] == {"CAPPL:X": 230}
+
     async def test_html_response_triggers_reauth_and_retry(self, api, device):
         api._authenticated = True
         device.queue_set(status=200, body="<html>login</html>")

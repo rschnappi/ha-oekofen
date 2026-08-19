@@ -306,6 +306,14 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.8
+
+- 🐛 **`set_data()` rundete Divisor-Werte nicht, sondern kappte sie**
+  (`int()` statt `round()`): Bei Fließkomma-Werten, die knapp unter eine
+  Ganzzahl fallen (z.B. `2.3 * 100 == 229.99999999999997`), wurde am
+  Gerät ein Rohwert geschrieben, der 1 Einheit zu niedrig war. Divisor=10
+  (bislang einziger Fall in den Tests) trifft das Problem zufällig nicht.
+
 ### Version 0.8.7
 
 - 🐛 **"Puffer & Pumpen"-Dashboard-Ansicht war toter Code**: Der Matching-
@@ -594,5 +602,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.7
+**Version**: 0.8.8
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
