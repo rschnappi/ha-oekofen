@@ -284,10 +284,13 @@ class PellematicAPI:
         session = await self._get_session()
         
         try:
-            # Apply divisor if provided
+            # Apply divisor if provided. round(), not int(): truncating
+            # toward zero silently sends a raw value one unit low whenever
+            # value*divisor lands just under a whole number due to float
+            # imprecision (e.g. 2.3*100 == 229.99999999999997).
             api_value = value
             if divisor and divisor != 1:
-                api_value = int(value * divisor)
+                api_value = round(value * divisor)
                 _LOGGER.debug(f"Applying divisor {divisor}: {value} * {divisor} = {api_value}")
             
             # Prepare request
