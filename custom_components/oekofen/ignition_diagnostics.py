@@ -179,6 +179,7 @@ class OekofenGluehstabWarnschwelle(RestoreNumber):
     _attr_mode = NumberMode.BOX
     _attr_icon = "mdi:alert-outline"
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_should_poll = False
 
     def __init__(self, entry_id: str, device_name: str) -> None:
         self._attr_unique_id = f"{entry_id}_{WARNSCHWELLE_KEY}"

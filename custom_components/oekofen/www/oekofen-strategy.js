@@ -52,20 +52,23 @@
     zirkulationspumpe: { label: "Zirkulationspumpe", icon: "mdi:pump", emoji: "\u{1F504}", hasZeitprogramm: true, hasClimate: false },
   };
 
-  // Buffer-tank probes and circulation pumps are top-level sensors with no
-  // "<type>_<index>_" structure (e.g. "tpm_ist", "pumpe_2"), so they never
-  // match a circuit and would otherwise get dumped into the Übersicht's
-  // generic sensor list. Pull them into their own view instead - matched by
-  // name since, unlike device_class/state_class, nothing in the entity
-  // registry distinguishes "this sensor is about the buffer tank".
-  const PUFFER_PUMPEN_RE = /^(puffer\w*|pumpe(_\d+)?|einschaltfuhler\w*|ausschaltfuhler\w*|tpm\w*|tpo\w*)$/;
+  // Buffer-tank probes and the supply/circulation pump are top-level
+  // sensors with no "<type>_<index>_" structure, so they never match a
+  // circuit and would otherwise get dumped into the Übersicht's generic
+  // sensor list. Pull them into their own view instead - matched by name
+  // (against sensor.py's actual SENSOR_DEFINITIONS keys: buffer_*,
+  // supply_pump, circulation_pump_speed) since, unlike device_class/
+  // state_class, nothing in the entity registry distinguishes "this
+  // sensor is about the buffer tank".
+  const PUFFER_PUMPEN_RE = /^(buffer_\w*|supply_pump|circulation_pump_speed)$/;
   const PUFFER_PUMPEN_LABELS = {
-    tpm_ist: "Puffer Mitte Ist",
-    tpm_soll: "Puffer Mitte Soll",
-    tpo_ist: "Puffer Oben Ist",
-    tpo_soll: "Puffer Oben Soll",
-    einschaltfuhler_ist: "Einschaltfühler",
-    ausschaltfuhler_ist: "Ausschaltfühler",
+    buffer_top_temperature: "Puffer Oben Ist",
+    buffer_top_target_temperature: "Puffer Oben Soll",
+    buffer_bottom_temperature: "Puffer Unten Ist",
+    buffer_bottom_target_temperature: "Puffer Unten Soll",
+    buffer_pump: "Pufferpumpe",
+    supply_pump: "Zubringerpumpe",
+    circulation_pump_speed: "Zirkulationspumpe Drehzahl",
   };
   const DURATION_UNITS = new Set(["h", "min", "s", "zs"]);
 
@@ -444,9 +447,6 @@
 
   function pufferPumpenLabel(suffix) {
     if (PUFFER_PUMPEN_LABELS[suffix]) return PUFFER_PUMPEN_LABELS[suffix];
-    const m = suffix.match(/^pumpe_(\d+)$/);
-    if (m) return `Pumpe ${m[1]}`;
-    if (suffix === "pumpe") return "Pumpe";
     return suffix.replace(/_/g, " ");
   }
 
@@ -454,7 +454,7 @@
   function buildPufferPumpenView(entityIds, prefix) {
     const cards = entityIds.map((entityId) => {
       const suffix = objectIdOf(entityId).slice(prefix.length);
-      const icon = suffix.startsWith("pumpe") ? "mdi:pump" : "mdi:thermometer";
+      const icon = suffix.includes("pump") ? "mdi:pump" : "mdi:thermometer";
       return tile(entityId, pufferPumpenLabel(suffix), icon);
     });
     return {
