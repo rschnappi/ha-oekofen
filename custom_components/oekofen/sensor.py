@@ -16,13 +16,11 @@ from homeassistant.const import (
 from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.config_entries import ConfigEntry
 
 from .coordinator import OekofenCoordinator
 from .ignition_diagnostics import OekofenGluehstabZuendzeit
-from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
 

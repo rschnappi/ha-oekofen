@@ -6,7 +6,7 @@ global device settings (not per heating/hot-water circuit), so unlike
 number.py/select.py/switch.py there is no per-circuit definitions loop.
 """
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from homeassistant.components.text import TextEntity, TextMode
 from homeassistant.config_entries import ConfigEntry

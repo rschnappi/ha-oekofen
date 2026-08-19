@@ -131,7 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # it during their own async_setup_entry (called via
     # async_forward_entry_setups below), then we trigger a single first
     # refresh once every platform has registered - see coordinator.py.
-    coordinator = OekofenCoordinator(hass, api)
+    coordinator = OekofenCoordinator(hass, api, entry)
 
     # Store API instance
     hass.data.setdefault(DOMAIN, {})
@@ -349,6 +349,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry."""
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
+    """Reload config entry.
+
+    Goes through hass.config_entries.async_reload() rather than calling
+    async_unload_entry/async_setup_entry directly - that's HA's own reload
+    entry point, and it takes the entry's setup lock and handles the
+    SETUP_IN_PROGRESS state transition, so two update-listener firings close
+    together (e.g. a fast double-submit of the options flow) can't race each
+    other the way two bare unload+setup calls could.
+    """
+    await hass.config_entries.async_reload(entry.entry_id)
