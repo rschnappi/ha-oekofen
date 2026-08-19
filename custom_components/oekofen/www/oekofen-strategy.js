@@ -261,14 +261,18 @@
       if (climateEntity) {
         topCards.push(markdown(`## ${meta.emoji} ${title}`));
         const thermostatCard = { type: "thermostat", entity: climateEntity };
-        // hvac_mode (Aus/Auto/Heizen) is already shown directly on the
-        // thermostat card - only preset_mode (Heizkreis "Absenken",
-        // Warmwasser "Boost") was hidden behind the more-info dialog.
-        // Pellematic has no presets (see mode_map in climate.py), so this
-        // feature would have nothing to show there.
+        // Neither hvac_mode (Aus/Auto/Heizen) nor preset_mode (Heizkreis
+        // "Absenken", Warmwasser "Boost") are shown directly on a plain
+        // thermostat card - both were only reachable through the more-info
+        // dialog. Card features add them as inline buttons instead. Every
+        // circuit with a climate entity has hvac_modes; only Heizkreis/
+        // Warmwasser have presets (Pellematic has none, see mode_map in
+        // climate.py).
+        const features = [{ type: "climate-hvac-modes" }];
         if (circuit.type === "heizkreis" || circuit.type === "warmwasser") {
-          thermostatCard.features = [{ type: "climate-preset-modes" }];
+          features.push({ type: "climate-preset-modes" });
         }
+        thermostatCard.features = features;
         topCards.push(thermostatCard);
         usedForSettings.push(climateEntity);
       }

@@ -306,6 +306,15 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.5
+
+- 🎛️ **hvac_mode-Buttons direkt auf der Thermostat-Karte**: 0.8.3 hatte nur
+  die Preset-Auswahl (Absenken/Boost) direkt sichtbar gemacht - die
+  Modus-Auswahl (Aus/Auto/Heizen) war weiterhin nur über den Mehr-Info-
+  Dialog erreichbar, bei Pellematic (ohne Presets) fehlte dadurch jede
+  direkte Bedienmöglichkeit auf der Karte. Zusätzliches
+  `climate-hvac-modes`-Feature ergänzt, für alle drei Kreistypen.
+
 ### Version 0.8.4
 
 - 🐛 **Fix: "Timeout waiting for strategy element ... to be registered"
@@ -562,5 +571,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.4
+**Version**: 0.8.5
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
