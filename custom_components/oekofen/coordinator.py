@@ -13,6 +13,7 @@ import logging
 from datetime import timedelta
 from typing import Any, Dict, Iterable, Set
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -36,12 +37,13 @@ class OekofenCoordinator(DataUpdateCoordinator):
     forwarded - see async_setup_entry in __init__.py.
     """
 
-    def __init__(self, hass: HomeAssistant, api: PellematicAPI) -> None:
+    def __init__(self, hass: HomeAssistant, api: PellematicAPI, config_entry: ConfigEntry) -> None:
         self.api = api
         self.parameters: Set[str] = set()
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=config_entry,
             name="ÖkOfen Pellematic",
             update_interval=SCAN_INTERVAL,
         )
