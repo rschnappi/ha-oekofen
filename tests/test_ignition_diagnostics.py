@@ -1,5 +1,8 @@
 """Tests for the Zündzeit (ignition-duration) diagnostics (ignition_diagnostics.py)."""
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.oekofen.ignition_diagnostics import (
     DEFAULT_WARNSCHWELLE_SECONDS,
@@ -8,6 +11,7 @@ from custom_components.oekofen.ignition_diagnostics import (
     OekofenGluehstabZuendzeit,
     _is_zuendung,
     _resolve_label,
+    _ZuendzeitExtraStoredData,
     get_warnschwelle,
 )
 
@@ -74,6 +78,56 @@ def _make_entity(coordinator):
     entity.hass = MagicMock()
     entity.async_write_ha_state = MagicMock()
     return entity
+
+
+def test_extra_stored_data_round_trip_preserves_in_progress_ignition():
+    since = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
+    data = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=since, last_is_zuendung=True)
+
+    restored = _ZuendzeitExtraStoredData.from_dict(data.as_dict())
+
+    assert restored.native_value == 408
+    assert restored.zuendung_since == since
+    assert restored.last_is_zuendung is True
+
+
+def test_extra_stored_data_round_trip_handles_no_in_progress_ignition():
+    data = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=None, last_is_zuendung=False)
+    restored = _ZuendzeitExtraStoredData.from_dict(data.as_dict())
+    assert restored.zuendung_since is None
+    assert restored.last_is_zuendung is False
+
+
+def test_extra_restore_state_data_reflects_current_tracking_state():
+    entity = _make_entity(FakeCoordinator({}))
+    since = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
+    entity._zuendung_since = since
+    entity._last_is_zuendung = True
+    entity._attr_native_value = None
+
+    stored = entity.extra_restore_state_data
+
+    assert stored.zuendung_since == since
+    assert stored.last_is_zuendung is True
+
+
+async def test_async_added_to_hass_restores_in_progress_ignition_across_restart():
+    """A restart landing mid-ignition must not lose track of when it
+    started - otherwise that cycle's duration is silently never recorded
+    once it later completes."""
+    entity = _make_entity(FakeCoordinator({}))
+    since = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
+    stored = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=since, last_is_zuendung=True)
+
+    with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
+        entity.async_get_last_extra_data = AsyncMock(
+            return_value=MagicMock(as_dict=MagicMock(return_value=stored.as_dict()))
+        )
+        await entity.async_added_to_hass()
+
+    assert entity._attr_native_value == 408
+    assert entity._zuendung_since == since
+    assert entity._last_is_zuendung is True
 
 
 def test_no_value_yet_leaves_state_unset():
