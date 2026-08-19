@@ -306,6 +306,21 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.0
+
+- 🐛 **`sensor.py` erzeugte nie mehr als 1 Sensor-Satz pro Pellematic-/
+  Heizkreis-/Warmwasser-Einheit**, unabhängig davon, wie viele die
+  Discovery tatsächlich gefunden hat - im Gegensatz zu allen anderen
+  Plattformen (`climate.py`, `number.py`, `select.py`, `switch.py`,
+  `time.py`, `datetime.py`), die schon länger dynamisch pro entdecktem
+  Kreis bauen. Ein zweiter Heizkreis/Warmwasser-Kreis/Pellematic-Kessel
+  bekam dadurch stillschweigend keinerlei Sensoren (Kesselstatus,
+  Vorlauftemperatur, Lüfterdrehzahl, Pelletsfüllstand, Motorstatus, …).
+  `sensor.py` baut die Pellematic-/Heizkreis-/Warmwasser-Abschnitte jetzt
+  ebenfalls dynamisch pro entdecktem Kreis. Bei nur je einem Kreis pro Typ
+  (der bisher einzige getestete Fall) ändert sich nichts - exakt dieselben
+  Entity-IDs/Namen wie bisher.
+
 ### Version 0.8.9
 
 - 🐛 **Glühstab-Zündzeit verlor eine laufende Zündung bei einem Neustart
@@ -613,5 +628,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.9
+**Version**: 0.9.0
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
