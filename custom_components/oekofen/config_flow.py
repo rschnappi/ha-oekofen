@@ -69,6 +69,50 @@ class OekofenConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
+    async def async_step_reauth(self, entry_data) -> FlowResult:
+        """Entry point HA calls after __init__.py raises ConfigEntryAuthFailed
+        (initial auth failure, or a later poll discovering the technician
+        password changed) - shows a "reauthenticate" repair in Settings
+        instead of leaving entities silently unavailable with no
+        explanation. entry_data is unused here (current values are read
+        from the reauth entry itself in the confirm step below) but is
+        part of HA's step_reauth signature.
+        """
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None) -> FlowResult:
+        """Ask for new credentials for the entry currently being reauthenticated."""
+        errors = {}
+        reauth_entry = self._get_reauth_entry()
+        current = reauth_entry.data
+
+        if user_input is not None:
+            try:
+                await self._test_connection(
+                    user_input[CONF_HOST],
+                    user_input[CONF_USERNAME],
+                    user_input[CONF_PASSWORD],
+                )
+                return self.async_update_reload_and_abort(
+                    reauth_entry,
+                    data={**current, **user_input},
+                )
+            except ConnectionError:
+                errors["base"] = "cannot_connect"
+            except AuthenticationError:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected error during reauthentication")
+                errors["base"] = "unknown"
+
+        schema = vol.Schema({
+            vol.Required(CONF_HOST, default=current.get(CONF_HOST)): cv.string,
+            vol.Required(CONF_USERNAME, default=current.get(CONF_USERNAME)): cv.string,
+            vol.Required(CONF_PASSWORD): cv.string,
+            vol.Required("language", default=current.get("language", "de")): vol.In(["de", "en", "fr", "it"]),
+        })
+        return self.async_show_form(step_id="reauth_confirm", data_schema=schema, errors=errors)
+
     @staticmethod
     async def _test_connection(host: str, username: str, password: str) -> bool:
         """Test the connection to the ÖkOfen device."""

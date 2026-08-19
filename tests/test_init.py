@@ -14,6 +14,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from custom_components.oekofen import (
     DOMAIN,
@@ -173,13 +174,17 @@ async def test_first_refresh_uses_async_refresh_not_config_entry_first_refresh(m
     mocks["coordinator"].async_config_entry_first_refresh.assert_not_called()
 
 
-async def test_setup_returns_false_and_stops_early_on_auth_failure(mocks):
+async def test_setup_raises_auth_failed_on_bad_credentials(mocks):
+    """A clean "wrong credentials" response must surface as
+    ConfigEntryAuthFailed, not a bare False return - that's what makes HA
+    offer a reauthenticate repair in Settings instead of leaving the entry
+    failed with no indication of why or how to fix it."""
     mocks["api"].authenticate.return_value = False
     hass = _make_hass()
 
-    result = await async_setup_entry(hass, _make_entry())
+    with pytest.raises(ConfigEntryAuthFailed):
+        await async_setup_entry(hass, _make_entry())
 
-    assert result is False
     hass.config_entries.async_forward_entry_setups.assert_not_called()
     mocks["coordinator"].async_refresh.assert_not_called()
 
