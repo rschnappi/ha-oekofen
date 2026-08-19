@@ -45,6 +45,15 @@ class OekofenCoordinator(DataUpdateCoordinator):
             name="ÖkOfen Pellematic",
             update_interval=SCAN_INTERVAL,
         )
+        # DataUpdateCoordinator.data defaults to None until the first
+        # refresh completes. Platforms add their entities (via
+        # async_add_entities in their own async_setup_entry) before
+        # __init__.py triggers that first refresh - see module docstring -
+        # and adding an entity immediately evaluates its available/
+        # native_value properties, which do `parameter in self.data`.
+        # Against None that's a crash instead of a correct, transient
+        # "unavailable"; against {} it's just False until real data lands.
+        self.data: Dict[str, Any] = {}
 
     def add_parameters(self, parameters: Iterable[str]) -> None:
         """Register parameters a platform needs polled."""
