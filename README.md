@@ -324,6 +324,12 @@ pytest tests/ -v
 
 `test_pellematic_api.py` mockt die Geräte-API nicht mit `aioresponses` (das an aiohttps internen `ClientResponse`-Konstruktor gekoppelt und bei neueren aiohttp-Versionen kaputt ist), sondern startet einen echten lokalen `aiohttp.web`-Server (`aiohttp.test_utils.TestServer`) und lässt `PellematicAPI` real dagegen sprechen - dadurch bleiben die Tests unabhängig von der jeweils installierten aiohttp-Version lauffähig.
 
+`tests/test_readme_version.py` hält `manifest.json` (einzige Quelle der
+Wahrheit für die Versionsnummer) und README.md automatisch synchron: CI
+schlägt fehl, falls der Footer ("**Version**: ...") oder die passende
+"### Version X.Y.Z"-Changelog-Überschrift nach einem Versions-Bump in
+`manifest.json` vergessen werden.
+
 ### Getestete Konfiguration
 - **ÖkOfen Pellematic 2012** - Vollständig getestet, inkl. Firmware-Varianten ("klassisch" vs. "Smart" bei Leistungsstufe/Regeltemperatur)
 - **Home Assistant** - CI und Live-Betrieb laufen gegen aktuelle Releases; die Integration ist zusätzlich defensiv gegen HA-API-Änderungen aus früheren Versionen abgesichert (z.B. `OptionsFlow.config_entry`-Property-Wechsel, `StaticPathConfig` vs. älteres `register_static_path`)
