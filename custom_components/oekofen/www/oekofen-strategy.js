@@ -260,7 +260,16 @@
       const climateEntity = circuitEntity(circuit, "climate", "");
       if (climateEntity) {
         topCards.push(markdown(`## ${meta.emoji} ${title}`));
-        topCards.push({ type: "thermostat", entity: climateEntity });
+        const thermostatCard = { type: "thermostat", entity: climateEntity };
+        // hvac_mode (Aus/Auto/Heizen) is already shown directly on the
+        // thermostat card - only preset_mode (Heizkreis "Absenken",
+        // Warmwasser "Boost") was hidden behind the more-info dialog.
+        // Pellematic has no presets (see mode_map in climate.py), so this
+        // feature would have nothing to show there.
+        if (circuit.type === "heizkreis" || circuit.type === "warmwasser") {
+          thermostatCard.features = [{ type: "climate-preset-modes" }];
+        }
+        topCards.push(thermostatCard);
         usedForSettings.push(climateEntity);
       }
     }
