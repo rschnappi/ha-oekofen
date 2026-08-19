@@ -23,6 +23,7 @@ not ae), which has already caused mismatched dashboard entity_ids once
 this session.
 """
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -38,7 +39,9 @@ from homeassistant.components.sensor import (
 from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.restore_state import ExtraStoredData
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .entity_helpers import build_device_info
 
@@ -95,6 +98,33 @@ def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAUL
     return default
 
 
+@dataclass
+class _ZuendzeitExtraStoredData(ExtraStoredData):
+    """Adds the in-progress-ignition tracking state to what RestoreSensor
+    normally persists (just native_value) - see the class docstring below
+    on why that in-progress state needs restoring too."""
+
+    native_value: Optional[int]
+    zuendung_since: Optional[datetime]
+    last_is_zuendung: Optional[bool]
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "native_value": self.native_value,
+            "zuendung_since": self.zuendung_since.isoformat() if self.zuendung_since else None,
+            "last_is_zuendung": self.last_is_zuendung,
+        }
+
+    @classmethod
+    def from_dict(cls, restored: Dict[str, Any]) -> "_ZuendzeitExtraStoredData":
+        zuendung_since = restored.get("zuendung_since")
+        return cls(
+            native_value=restored.get("native_value"),
+            zuendung_since=dt_util.parse_datetime(zuendung_since) if zuendung_since else None,
+            last_is_zuendung=restored.get("last_is_zuendung"),
+        )
+
+
 class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
     """Duration of the boiler's last "Zuendung" (ignition) Kesselstatus phase.
 
@@ -102,6 +132,14 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
     updated once per completed ignition, which can be hours or days apart,
     so without restoring it the sensor would drop to "unknown" on every
     restart until the next ignition happens to complete.
+
+    Also restores _zuendung_since/_last_is_zuendung (via a custom
+    extra_restore_state_data, not RestoreSensor's default which only covers
+    native_value): without that, a restart landing while the boiler is
+    actively mid-ignition loses track of when it started, and that cycle's
+    duration is silently never recorded once it completes - not a crash,
+    just a dropped sample, but exactly the kind of restart-shaped gap this
+    integration has already been bitten by elsewhere.
     """
 
     _attr_device_class = SensorDeviceClass.DURATION
@@ -118,11 +156,24 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
         self._zuendung_since: Optional[datetime] = None
         self._last_is_zuendung: Optional[bool] = None
 
+    @property
+    def extra_restore_state_data(self) -> _ZuendzeitExtraStoredData:
+        return _ZuendzeitExtraStoredData(
+            native_value=self.native_value,
+            zuendung_since=self._zuendung_since,
+            last_is_zuendung=self._last_is_zuendung,
+        )
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        last_data = await self.async_get_last_sensor_data()
-        if last_data is not None and last_data.native_value is not None:
-            self._attr_native_value = last_data.native_value
+        last_extra_data = await self.async_get_last_extra_data()
+        if last_extra_data is None:
+            return
+        restored = _ZuendzeitExtraStoredData.from_dict(last_extra_data.as_dict())
+        if restored.native_value is not None:
+            self._attr_native_value = restored.native_value
+        self._zuendung_since = restored.zuendung_since
+        self._last_is_zuendung = restored.last_is_zuendung
 
     def _handle_coordinator_update(self) -> None:
         point = self.coordinator.data.get(KESSELSTATUS_PARAMETER)

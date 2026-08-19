@@ -306,6 +306,17 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.8.9
+
+- 🐛 **Glühstab-Zündzeit verlor eine laufende Zündung bei einem Neustart
+  mitten im Zündvorgang.** Nur der fertige Wert wurde bisher über HA-
+  Neustarts hinweg gespeichert (RestoreSensor), nicht der interne
+  "seit wann läuft die aktuelle Zündung"-Zeitstempel - ein Neustart genau
+  während einer Zündung verlor diesen Zeitpunkt, wodurch die Dauer dieses
+  Zyklus beim Abschluss nie berechnet oder gegen die Warnschwelle
+  geprüft wurde (kein Crash, nur eine stillschweigend übersprungene
+  Messung). Wird jetzt zusätzlich mitgespeichert und wiederhergestellt.
+
 ### Version 0.8.8
 
 - 🐛 **`set_data()` rundete Divisor-Werte nicht, sondern kappte sie**
@@ -602,5 +613,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.8
+**Version**: 0.8.9
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
