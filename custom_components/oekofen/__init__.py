@@ -149,7 +149,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # All platforms have registered their needed parameters into the shared
     # coordinator by now (async_forward_entry_setups awaits every platform's
     # async_setup_entry) - fetch them all in one combined request.
-    await coordinator.async_config_entry_first_refresh()
+    #
+    # Deliberately async_refresh(), not async_config_entry_first_refresh():
+    # the latter raises ConfigEntryNotReady on failure, which makes HA retry
+    # this whole async_setup_entry - including the async_forward_entry_setups
+    # above - without unloading the platforms from the failed attempt first,
+    # so EntityComponent rejects the retry ("already been setup") and the
+    # entry lands in a permanent SETUP_ERROR. A transient failure on the very
+    # first request against the device's fairly weak embedded web server
+    # (e.g. right after this device or HA itself has just restarted) would
+    # brick the integration until a manual reload. async_refresh() only logs
+    # and leaves last_update_success False instead - entities already
+    # tolerate that (coordinator.data stays {}, see coordinator.py), showing
+    # unavailable until the coordinator's own next scheduled poll succeeds.
+    await coordinator.async_refresh()
 
     # Register services
     async def handle_set_parameter(call: ServiceCall) -> None:
