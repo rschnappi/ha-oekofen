@@ -1,5 +1,7 @@
 """Sensor platform for ÖkOfen Pellematic integration."""
+import json
 import logging
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 from homeassistant.components.sensor import (
@@ -24,6 +26,12 @@ from .entity_helpers import build_device_info
 from .ignition_diagnostics import OekofenGluehstabZuendzeit
 
 _LOGGER = logging.getLogger(__name__)
+
+# Read once at import time - lets the dashboard-strategy JS surface the
+# installed version directly (via a plain entity, same as every other piece
+# of data it works with) instead of the user having to guess it from
+# browser-cache behavior of the bundled JS, or dig through Settings > Devices.
+_MANIFEST_VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
 
 ENTITY_CATEGORY_MAP = {
     "diagnostic": EntityCategory.DIAGNOSTIC,
@@ -632,10 +640,28 @@ async def async_setup_entry(
         )
 
     entities.append(OekofenGluehstabZuendzeit(coordinator, config_entry.entry_id, device_name))
+    entities.append(OekofenIntegrationVersion(config_entry.entry_id, device_name))
 
     _register_fault_relay_watcher(hass, coordinator, config_entry.entry_id)
 
     async_add_entities(entities)
+
+
+class OekofenIntegrationVersion(SensorEntity):
+    """Static diagnostic sensor exposing the installed integration version.
+
+    Not backed by a coordinator/device parameter - manifest.json's version
+    is read once at import time and never changes without a code update.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:tag-outline"
+
+    def __init__(self, entry_id: str, device_name: str) -> None:
+        self._attr_unique_id = f"{entry_id}_integration_version"
+        self._attr_name = "Integration Version"
+        self._attr_native_value = _MANIFEST_VERSION
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
 
 class OekofenSensor(CoordinatorEntity, SensorEntity):
