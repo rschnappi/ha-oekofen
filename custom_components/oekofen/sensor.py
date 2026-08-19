@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.config_entries import ConfigEntry
 
 from .coordinator import OekofenCoordinator
+from .entity_helpers import build_device_info
 from .ignition_diagnostics import OekofenGluehstabZuendzeit
 
 _LOGGER = logging.getLogger(__name__)
@@ -668,12 +669,7 @@ class OekofenSensor(CoordinatorEntity, SensorEntity):
 
         # Device info - identifiers use the stable config entry id so the
         # device registry entry survives a host/IP change.
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
     @property
     def name(self) -> str:

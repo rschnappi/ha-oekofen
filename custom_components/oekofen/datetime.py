@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import OekofenCoordinator
 from .datetime_common import device_seconds_to_datetime, datetime_to_device_seconds
+from .entity_helpers import build_device_info, parameter_available
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,12 +109,7 @@ class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_name = config["name"]
         self._attr_icon = config.get("icon")
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
     def _data_point(self) -> Optional[Dict[str, Any]]:
         return self.coordinator.data.get(self._read_parameter)
@@ -127,7 +123,7 @@ class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._read_parameter in self.coordinator.data
+        return parameter_available(self.coordinator, self._read_parameter)
 
     async def async_set_value(self, value: datetime) -> None:
         seconds = datetime_to_device_seconds(value)

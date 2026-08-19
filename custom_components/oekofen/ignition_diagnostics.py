@@ -40,6 +40,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .entity_helpers import build_device_info
+
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "oekofen"
@@ -112,12 +114,7 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
         self._entry_id = entry_id
         self._attr_unique_id = f"{entry_id}_{ZUENDZEIT_KEY}"
         self._attr_name = "Glühstab Zündzeit"
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
         self._zuendung_since: Optional[datetime] = None
         self._last_is_zuendung: Optional[bool] = None
 
@@ -186,12 +183,7 @@ class OekofenGluehstabWarnschwelle(RestoreNumber):
     def __init__(self, entry_id: str, device_name: str) -> None:
         self._attr_unique_id = f"{entry_id}_{WARNSCHWELLE_KEY}"
         self._attr_name = "Glühstab Warnschwelle"
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
         self._attr_native_value = DEFAULT_WARNSCHWELLE_SECONDS
 
     async def async_added_to_hass(self) -> None:

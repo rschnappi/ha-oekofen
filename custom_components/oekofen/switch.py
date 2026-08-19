@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import OekofenCoordinator
+from .entity_helpers import build_device_info, parameter_available
 from .pellematic_api import PellematicAPI
 from .schedule_common import build_schedule_slots
 
@@ -102,12 +103,7 @@ class OekofenDayActiveSwitch(CoordinatorEntity, SwitchEntity):
         self._parameter = f"{slot['base']}.block"
         self._attr_unique_id = f"{entry_id}_{slot['key']}_active"
         self._attr_name = f"{slot['label']} Aktiv"
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
     @property
     def is_on(self) -> Optional[bool]:
@@ -121,7 +117,7 @@ class OekofenDayActiveSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+        return parameter_available(self.coordinator, self._parameter)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Activate this weekday (block group 0 - matches how the device UI assigns a fresh day)."""
@@ -152,12 +148,7 @@ class OekofenModeSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_name = config["name"]
         self._attr_icon = config.get("icon")
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
     @property
     def is_on(self) -> Optional[bool]:
@@ -171,7 +162,7 @@ class OekofenModeSwitch(CoordinatorEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+        return parameter_available(self.coordinator, self._parameter)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self.api.set_data(self._parameter, 1)
