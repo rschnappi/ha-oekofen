@@ -1,4 +1,5 @@
 """The ÖkOfen Pellematic integration."""
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -38,28 +39,45 @@ async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
     frontend, so `strategy: {type: custom:oekofen-strategy}` works without the
     user manually adding a Lovelace resource. Idempotent across config
     entries/reloads.
+
+    With two ÖkOfen devices configured, HA sets up both config entries
+    concurrently, and this is the very first thing each one does. A bare
+    "already registered" boolean would let a second, concurrent call return
+    immediately while the first call is still mid-`await` on the actual
+    registration - reopening (in a much narrower window) the same "Timeout
+    waiting for strategy element ... to be registered" race this function was
+    reordered to fix in the first place. An Event lets a concurrent caller
+    wait for registration to actually finish instead of racing past it.
     """
-    if hass.data.setdefault(DOMAIN, {}).get(_FRONTEND_KEY):
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    existing_event = domain_data.get(_FRONTEND_KEY)
+    if existing_event is not None:
+        await existing_event.wait()
         return
-    hass.data[DOMAIN][_FRONTEND_KEY] = True
 
-    js_path = str(Path(__file__).parent / "www" / "oekofen-strategy.js")
+    event = asyncio.Event()
+    domain_data[_FRONTEND_KEY] = event
     try:
-        # HA >= ~2024.7: async, avoids the "blocking call" warning the sync
-        # register_static_path below triggers on newer versions.
-        from homeassistant.components.http import StaticPathConfig
+        js_path = str(Path(__file__).parent / "www" / "oekofen-strategy.js")
+        try:
+            # HA >= ~2024.7: async, avoids the "blocking call" warning the sync
+            # register_static_path below triggers on newer versions.
+            from homeassistant.components.http import StaticPathConfig
 
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(STRATEGY_URL_PATH, js_path, cache_headers=False)]
-        )
-    except ImportError:
-        # Older HA doesn't have StaticPathConfig/async_register_static_paths yet.
-        hass.http.register_static_path(STRATEGY_URL_PATH, js_path, cache_headers=False)
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(STRATEGY_URL_PATH, js_path, cache_headers=False)]
+            )
+        except ImportError:
+            # Older HA doesn't have StaticPathConfig/async_register_static_paths yet.
+            hass.http.register_static_path(STRATEGY_URL_PATH, js_path, cache_headers=False)
 
-    # Cache-bust with the integration version, so browsers fetch the new JS
-    # after an update instead of serving a stale cached copy of the module
-    # under the same URL until the user manually clears their cache.
-    add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={_MANIFEST_VERSION}")
+        # Cache-bust with the integration version, so browsers fetch the new
+        # JS after an update instead of serving a stale cached copy of the
+        # module under the same URL until the user manually clears their
+        # cache.
+        add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={_MANIFEST_VERSION}")
+    finally:
+        event.set()
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
