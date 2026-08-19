@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, Set
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .pellematic_api import PellematicAPI
@@ -65,4 +66,15 @@ class OekofenCoordinator(DataUpdateCoordinator):
         try:
             return await self.api.get_data(list(self.parameters))
         except Exception as err:  # noqa: BLE001
+            # pellematic_api.py doesn't use a distinct exception type for
+            # auth failures (see get_data's own "Authentication
+            # failed"/"Authentication required"/"Re-authentication failed"
+            # raises), so this is the same string match config_flow.py
+            # already uses. Without it, a technician password changed after
+            # setup would fail every poll forever with entities just showing
+            # unavailable - ConfigEntryAuthFailed instead surfaces a
+            # reauthenticate repair in Settings, and DataUpdateCoordinator
+            # itself specifically detects this exception type.
+            if "authenticat" in str(err).lower():
+                raise ConfigEntryAuthFailed(err) from err
             raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}") from err

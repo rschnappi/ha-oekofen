@@ -306,6 +306,17 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.1
+
+- ✅ **Reauth-Flow**: Ändert sich das Techniker-Passwort am Gerät, schlug
+  die Anmeldung bisher stumm dauerhaft fehl - Entities wurden "nicht
+  verfügbar", ohne dass HA irgendeinen Hinweis darauf gab, warum oder wie
+  das zu beheben ist. Sowohl beim initialen Setup als auch bei jedem
+  regulären Poll-Fehlschlag wird ein reiner Authentifizierungsfehler jetzt
+  erkannt und löst eine "Anmeldung erneuern"-Aufforderung in
+  **Einstellungen → Geräte & Dienste** aus, über die neue Zugangsdaten
+  eingegeben werden können, ohne die Integration neu einzurichten.
+
 ### Version 0.9.0
 
 - 🐛 **`sensor.py` erzeugte nie mehr als 1 Sensor-Satz pro Pellematic-/
@@ -628,5 +639,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.0
+**Version**: 0.9.1
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

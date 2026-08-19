@@ -13,6 +13,7 @@ other tests (see FakeCoordinator in conftest.py).
 from unittest.mock import AsyncMock
 
 import pytest
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.oekofen.coordinator import OekofenCoordinator
@@ -53,4 +54,18 @@ async def test_update_data_wraps_errors_in_update_failed():
     coordinator.add_parameters(["a"])
 
     with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_update_data_raises_auth_failed_when_credentials_are_the_problem():
+    """A technician password changed after setup must surface as
+    ConfigEntryAuthFailed (which DataUpdateCoordinator itself specifically
+    detects and turns into a reauthenticate repair), not just another
+    UpdateFailed that leaves entities unavailable with no indication why."""
+    api = AsyncMock()
+    api.get_data.side_effect = Exception("Authentication failed")
+    coordinator = _make_coordinator(api)
+    coordinator.add_parameters(["a"])
+
+    with pytest.raises(ConfigEntryAuthFailed):
         await coordinator._async_update_data()

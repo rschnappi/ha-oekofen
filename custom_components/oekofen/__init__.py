@@ -8,6 +8,7 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from .coordinator import OekofenCoordinator
 from .discovery import async_discover_circuits
@@ -107,15 +108,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Create API instance
     api = PellematicAPI(host, username, password, language)
-    
+
     # Test connection
     try:
-        if not await api.authenticate():
-            _LOGGER.error("Failed to authenticate with ÖkOfen device")
-            return False
+        authenticated = await api.authenticate()
     except Exception as e:
         _LOGGER.error(f"Failed to connect to ÖkOfen device: {e}")
         return False
+
+    if not authenticated:
+        # A clean "wrong credentials" response (as opposed to the network/
+        # connection exceptions caught above) - raise so HA offers a
+        # reauthenticate repair in Settings instead of just failing setup
+        # with no indication of why or how to fix it.
+        raise ConfigEntryAuthFailed("Authentication failed - check username/password")
     
     # Discover which heating circuits, hot-water circuits, circulation
     # pumps and Pellematic units actually exist on this device, so the

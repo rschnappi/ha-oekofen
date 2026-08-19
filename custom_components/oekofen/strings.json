@@ -10,6 +10,16 @@
           "password": "Passwort",
           "language": "Sprache"
         }
+      },
+      "reauth_confirm": {
+        "title": "ÖkOfen Pellematic - Anmeldung erneuern",
+        "description": "Die Anmeldung am ÖkOfen-Gerät ist fehlgeschlagen (z.B. geändertes Techniker-Passwort). Bitte aktuelle Zugangsdaten eingeben.",
+        "data": {
+          "host": "IP-Adresse oder Hostname",
+          "username": "Benutzername",
+          "password": "Passwort",
+          "language": "Sprache"
+        }
       }
     },
     "error": {
