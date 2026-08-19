@@ -121,57 +121,6 @@ Automatisierungen und Skripten nutzbar sind - keine `input_number`/
 versteckt und entsprechend markiert - siehe Abschnitt "⚠️ Installateur-Ebene-Felder"
 weiter unten.
 
-## 🎛️ Services
-
-Die Integration bietet folgende Services zum Steuern des Heizsystems:
-
-⚠️ **Legacy-Hinweis**: `set_system_mode`/`set_heating_mode`/`set_hot_water_mode`/`set_pellematic_mode` steuern dieselben Parameter, die inzwischen über die nativen `select.*`/`climate.*`-Entities (Betriebsart-Dropdown bzw. Thermostat-Karte) komfortabler mit Status-Feedback verfügbar sind. Die Services bleiben aus Kompatibilitätsgründen bestehen, für **neue** Automatisierungen aber bitte die Entities bevorzugen. `oekofen.set_parameter` bleibt weiterhin der generische Weg für alle Parameter, die (noch) keine eigene Entity haben.
-
-### `oekofen.set_system_mode`
-Setzt den Betriebsmodus der Anlage.
-```yaml
-service: oekofen.set_system_mode
-data:
-  mode: auto  # aus, auto, warmwasser
-```
-
-### `oekofen.set_heating_mode`
-Setzt den Betriebsmodus eines Heizkreises.
-```yaml
-service: oekofen.set_heating_mode
-data:
-  circuit: 0  # 0-5
-  mode: auto  # aus, auto, heizen, absenken
-```
-
-### `oekofen.set_hot_water_mode`
-Setzt den Betriebsmodus für Warmwasser.
-```yaml
-service: oekofen.set_hot_water_mode
-data:
-  circuit: 0  # 0-2
-  mode: auto  # aus, auto, ein
-```
-
-### `oekofen.set_pellematic_mode`
-Setzt den Betriebsmodus des Pellematic Kessels.
-```yaml
-service: oekofen.set_pellematic_mode
-data:
-  unit: 0  # 0-3
-  mode: auto  # aus, auto, ein
-```
-
-### `oekofen.set_parameter`
-Setzt einen rohen Parameter-Wert (für Experten).
-```yaml
-service: oekofen.set_parameter
-data:
-  parameter: "CAPPL:LOCAL.hk[0].raumtemp_heizen"
-  value: 20.0
-  divisor: 10  # optional
-```
-
 ## 📱 Dashboard
 
 Zwei Wege zu einem fertigen Dashboard - für die meisten reicht **Option A**.
@@ -356,6 +305,22 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 - `CAPPL:FA[0].L_kesselstatus` - Kesselstatus ✅
 
 ## 📝 Changelog
+
+### Version 0.8.2
+
+- 💥 **Breaking: die 5 `oekofen.*`-Services entfernt** (`set_parameter`,
+  `set_system_mode`, `set_heating_mode`, `set_hot_water_mode`,
+  `set_pellematic_mode`). Die vier Modus-Services waren seit Einführung der
+  `climate.*`/`select.*`-Entities ohnehin nur noch redundante Legacy-Pfade
+  zu denselben Parametern - mit dem Nachteil, dass sie bei **mehreren**
+  ÖkOfen-Geräten in derselben HA-Instanz beim zweiten Geräte-Setup
+  unbemerkt die Services des ersten überschrieben hätten (Services sind
+  domain-, nicht entry-weit registriert), Befehle also am falschen Kessel
+  ankommen konnten. Bestehende Automationen, die einen dieser Services
+  aufrufen, bitte auf die entsprechenden Entity-Services umstellen:
+  `climate.set_hvac_mode`/`climate.set_preset_mode` (Betriebsart) bzw.
+  `select.select_option` bzw. direktes Setzen der `number.*`-Entity für
+  Parameter ohne eigene Entity.
 
 ### Version 0.8.1
 
@@ -575,5 +540,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.8.1
+**Version**: 0.8.2
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
