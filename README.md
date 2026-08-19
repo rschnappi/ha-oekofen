@@ -359,6 +359,19 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ### Version 0.8.0
 
+- ⚡ **Coordinator-Konsolidierung**: Alle Plattformen (select/number/
+  climate/sensor/switch/time/datetime/text) hatten bisher je einen
+  eigenen `DataUpdateCoordinator`, der unabhängig pollte - bis zu ~11
+  separate HTTP-Requests pro Zyklus gegen den eher schwachbrüstigen
+  Embedded-Webserver am Kessel, teils mit überlappenden Parametern
+  (z.B. `anlage_betriebsart` sowohl von select.py als auch climate.py
+  einzeln abgefragt). Neuer gemeinsamer `OekofenCoordinator`
+  (`coordinator.py`): jede Plattform registriert beim eigenen Setup nur
+  noch ihre benötigten Parameter (`add_parameters()`), `__init__.py`
+  löst danach einen einzigen ersten Refresh für den ganzen Config-Entry
+  aus. Dadurch ein kombinierter Request statt bis zu elf - und da das
+  jetzt günstiger ist, Poll-Intervall von 30-60s (je nach Plattform) auf
+  einheitlich 15s gesenkt.
 - 🧩 **Dashboard-Strategy** (`custom:oekofen-strategy`,
   `custom_components/oekofen/www/oekofen-strategy.js`): generiert das
   komplette Dashboard zur Laufzeit direkt aus den vorhandenen Entities -

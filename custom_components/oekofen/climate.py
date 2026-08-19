@@ -25,7 +25,6 @@ diverges from what the number/sensor entities already show - it's just a
 different, standard-climate-domain view onto the same data.
 """
 import logging
-from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from homeassistant.components.climate import (
@@ -39,11 +38,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, CONF_HOST, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .betriebsart import (
     ANLAGE_MODE_PARAMETER,
@@ -52,11 +47,10 @@ from .betriebsart import (
     betriebsart_parameter,
     betriebsart_slot_parameters,
 )
+from .coordinator import OekofenCoordinator
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
-
-SCAN_INTERVAL = timedelta(seconds=30)
 
 # Custom preset label matching the device's own wording exactly, instead of
 # HA's generic built-in PRESET_ECO ("Eco") which would be a translation
@@ -153,6 +147,7 @@ async def async_setup_entry(
     entry_data = hass.data["oekofen"][config_entry.entry_id]
     api: PellematicAPI = entry_data["api"]
     circuits = entry_data["circuits"]
+    coordinator = entry_data["coordinator"]
     definitions = build_climate_definitions(circuits)
 
     if not definitions:
@@ -169,9 +164,7 @@ async def async_setup_entry(
             parameters.append(config["boost_parameter"])
     if ANLAGE_MODE_PARAMETER not in parameters:
         parameters.append(ANLAGE_MODE_PARAMETER)
-
-    coordinator = OekofenClimateCoordinator(hass, api, parameters)
-    await coordinator.async_config_entry_first_refresh()
+    coordinator.add_parameters(parameters)
 
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
     entities = [
@@ -179,26 +172,6 @@ async def async_setup_entry(
         for key, config in definitions.items()
     ]
     async_add_entities(entities)
-
-
-class OekofenClimateCoordinator(DataUpdateCoordinator):
-    """Coordinator polling mode/target/current temperature for the climate entities."""
-
-    def __init__(self, hass: HomeAssistant, api: PellematicAPI, parameters: List[str]) -> None:
-        self.api = api
-        self._parameters = parameters
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="ÖkOfen Climate",
-            update_interval=SCAN_INTERVAL,
-        )
-
-    async def _async_update_data(self) -> Dict[str, Any]:
-        try:
-            return await self.api.get_data(self._parameters)
-        except Exception as err:  # noqa: BLE001
-            raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}") from err
 
 
 class OekofenClimate(CoordinatorEntity, ClimateEntity):
@@ -209,7 +182,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
 
     def __init__(
         self,
-        coordinator: OekofenClimateCoordinator,
+        coordinator: OekofenCoordinator,
         api: PellematicAPI,
         key: str,
         config: Dict[str, Any],

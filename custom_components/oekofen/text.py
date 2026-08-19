@@ -6,7 +6,6 @@ global device settings (not per heating/hot-water circuit), so unlike
 number.py/select.py/switch.py there is no per-circuit definitions loop.
 """
 import logging
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from homeassistant.components.text import TextEntity, TextMode
@@ -14,17 +13,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .coordinator import OekofenCoordinator
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
-
-SCAN_INTERVAL = timedelta(seconds=60)
 
 MAIL_EMPFAENGER_COUNT = 5
 
@@ -75,11 +69,11 @@ async def async_setup_entry(
     """Set up the Fernwartung/Mail text entities for a config entry."""
     entry_data = hass.data["oekofen"][config_entry.entry_id]
     api: PellematicAPI = entry_data["api"]
+    coordinator: OekofenCoordinator = entry_data["coordinator"]
     definitions = build_text_definitions()
 
     parameters = [config["parameter"] for config in definitions.values()]
-    coordinator = OekofenTextCoordinator(hass, api, parameters)
-    await coordinator.async_config_entry_first_refresh()
+    coordinator.add_parameters(parameters)
 
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
     entities = [
@@ -89,26 +83,6 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class OekofenTextCoordinator(DataUpdateCoordinator):
-    """Coordinator polling the Fernwartung/Mail text values."""
-
-    def __init__(self, hass: HomeAssistant, api: PellematicAPI, parameters: List[str]) -> None:
-        self.api = api
-        self._parameters = parameters
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="ÖkOfen Fernwartung",
-            update_interval=SCAN_INTERVAL,
-        )
-
-    async def _async_update_data(self) -> Dict[str, Any]:
-        try:
-            return await self.api.get_data(self._parameters)
-        except Exception as err:  # noqa: BLE001
-            raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}") from err
-
-
 class OekofenText(CoordinatorEntity, TextEntity):
     """A writable ÖkOfen Fernwartung/Mail text field."""
 
@@ -116,7 +90,7 @@ class OekofenText(CoordinatorEntity, TextEntity):
 
     def __init__(
         self,
-        coordinator: OekofenTextCoordinator,
+        coordinator: OekofenCoordinator,
         api: PellematicAPI,
         key: str,
         config: Dict[str, Any],

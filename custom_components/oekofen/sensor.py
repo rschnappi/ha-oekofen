@@ -1,6 +1,5 @@
 """Sensor platform for ÖkOfen Pellematic integration."""
 import logging
-from datetime import timedelta
 from typing import Dict, Any, Optional
 
 from homeassistant.components.sensor import (
@@ -18,19 +17,14 @@ from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.config_entries import ConfigEntry
 
+from .coordinator import OekofenCoordinator
 from .ignition_diagnostics import OekofenGluehstabZuendzeit
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
-
-SCAN_INTERVAL = timedelta(seconds=30)  # Based on 5-second jQuery intervals, but more conservative
 
 ENTITY_CATEGORY_MAP = {
     "diagnostic": EntityCategory.DIAGNOSTIC,
@@ -51,7 +45,7 @@ def _is_relay_active(value: Any) -> bool:
         return False
 
 
-def _register_fault_relay_watcher(hass: HomeAssistant, coordinator: "OekofenDataUpdateCoordinator", entry_id: str) -> None:
+def _register_fault_relay_watcher(hass: HomeAssistant, coordinator: OekofenCoordinator, entry_id: str) -> None:
     """Raise/clear a persistent notification when the Störmelderelais trips."""
     notification_id = f"oekofen_stoermelderelais_{entry_id}"
     was_active = {"value": False}
@@ -618,16 +612,11 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up ÖkOfen sensors from a config entry."""
-    
-    # Get the API instance from the integration data
-    api = hass.data["oekofen"][config_entry.entry_id]["api"]
-    
-    # Create data update coordinator
-    coordinator = OekofenDataUpdateCoordinator(hass, api)
-    
-    # Fetch initial data
-    await coordinator.async_config_entry_first_refresh()
-    
+
+    entry_data = hass.data["oekofen"][config_entry.entry_id]
+    coordinator: OekofenCoordinator = entry_data["coordinator"]
+    coordinator.add_parameters(config["parameter"] for config in SENSOR_DEFINITIONS.values())
+
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
 
     # Create sensor entities
@@ -650,40 +639,12 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class OekofenDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching data from the ÖkOfen API."""
-
-    def __init__(self, hass: HomeAssistant, api: PellematicAPI) -> None:
-        """Initialize the coordinator."""
-        self.api = api
-        
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="ÖkOfen Pellematic",
-            update_interval=SCAN_INTERVAL,
-        )
-
-    async def _async_update_data(self) -> Dict[str, Any]:
-        """Fetch data from the ÖkOfen device."""
-        try:
-            # Get all parameters for defined sensors
-            parameters = [config["parameter"] for config in SENSOR_DEFINITIONS.values()]
-            data = await self.api.get_data(parameters)
-            
-            _LOGGER.debug(f"Updated data for {len(data)} parameters")
-            return data
-            
-        except Exception as err:
-            raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}")
-
-
 class OekofenSensor(CoordinatorEntity, SensorEntity):
     """Representation of an ÖkOfen sensor."""
 
     def __init__(
         self,
-        coordinator: OekofenDataUpdateCoordinator,
+        coordinator: OekofenCoordinator,
         sensor_key: str,
         sensor_config: Dict[str, Any],
         device_name: str,
