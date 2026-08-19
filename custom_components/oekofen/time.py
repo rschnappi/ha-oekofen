@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import OekofenCoordinator
+from .entity_helpers import build_device_info, parameter_available
 from .pellematic_api import PellematicAPI
 from .schedule_common import (
     BLOCKS_PER_DAY,
@@ -85,12 +86,7 @@ class OekofenScheduleTimeEntity(CoordinatorEntity, TimeEntity):
             f"{entry_id}_{slot['key']}_block{block}_{EDGE_LABELS[edge].lower()}"
         )
         self._attr_name = f"{slot['label']} {BLOCK_LABELS[block]} {EDGE_LABELS[edge]}"
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
     @property
     def native_value(self) -> Optional[dt_time]:
@@ -101,7 +97,7 @@ class OekofenScheduleTimeEntity(CoordinatorEntity, TimeEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+        return parameter_available(self.coordinator, self._parameter)
 
     async def async_set_value(self, value: dt_time) -> None:
         seconds = time_to_seconds(value)

@@ -48,6 +48,7 @@ from .betriebsart import (
     betriebsart_slot_parameters,
 )
 from .coordinator import OekofenCoordinator
+from .entity_helpers import build_device_info, parameter_available
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -236,12 +237,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
             self._attr_preset_modes = None
         self._attr_supported_features = features
 
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
     def _point(self, parameter: str) -> Optional[Dict[str, Any]]:
         return self.coordinator.data.get(parameter)
@@ -374,7 +370,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._mode_parameter_now() in self.coordinator.data
+        return parameter_available(self.coordinator, self._mode_parameter_now())
 
     async def _write_label(self, label: str) -> None:
         options = self._mode_options()

@@ -18,6 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import OekofenCoordinator
+from .entity_helpers import build_device_info, parameter_available
 from .ignition_diagnostics import OekofenGluehstabWarnschwelle
 from .pellematic_api import PellematicAPI
 
@@ -292,12 +293,7 @@ class OekofenNumber(CoordinatorEntity, NumberEntity):
         # raises AttributeError instead of returning None.
         self._attr_entity_category = EntityCategory.CONFIG if config.get("config") else None
         self._warning: Optional[str] = config.get("warning")
-        self._attr_device_info = {
-            "identifiers": {("oekofen", entry_id)},
-            "name": device_name,
-            "manufacturer": "ÖkOfen",
-            "model": "Pellematic",
-        }
+        self._attr_device_info = build_device_info(entry_id, device_name)
 
     @property
     def extra_state_attributes(self) -> Optional[Dict[str, Any]]:
@@ -354,7 +350,7 @@ class OekofenNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.last_update_success and self._parameter in self.coordinator.data
+        return parameter_available(self.coordinator, self._parameter)
 
     async def async_set_native_value(self, value: float) -> None:
         divisor = self._divisor()
