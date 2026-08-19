@@ -128,6 +128,14 @@ def build_climate_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[
             "icon": "mdi:fire",
             "mode_parameter": f"{base}.betriebsart_fa",
             "target_parameter": f"{base}.pe_kesseltemperatur_soll",
+            # On "Smart" firmware (L_pe_schnecke_sauganlage==4) the device
+            # ignores pe_kesseltemperatur_soll and regulates off
+            # frischwasser_soll_temp instead (config.min.js gates the
+            # former to "!= 4" in the vendor's own menu) - same
+            # dual-firmware split number.py already handles for this same
+            # setpoint. Read/write picks whichever one the device actually
+            # returns real data for - see _active_target_parameter().
+            "target_parameter_smart": f"{base}.frischwasser_soll_temp",
             "current_parameter": f"{base}.L_kesseltemperatur",
             "mode_map": PE_MODE_MAP,
             "mode_fallback": PE_MODE_FALLBACK,
@@ -160,6 +168,8 @@ async def async_setup_entry(
         else:
             parameters.append(config["mode_parameter"])
         parameters += [config["target_parameter"], config["current_parameter"]]
+        if config.get("target_parameter_smart"):
+            parameters.append(config["target_parameter_smart"])
         if config.get("boost_parameter"):
             parameters.append(config["boost_parameter"])
     if ANLAGE_MODE_PARAMETER not in parameters:
@@ -194,6 +204,7 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         self._betriebsart_base: Optional[str] = config.get("betriebsart_base")
         self._mode_parameter: Optional[str] = config.get("mode_parameter")
         self._target_parameter = config["target_parameter"]
+        self._target_parameter_smart: Optional[str] = config.get("target_parameter_smart")
         self._current_parameter = config["current_parameter"]
         self._mode_map: Dict[str, Tuple[HVACMode, str]] = config["mode_map"]
         self._mode_fallback: List[str] = config["mode_fallback"]
@@ -267,6 +278,18 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
             return {"hinweis": AUS_MODE_HINWEIS}
         return None
 
+    def _active_target_parameter(self) -> str:
+        """Pick whichever setpoint parameter this boiler's firmware actually
+        uses (see target_parameter_smart's definition-site comment) - the
+        device only ever returns real data for the applicable one, so a
+        missing/empty value on the classic parameter means this is a
+        Smart-firmware boiler."""
+        if self._target_parameter_smart:
+            point = self._point(self._target_parameter)
+            if not point or point.get("value") in (None, ""):
+                return self._target_parameter_smart
+        return self._target_parameter
+
     def _divisor(self, parameter: str) -> float:
         point = self._point(parameter)
         if not point:
@@ -289,30 +312,33 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
 
     @property
     def target_temperature(self) -> Optional[float]:
-        point = self._point(self._target_parameter)
+        parameter = self._active_target_parameter()
+        point = self._point(parameter)
         if not point or point.get("value") in (None, ""):
             return None
         try:
-            return round(float(point["value"]) / self._divisor(self._target_parameter), 1)
+            return round(float(point["value"]) / self._divisor(parameter), 1)
         except (TypeError, ValueError):
             return None
 
     @property
     def min_temp(self) -> float:
-        point = self._point(self._target_parameter)
+        parameter = self._active_target_parameter()
+        point = self._point(parameter)
         if point:
             try:
-                return round(float(point.get("lowerLimit")) / self._divisor(self._target_parameter), 1)
+                return round(float(point.get("lowerLimit")) / self._divisor(parameter), 1)
             except (TypeError, ValueError):
                 pass
         return self._default_min_temp
 
     @property
     def max_temp(self) -> float:
-        point = self._point(self._target_parameter)
+        parameter = self._active_target_parameter()
+        point = self._point(parameter)
         if point:
             try:
-                return round(float(point.get("upperLimit")) / self._divisor(self._target_parameter), 1)
+                return round(float(point.get("upperLimit")) / self._divisor(parameter), 1)
             except (TypeError, ValueError):
                 pass
         return self._default_max_temp
@@ -396,7 +422,8 @@ class OekofenClimate(CoordinatorEntity, ClimateEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        divisor = self._divisor(self._target_parameter)
+        parameter = self._active_target_parameter()
+        divisor = self._divisor(parameter)
         raw_value = round(temperature * divisor)
-        await self.api.set_data(self._target_parameter, raw_value)
+        await self.api.set_data(parameter, raw_value)
         await self.coordinator.async_request_refresh()

@@ -141,6 +141,38 @@ async def test_pellematic_async_set_temperature_writes_regeltemperatur():
     assert coord.refresh_calls == 1
 
 
+def test_pellematic_target_temperature_falls_back_to_smart_parameter():
+    """On "Smart" firmware the device never returns real data for
+    pe_kesseltemperatur_soll - the entity should read frischwasser_soll_temp
+    instead rather than showing no target temperature at all."""
+    config = _pe_config()
+    coord = FakeCoordinator({config["target_parameter_smart"]: make_point("650", divisor="10")})
+    entity = _make_entity(coord, config, key="pe0_climate")
+    assert entity.target_temperature == 65.0
+
+
+def test_pellematic_target_temperature_prefers_classic_parameter_when_present():
+    config = _pe_config()
+    coord = FakeCoordinator({
+        config["target_parameter"]: make_point("650", divisor="10"),
+        config["target_parameter_smart"]: make_point("700", divisor="10"),
+    })
+    entity = _make_entity(coord, config, key="pe0_climate")
+    assert entity.target_temperature == 65.0
+
+
+async def test_pellematic_async_set_temperature_writes_smart_parameter_on_smart_firmware():
+    config = _pe_config()
+    api = AsyncMock()
+    coord = FakeCoordinator({config["target_parameter_smart"]: make_point("650", divisor="10")})
+    entity = _make_entity(coord, config, key="pe0_climate", api=api)
+
+    await entity.async_set_temperature(temperature=68.0)
+
+    api.set_data.assert_awaited_once_with(config["target_parameter_smart"], 680)
+    assert coord.refresh_calls == 1
+
+
 def test_hvac_mode_and_preset_for_heizen():
     config = _hk_config()
     coord = FakeCoordinator({_mode_param(config): make_point("2", format_texts="Aus|Auto|Heizen|Absenken")})
