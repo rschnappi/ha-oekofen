@@ -1,6 +1,6 @@
 """Datetime platform for ÖkOfen Party-/Urlaubsprogramm absolute time fields."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from homeassistant.components.datetime import DateTimeEntity
@@ -8,18 +8,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .coordinator import OekofenCoordinator
 from .datetime_common import device_seconds_to_datetime, datetime_to_device_seconds
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
-
-SCAN_INTERVAL = timedelta(seconds=60)
 
 
 def build_datetime_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
@@ -72,6 +67,7 @@ async def async_setup_entry(
     entry_data = hass.data["oekofen"][config_entry.entry_id]
     api: PellematicAPI = entry_data["api"]
     circuits = entry_data["circuits"]
+    coordinator: OekofenCoordinator = entry_data["coordinator"]
     definitions = build_datetime_definitions(circuits)
 
     if not definitions:
@@ -82,8 +78,7 @@ async def async_setup_entry(
         for config in definitions.values()
         for param in (config["parameter"], config.get("read_parameter", config["parameter"]))
     })
-    coordinator = OekofenDateTimeCoordinator(hass, api, parameters)
-    await coordinator.async_config_entry_first_refresh()
+    coordinator.add_parameters(parameters)
 
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
     entities = [
@@ -93,32 +88,12 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class OekofenDateTimeCoordinator(DataUpdateCoordinator):
-    """Coordinator polling the Party-/Urlaubsprogramm datetime values."""
-
-    def __init__(self, hass: HomeAssistant, api: PellematicAPI, parameters: List[str]) -> None:
-        self.api = api
-        self._parameters = parameters
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="ÖkOfen Party/Urlaub Zeiten",
-            update_interval=SCAN_INTERVAL,
-        )
-
-    async def _async_update_data(self) -> Dict[str, Any]:
-        try:
-            return await self.api.get_data(self._parameters)
-        except Exception as err:  # noqa: BLE001
-            raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}") from err
-
-
 class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
     """A writable ÖkOfen absolute datetime field (Party endzeit, Urlaub start/ende)."""
 
     def __init__(
         self,
-        coordinator: OekofenDateTimeCoordinator,
+        coordinator: OekofenCoordinator,
         api: PellematicAPI,
         key: str,
         config: Dict[str, Any],

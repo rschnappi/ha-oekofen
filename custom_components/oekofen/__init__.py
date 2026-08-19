@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
 from .betriebsart import ANLAGE_MODE_PARAMETER, active_betriebsart_slot
+from .coordinator import OekofenCoordinator
 from .discovery import async_discover_circuits
 from .pellematic_api import PellematicAPI
 
@@ -118,18 +119,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # that is really there.
     circuits = await async_discover_circuits(api)
 
+    # Shared coordinator: platforms register the parameters they need into
+    # it during their own async_setup_entry (called via
+    # async_forward_entry_setups below), then we trigger a single first
+    # refresh once every platform has registered - see coordinator.py.
+    coordinator = OekofenCoordinator(hass, api)
+
     # Store API instance
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
         "circuits": circuits,
+        "coordinator": coordinator,
     }
 
     await _async_register_frontend_resources(hass)
 
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
+    # All platforms have registered their needed parameters into the shared
+    # coordinator by now (async_forward_entry_setups awaits every platform's
+    # async_setup_entry) - fetch them all in one combined request.
+    await coordinator.async_config_entry_first_refresh()
+
     # Register services
     async def handle_set_parameter(call: ServiceCall) -> None:
         """Handle the set_parameter service call."""

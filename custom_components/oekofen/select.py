@@ -7,7 +7,6 @@ only for the handful of parameters that don't carry formatTexts on
 older firmware, so the entity still works if the device omits them.
 """
 import logging
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from homeassistant.components.select import SelectEntity
@@ -15,11 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .betriebsart import (
     ANLAGE_MODE_PARAMETER,
@@ -28,11 +23,10 @@ from .betriebsart import (
     betriebsart_parameter,
     betriebsart_slot_parameters,
 )
+from .coordinator import OekofenCoordinator
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
-
-SCAN_INTERVAL = timedelta(seconds=60)
 
 # See number.py's INSTALLER_WARNING for context: these two parameters sit
 # behind the installer/technician PIN in the vendor's own web UI.
@@ -139,6 +133,7 @@ async def async_setup_entry(
     entry_data = hass.data["oekofen"][config_entry.entry_id]
     api: PellematicAPI = entry_data["api"]
     circuits = entry_data["circuits"]
+    coordinator = entry_data["coordinator"]
     definitions = build_select_definitions(circuits)
 
     if not definitions:
@@ -152,8 +147,7 @@ async def async_setup_entry(
             parameters.append(config["parameter"])
     if ANLAGE_MODE_PARAMETER not in parameters:
         parameters.append(ANLAGE_MODE_PARAMETER)
-    coordinator = OekofenSelectCoordinator(hass, api, parameters)
-    await coordinator.async_config_entry_first_refresh()
+    coordinator.add_parameters(parameters)
 
     device_name = f"ÖkOfen {config_entry.data[CONF_HOST]}"
     entities = [
@@ -163,32 +157,12 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class OekofenSelectCoordinator(DataUpdateCoordinator):
-    """Coordinator polling the mode/schedule-selection values."""
-
-    def __init__(self, hass: HomeAssistant, api: PellematicAPI, parameters: List[str]) -> None:
-        self.api = api
-        self._parameters = parameters
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="ÖkOfen Betriebsarten",
-            update_interval=SCAN_INTERVAL,
-        )
-
-    async def _async_update_data(self) -> Dict[str, Any]:
-        try:
-            return await self.api.get_data(self._parameters)
-        except Exception as err:  # noqa: BLE001
-            raise UpdateFailed(f"Error communicating with ÖkOfen device: {err}") from err
-
-
 class OekofenModeSelect(CoordinatorEntity, SelectEntity):
     """A writable ÖkOfen enum parameter, exposed as an HA select dropdown."""
 
     def __init__(
         self,
-        coordinator: OekofenSelectCoordinator,
+        coordinator: OekofenCoordinator,
         api: PellematicAPI,
         key: str,
         config: Dict[str, Any],

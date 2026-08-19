@@ -5,10 +5,8 @@ tag[0] = Sunday ... tag[6] = Saturday (NOT the usual Monday-first order).
 Each weekday can hold up to 3 independent start/end time blocks
 (zeitreihe[0..2]), and a "block" value of -1 means the day is disabled.
 """
-from datetime import time as dt_time, timedelta
+from datetime import time as dt_time
 from typing import Any, Dict, List, Optional
-
-SCAN_INTERVAL = timedelta(seconds=60)
 
 # Device's own weekday indexing: 0=Sunday .. 6=Saturday
 DAY_NAMES = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"]
