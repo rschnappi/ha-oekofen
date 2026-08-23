@@ -131,6 +131,53 @@ async def test_async_added_to_hass_restores_in_progress_ignition_across_restart(
     assert entity._last_is_zuendung is True
 
 
+def test_migrates_away_from_stale_seconds_unit_override():
+    """See _async_migrate_unit_override's docstring: HA's own SensorEntity
+    silently pins a duration sensor to its original unit the first time the
+    native unit changes, to protect existing statistics - undo that pin
+    once minutes is the sensor's real native unit. Live-reproduced: a
+    native 8.2 min value kept displaying as "492 s" until this ran."""
+    entity = _make_entity(FakeCoordinator({}))
+    entity.entity_id = "sensor.test_gluehstab_zundzeit"
+    entity.registry_entry = MagicMock(options={"sensor.private": {"suggested_unit_of_measurement": "s"}})
+
+    new_entry = MagicMock(options={})
+    mock_registry = MagicMock()
+    mock_registry.async_update_entity_options.return_value = new_entry
+
+    with patch("custom_components.oekofen.ignition_diagnostics.er.async_get", return_value=mock_registry):
+        with patch.object(OekofenGluehstabZuendzeit, "_async_read_entity_options", MagicMock()) as mock_read:
+            entity._async_migrate_unit_override()
+
+    mock_registry.async_update_entity_options.assert_called_once_with(
+        "sensor.test_gluehstab_zundzeit", "sensor.private", None
+    )
+    assert entity.registry_entry is new_entry
+    mock_read.assert_called_once()
+
+
+def test_unit_migration_noop_when_no_override_present():
+    entity = _make_entity(FakeCoordinator({}))
+    entity.registry_entry = MagicMock(options={})
+
+    with patch("custom_components.oekofen.ignition_diagnostics.er.async_get") as mock_er:
+        entity._async_migrate_unit_override()
+
+    mock_er.assert_not_called()
+
+
+def test_unit_migration_noop_when_override_already_matches_native_unit():
+    entity = _make_entity(FakeCoordinator({}))
+    entity.registry_entry = MagicMock(
+        options={"sensor.private": {"suggested_unit_of_measurement": "min"}}
+    )
+
+    with patch("custom_components.oekofen.ignition_diagnostics.er.async_get") as mock_er:
+        entity._async_migrate_unit_override()
+
+    mock_er.assert_not_called()
+
+
 def test_no_value_yet_leaves_state_unset():
     coord = FakeCoordinator({})
     entity = _make_entity(coord)

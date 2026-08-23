@@ -173,6 +173,7 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
+        self._async_migrate_unit_override()
         last_extra_data = await self.async_get_last_extra_data()
         if last_extra_data is None:
             return
@@ -186,6 +187,35 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
             self._attr_native_value = value
         self._zuendung_since = restored.zuendung_since
         self._last_is_zuendung = restored.last_is_zuendung
+
+    def _async_migrate_unit_override(self) -> None:
+        """Undo HA's own automatic "keep the old unit" protection.
+
+        SensorEntity.add_to_platform_start (see homeassistant/components/
+        sensor/__init__.py) runs on every add-to-hass, before this method:
+        if a duration-class sensor's computed unit differs from what's
+        already on file in the entity registry, and no user override
+        exists yet, it silently writes a `sensor.private.
+        suggested_unit_of_measurement` registry option pinned to the *old*
+        unit - specifically so existing statistics/dashboards don't break
+        when an integration changes its native unit. That's exactly what
+        happened here: switching this sensor from seconds to minutes just
+        made every future minute value get converted back to seconds for
+        display (a native 8.2 stayed correct internally, but showed as
+        "492 s"). Since minutes is what we actually want going forward,
+        clear that pin once it's stale.
+        """
+        if self.registry_entry is None:
+            return
+        private_options = self.registry_entry.options.get("sensor.private") or {}
+        pinned_unit = private_options.get("suggested_unit_of_measurement")
+        if not pinned_unit or pinned_unit == self.native_unit_of_measurement:
+            return
+        registry = er.async_get(self.hass)
+        self.registry_entry = registry.async_update_entity_options(
+            self.entity_id, "sensor.private", None
+        )
+        self._async_read_entity_options()
 
     def _handle_coordinator_update(self) -> None:
         point = self.coordinator.data.get(KESSELSTATUS_PARAMETER)

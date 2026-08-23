@@ -306,6 +306,23 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.4
+
+- 🐛 **Zündzeit zeigte trotz 0.9.3 weiter Sekunden statt Minuten an.**
+  Ursache live gefunden: Home Assistant's eigener `SensorEntity`-Code
+  "pinnt" die Anzeige-Einheit einer Duration-Sensor-Entity automatisch
+  auf die zuerst gesehene Einheit, sobald sich die native Einheit einer
+  bereits bestehenden Entity ändert - explizit dafür gedacht, bestehende
+  Statistiken/Dashboards nicht durch einen Integrations-Update kaputt
+  zu machen. Genau das ist beim Wechsel von Sekunden auf Minuten
+  passiert: neue Werte in Minuten wurden weiterhin zurück in Sekunden
+  umgerechnet angezeigt (z.B. "492 s" statt "8,2 min"). Dieses Pinning
+  wird jetzt beim Start einmalig aufgehoben.
+- 🔄 **Reload-Button im Dashboard**: Neben der Versionsnummer oben in der
+  Übersicht gibt es jetzt einen Button, der die Seite neu lädt - eine
+  manuelle Möglichkeit, eine evtl. noch veraltete Dashboard-Ansicht
+  aufzufrischen, ohne im Browser den Cache manuell leeren zu müssen.
+
 ### Version 0.9.3
 
 - 🔄 **Glühstab Zündzeit/Warnschwelle jetzt in Minuten statt Sekunden.**
@@ -670,5 +687,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.3
+**Version**: 0.9.4
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
