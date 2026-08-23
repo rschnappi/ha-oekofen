@@ -489,15 +489,23 @@
     const counterTimeIds = counterIds
       .filter((id) => DURATION_UNITS.has(states[id].attributes.unit_of_measurement))
       .sort();
+    // Zündzeit (glow-plug ignition duration) updates irregularly (once per
+    // completed cold-start ignition, hours or days apart) rather than
+    // accumulating daily like the runtime/cycle counters below - a trend
+    // line of its own values over time is the useful view, not a per-day
+    // change bar chart. Pull it out of the generic duration-tile bucket
+    // into its own chart, same treatment as Feuerraumtemperatur above.
+    const zuendzeitIds = sensorIds.filter((id) => /gluhstab_zundzeit/.test(objectIdOf(id)));
     const statsTileIds = sensorIds
       .filter((id) => {
+        if (zuendzeitIds.includes(id)) return false;
         const a = states[id].attributes;
         if (a.device_class === "temperature") return false;
         return a.device_class === "duration" || DURATION_UNITS.has(a.unit_of_measurement) || a.state_class === "total_increasing";
       })
       .sort();
 
-    if (!tempIds.length && !statsTileIds.length) return null;
+    if (!tempIds.length && !statsTileIds.length && !zuendzeitIds.length) return null;
 
     const cards = [];
 
@@ -535,6 +543,30 @@
         type: "statistics-graph",
         title: "Feuerraumtemperatur (Langzeit, 90 Tage)",
         entities: feuerraumIds.map((id) => ({ entity: id })),
+        days_to_show: 90,
+        period: "day",
+        stat_types: ["mean", "min", "max"],
+      });
+    }
+
+    if (zuendzeitIds.length) {
+      // The warning-threshold number entity has no long-term statistics of
+      // its own (HA's recorder only compiles those for sensor state_class
+      // entities), but its plain state history still works fine in a
+      // history-graph, alongside the actual duration, as a reference line.
+      const warnschwelleId = entityIds.find((id) => domainOf(id) === "number" && /gluhstab_warnschwelle/.test(objectIdOf(id)));
+      const zuendzeitHistoryIds = warnschwelleId ? [...zuendzeitIds, warnschwelleId] : zuendzeitIds;
+      cards.push({
+        type: "history-graph",
+        title: "Zündzeit",
+        hours_to_show: 168,
+        refresh_interval: 60,
+        entities: zuendzeitHistoryIds.map((id) => ({ entity: id })),
+      });
+      cards.push({
+        type: "statistics-graph",
+        title: "Zündzeit (Langzeit, 90 Tage)",
+        entities: zuendzeitIds.map((id) => ({ entity: id })),
         days_to_show: 90,
         period: "day",
         stat_types: ["mean", "min", "max"],

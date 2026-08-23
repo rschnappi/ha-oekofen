@@ -53,10 +53,17 @@ KESSELSTATUS_PARAMETER = "CAPPL:FA[0].L_kesselstatus"
 ZUENDUNG_LABEL = "zuendung"
 ZUENDZEIT_KEY = "gluehstab_zuendzeit"
 WARNSCHWELLE_KEY = "gluehstab_warnschwelle"
-# Based on one observed real cold-start ignition (~408s/6:48min) - tune
+# Based on one observed real cold-start ignition (~408s/6.8min) - tune
 # this via the "Glühstab Warnschwelle" number entity once more samples
-# are available.
-DEFAULT_WARNSCHWELLE_SECONDS = 600.0
+# are available. Both this and OekofenGluehstabZuendzeit's own value are
+# in minutes (not seconds) - realistic ignitions run a few minutes, and
+# seconds-level precision doesn't matter for a "is this trending up"
+# indicator.
+DEFAULT_WARNSCHWELLE_MINUTES = 10.0
+# A previously-restored value above this is unambiguously a leftover from
+# before entities here were in seconds, not a plausible minutes value -
+# see the migration handling in async_added_to_hass on both entities below.
+_LEGACY_SECONDS_VALUE_THRESHOLD = 60.0
 
 
 def _resolve_label(point: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -84,7 +91,7 @@ def _is_zuendung(label: Optional[str]) -> Optional[bool]:
     return label.strip().lower() == ZUENDUNG_LABEL
 
 
-def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAULT_WARNSCHWELLE_SECONDS) -> float:
+def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAULT_WARNSCHWELLE_MINUTES) -> float:
     """Look up the current Glühstab-Warnschwelle value via the entity registry."""
     registry = er.async_get(hass)
     entity_id = registry.async_get_entity_id("number", DOMAIN, f"{entry_id}_{WARNSCHWELLE_KEY}")
@@ -144,7 +151,7 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
 
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_icon = "mdi:heating-coil"
 
     def __init__(self, coordinator, entry_id: str, device_name: str) -> None:
@@ -171,7 +178,12 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
             return
         restored = _ZuendzeitExtraStoredData.from_dict(last_extra_data.as_dict())
         if restored.native_value is not None:
-            self._attr_native_value = restored.native_value
+            value = restored.native_value
+            if value > _LEGACY_SECONDS_VALUE_THRESHOLD:
+                # Restored from before this sensor switched from seconds to
+                # minutes - convert rather than displaying e.g. "408 min".
+                value = round(value / 60, 1)
+            self._attr_native_value = value
         self._zuendung_since = restored.zuendung_since
         self._last_is_zuendung = restored.last_is_zuendung
 
@@ -191,25 +203,25 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
                 self._zuendung_since = now
             elif not is_zuendung and self._last_is_zuendung and self._zuendung_since is not None:
                 # Kesselstatus verlässt "Zuendung": Zündvorgang beendet, Dauer auswerten
-                duration = round((now - self._zuendung_since).total_seconds())
-                self._attr_native_value = duration
+                duration_minutes = round((now - self._zuendung_since).total_seconds() / 60, 1)
+                self._attr_native_value = duration_minutes
                 self._zuendung_since = None
-                self._maybe_warn(duration)
+                self._maybe_warn(duration_minutes)
 
         if is_zuendung is not None:
             self._last_is_zuendung = is_zuendung
 
         super()._handle_coordinator_update()
 
-    def _maybe_warn(self, duration: float) -> None:
+    def _maybe_warn(self, duration_minutes: float) -> None:
         threshold = get_warnschwelle(self.hass, self._entry_id)
-        if duration <= threshold:
+        if duration_minutes <= threshold:
             return
         async_create_notification(
             self.hass,
             (
-                f"Die letzte Zündung hat {duration:.0f} Sekunden gedauert "
-                f"(Schwelle: {threshold:.0f} s). Das kann auf einen "
+                f"Die letzte Zündung hat {duration_minutes:.1f} Minuten gedauert "
+                f"(Schwelle: {threshold:.1f} min). Das kann auf einen "
                 f"schwächelnden Glühstab hindeuten."
             ),
             title="ÖkOfen: Zündzeit auffällig",
@@ -223,10 +235,10 @@ class OekofenGluehstabWarnschwelle(RestoreNumber):
     Purely local to Home Assistant - not backed by any device parameter.
     """
 
-    _attr_native_min_value = 30
-    _attr_native_max_value = 900
-    _attr_native_step = 10
-    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_native_min_value = 1
+    _attr_native_max_value = 15
+    _attr_native_step = 0.5
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_mode = NumberMode.BOX
     _attr_icon = "mdi:alert-outline"
     _attr_entity_category = EntityCategory.CONFIG
@@ -236,13 +248,19 @@ class OekofenGluehstabWarnschwelle(RestoreNumber):
         self._attr_unique_id = f"{entry_id}_{WARNSCHWELLE_KEY}"
         self._attr_name = "Glühstab Warnschwelle"
         self._attr_device_info = build_device_info(entry_id, device_name)
-        self._attr_native_value = DEFAULT_WARNSCHWELLE_SECONDS
+        self._attr_native_value = DEFAULT_WARNSCHWELLE_MINUTES
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_data = await self.async_get_last_number_data()
         if last_data is not None and last_data.native_value is not None:
-            self._attr_native_value = last_data.native_value
+            value = last_data.native_value
+            if value > _LEGACY_SECONDS_VALUE_THRESHOLD:
+                # Restored from before this entity switched from seconds to
+                # minutes (e.g. the 600s default) - convert rather than
+                # restoring an out-of-bounds value like "600 min".
+                value = round(value / 60, 1)
+            self._attr_native_value = value
 
     async def async_set_native_value(self, value: float) -> None:
         self._attr_native_value = value

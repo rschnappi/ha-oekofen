@@ -306,6 +306,21 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.3
+
+- 🔄 **Glühstab Zündzeit/Warnschwelle jetzt in Minuten statt Sekunden.**
+  `sensor.*_gluhstab_zundzeit` und `number.*_gluhstab_warnschwelle` (Bereich
+  jetzt 1-15 min statt 30-900s, Default weiterhin 10 min = vorher 600s)
+  zeigen ihre Werte in Minuten. Ein zuvor gespeicherter Sekunden-Wert wird
+  beim ersten Neustart nach dem Update automatisch umgerechnet
+  (Erkennung: Werte über 60 können bei den neuen Grenzen nur ein
+  Sekunden-Restwert sein), nicht einfach als "600 min" fehlinterpretiert.
+- 📊 **Eigenes Zündzeit-Chart in der Statistik-Ansicht**: Lief bisher als
+  einfache Kachel im "Betriebsstunden & Zyklen"-Grid ohne Verlauf. Hat
+  jetzt ein eigenes 7-Tage-Verlaufs-Chart (die Warnschwelle als
+  Referenzlinie mit eingeblendet) plus 90-Tage-Langzeitstatistik
+  (Mittelwert/Min/Max pro Tag), analog zum Feuerraumtemperatur-Chart.
+
 ### Version 0.9.2
 
 - 🐛 **Dashboard-Strategy-JS wird jetzt mit explizitem `Cache-Control:
@@ -655,5 +670,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.2
+**Version**: 0.9.3
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
