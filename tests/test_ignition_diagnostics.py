@@ -2,10 +2,11 @@
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.components.number import RestoreNumber
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.oekofen.ignition_diagnostics import (
-    DEFAULT_WARNSCHWELLE_SECONDS,
+    DEFAULT_WARNSCHWELLE_MINUTES,
     KESSELSTATUS_PARAMETER,
     OekofenGluehstabWarnschwelle,
     OekofenGluehstabZuendzeit,
@@ -54,7 +55,7 @@ def test_get_warnschwelle_default_when_entity_missing():
     hass = MagicMock()
     with patch("custom_components.oekofen.ignition_diagnostics.er.async_get") as mock_er:
         mock_er.return_value.async_get_entity_id.return_value = None
-        assert get_warnschwelle(hass, "entry1") == DEFAULT_WARNSCHWELLE_SECONDS
+        assert get_warnschwelle(hass, "entry1") == DEFAULT_WARNSCHWELLE_MINUTES
 
 
 def test_get_warnschwelle_reads_current_entity_state():
@@ -70,7 +71,7 @@ def test_get_warnschwelle_falls_back_on_unavailable_state():
     hass.states.get.return_value = MagicMock(state="unavailable")
     with patch("custom_components.oekofen.ignition_diagnostics.er.async_get") as mock_er:
         mock_er.return_value.async_get_entity_id.return_value = "number.x_gluehstab_warnschwelle"
-        assert get_warnschwelle(hass, "entry1") == DEFAULT_WARNSCHWELLE_SECONDS
+        assert get_warnschwelle(hass, "entry1") == DEFAULT_WARNSCHWELLE_MINUTES
 
 
 def _make_entity(coordinator):
@@ -117,7 +118,7 @@ async def test_async_added_to_hass_restores_in_progress_ignition_across_restart(
     once it later completes."""
     entity = _make_entity(FakeCoordinator({}))
     since = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
-    stored = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=since, last_is_zuendung=True)
+    stored = _ZuendzeitExtraStoredData(native_value=6.8, zuendung_since=since, last_is_zuendung=True)
 
     with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
         entity.async_get_last_extra_data = AsyncMock(
@@ -125,7 +126,7 @@ async def test_async_added_to_hass_restores_in_progress_ignition_across_restart(
         )
         await entity.async_added_to_hass()
 
-    assert entity._attr_native_value == 408
+    assert entity._attr_native_value == 6.8
     assert entity._zuendung_since == since
     assert entity._last_is_zuendung is True
 
@@ -199,15 +200,51 @@ def test_duration_over_threshold_triggers_notification():
 
 def test_warnschwelle_defaults_and_bounds():
     entity = OekofenGluehstabWarnschwelle("entry1", "Test")
-    assert entity._attr_native_value == DEFAULT_WARNSCHWELLE_SECONDS
-    assert entity._attr_native_min_value == 30
-    assert entity._attr_native_max_value == 900
+    assert entity._attr_native_value == DEFAULT_WARNSCHWELLE_MINUTES
+    assert entity._attr_native_min_value == 1
+    assert entity._attr_native_max_value == 15
     assert entity.unique_id == "entry1_gluehstab_warnschwelle"
 
 
 async def test_warnschwelle_set_native_value():
     entity = OekofenGluehstabWarnschwelle("entry1", "Test")
     entity.async_write_ha_state = MagicMock()
-    await entity.async_set_native_value(300)
-    assert entity._attr_native_value == 300
+    await entity.async_set_native_value(7.5)
+    assert entity._attr_native_value == 7.5
     entity.async_write_ha_state.assert_called_once()
+
+
+async def test_warnschwelle_restores_legacy_seconds_value_as_minutes():
+    """A value restored from before this entity switched from seconds to
+    minutes (e.g. the old 600s default) must be converted, not restored
+    as-is - "600 min" would be wildly out of the new 1-15 bounds."""
+    entity = OekofenGluehstabWarnschwelle("entry1", "Test")
+    entity.async_get_last_number_data = AsyncMock(return_value=MagicMock(native_value=600))
+
+    with patch.object(RestoreNumber, "async_added_to_hass", AsyncMock()):
+        await entity.async_added_to_hass()
+
+    assert entity._attr_native_value == 10.0
+
+
+async def test_warnschwelle_restores_plausible_minutes_value_unchanged():
+    entity = OekofenGluehstabWarnschwelle("entry1", "Test")
+    entity.async_get_last_number_data = AsyncMock(return_value=MagicMock(native_value=7.5))
+
+    with patch.object(RestoreNumber, "async_added_to_hass", AsyncMock()):
+        await entity.async_added_to_hass()
+
+    assert entity._attr_native_value == 7.5
+
+
+async def test_zuendzeit_restores_legacy_seconds_value_as_minutes():
+    entity = _make_entity(FakeCoordinator({}))
+    stored = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=None, last_is_zuendung=False)
+
+    with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
+        entity.async_get_last_extra_data = AsyncMock(
+            return_value=MagicMock(as_dict=MagicMock(return_value=stored.as_dict()))
+        )
+        await entity.async_added_to_hass()
+
+    assert entity._attr_native_value == 6.8
