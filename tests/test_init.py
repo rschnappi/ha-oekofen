@@ -19,6 +19,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from custom_components.oekofen import (
     DOMAIN,
     _async_register_frontend_resources,
+    _StrategyJSView,
     async_reload_entry,
     async_setup_entry,
     async_unload_entry,
@@ -43,7 +44,7 @@ def _make_hass():
     hass.config_entries.async_forward_entry_setups = AsyncMock()
     hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
     hass.config_entries.async_reload = AsyncMock()
-    hass.http.async_register_static_paths = AsyncMock()
+    hass.async_add_executor_job = AsyncMock(return_value="// mock strategy js")
     return hass
 
 
@@ -126,6 +127,20 @@ async def test_platforms_forwarded_before_first_coordinator_refresh(mocks):
     assert order == ["forward", "refresh"]
 
 
+async def test_strategy_js_view_serves_content_with_no_store_header():
+    """The whole point of serving this from a custom view instead of HA's
+    built-in static-path helper: an explicit no-store header, so a
+    browser/WebView can never serve a stale cached copy regardless of its
+    own caching heuristics - see the class docstring for the "works after
+    clearing cache, breaks again after a couple of loads" symptom this
+    fixes."""
+    view = _StrategyJSView("// the actual js content")
+    response = await view.get(MagicMock())
+
+    assert response.text == "// the actual js content"
+    assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
+
+
 async def test_concurrent_frontend_registration_second_caller_waits_for_first():
     """Two ÖkOfen config entries set up concurrently both call
     _async_register_frontend_resources as their first step. The second
@@ -139,12 +154,13 @@ async def test_concurrent_frontend_registration_second_caller_waits_for_first():
     release = asyncio.Event()
     order = []
 
-    async def slow_register(*args, **kwargs):
+    async def slow_read(*args, **kwargs):
         started.set()
         await release.wait()
         order.append("registered")
+        return "// mock strategy js"
 
-    hass.http.async_register_static_paths = slow_register
+    hass.async_add_executor_job = slow_read
 
     with patch("custom_components.oekofen.add_extra_js_url"):
         task1 = asyncio.create_task(_async_register_frontend_resources(hass))
