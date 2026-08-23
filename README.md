@@ -306,6 +306,22 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.2
+
+- 🐛 **Dashboard-Strategy-JS wird jetzt mit explizitem `Cache-Control:
+  no-store` ausgeliefert.** Trotz Versions-basiertem Cache-Bust
+  (0.8.1) und dem Frontend-Registrierungs-Reihenfolge-Fix (0.8.4) blieb
+  der Fehler "Timeout waiting for strategy element ... to be
+  registered" auf manchen Clients (v.a. Kiosk-Tablets) unzuverlässig
+  bestehen: funktionierte nach Cache-Leeren für 1-2 Aufrufe, dann wieder
+  nicht. HA's eingebauter Static-Path-Helfer (`cache_headers=False`)
+  setzt dabei keinen expliziten Cache-Control-Header - überlässt es
+  also den Heuristiken des jeweiligen Browsers/WebViews, ob und wie
+  lange die Datei trotzdem lokal zwischengespeichert wird. Die JS-Datei
+  wird jetzt über eine eigene View mit explizitem `no-store`-Header
+  ausgeliefert statt über den Static-Path-Helfer, was diese Unschärfe
+  beseitigt.
+
 ### Version 0.9.1
 
 - ✅ **Reauth-Flow**: Ändert sich das Techniker-Passwort am Gerät, schlug
@@ -639,5 +655,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.1
+**Version**: 0.9.2
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

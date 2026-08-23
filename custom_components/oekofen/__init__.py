@@ -4,7 +4,10 @@ import json
 import logging
 from pathlib import Path
 
+from aiohttp import web
+
 from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
@@ -35,6 +38,41 @@ PLATFORMS = [
 ]
 
 
+class _StrategyJSView(HomeAssistantView):
+    """Serves the bundled dashboard-strategy JS with an explicit no-store
+    Cache-Control header.
+
+    HA's built-in static-path helper only offers a binary choice:
+    cache_headers=True (a month-long Cache-Control) or cache_headers=False
+    (no explicit header at all, falling back to aiohttp's FileResponse
+    defaults - ETag/Last-Modified only). The latter still leaves it up to
+    each browser/WebView's own heuristics whether to treat the response as
+    cacheable, which some kiosk-tablet WebViews apparently do quite
+    aggressively: even with the version-based cache-busting query param
+    (see add_extra_js_url below), the strategy element registration kept
+    intermittently timing out on repeat loads - working right after
+    clearing the browser cache, then failing again after a couple of
+    loads, exactly the pattern of a client occasionally serving a cached
+    response instead of asking the server. An explicit no-store header
+    removes that ambiguity instead of relying on cache_headers=False's
+    unspecified fallback behavior.
+    """
+
+    url = STRATEGY_URL_PATH
+    name = "oekofen_strategy_js"
+    requires_auth = False
+
+    def __init__(self, js_content: str) -> None:
+        self._js_content = js_content
+
+    async def get(self, request: web.Request) -> web.Response:
+        return web.Response(
+            text=self._js_content,
+            content_type="application/javascript",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        )
+
+
 async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
     """Serve the bundled ÖkOfen dashboard-strategy JS and register it with the
     frontend, so `strategy: {type: custom:oekofen-strategy}` works without the
@@ -59,23 +97,14 @@ async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
     event = asyncio.Event()
     domain_data[_FRONTEND_KEY] = event
     try:
-        js_path = str(Path(__file__).parent / "www" / "oekofen-strategy.js")
-        try:
-            # HA >= ~2024.7: async, avoids the "blocking call" warning the sync
-            # register_static_path below triggers on newer versions.
-            from homeassistant.components.http import StaticPathConfig
+        js_path = Path(__file__).parent / "www" / "oekofen-strategy.js"
+        js_content = await hass.async_add_executor_job(js_path.read_text)
+        hass.http.register_view(_StrategyJSView(js_content))
 
-            await hass.http.async_register_static_paths(
-                [StaticPathConfig(STRATEGY_URL_PATH, js_path, cache_headers=False)]
-            )
-        except ImportError:
-            # Older HA doesn't have StaticPathConfig/async_register_static_paths yet.
-            hass.http.register_static_path(STRATEGY_URL_PATH, js_path, cache_headers=False)
-
-        # Cache-bust with the integration version, so browsers fetch the new
-        # JS after an update instead of serving a stale cached copy of the
-        # module under the same URL until the user manually clears their
-        # cache.
+        # Also cache-bust with the integration version, so a URL a browser
+        # somehow already has cached (proxies, some WebViews ignoring
+        # Cache-Control) still gets treated as a different resource after an
+        # update, on top of the view's own no-store header above.
         add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={_MANIFEST_VERSION}")
     finally:
         event.set()
