@@ -384,7 +384,13 @@
       leftoverEntityIds = leftoverEntityIds.filter((id) => id !== versionId);
       const state = (hass.states || {})[versionId];
       if (state) {
-        cards.push(markdown(`*ÖkOfen Integration v${state.state}*`));
+        cards.push({
+          type: "horizontal-stack",
+          cards: [
+            markdown(`*ÖkOfen Integration v${state.state}*`),
+            { type: "custom:oekofen-reload-button" },
+          ],
+        });
       }
     }
 
@@ -675,6 +681,63 @@
   // below caused "Timeout waiting for strategy element ... to be registered".
   if (typeof customElements !== "undefined" && !customElements.get("ll-strategy-dashboard-oekofen-strategy")) {
     customElements.define("ll-strategy-dashboard-oekofen-strategy", OekofenStrategy);
+  }
+
+  /**
+   * Plain "reload the page" button, next to the version note at the top of
+   * the Übersicht - a manual escape hatch for whenever a client (kiosk
+   * tablet or otherwise) is still showing a stale copy of the dashboard
+   * despite the no-store Cache-Control on the strategy JS (see
+   * __init__.py's _StrategyJSView), without having to dig through browser
+   * settings to clear the cache. Unlike the strategy element above, a
+   * regular custom card's tag name is used as-is (no "ll-strategy-
+   * dashboard-" prefix - that mapping only applies to `type: "custom:..."`
+   * on dashboard *strategies*, not regular cards).
+   */
+  class OekofenReloadButton extends HTMLElement {
+    setConfig(config) {
+      this._config = config || {};
+    }
+
+    set hass(_hass) {
+      // No entity state needed - this is a static action button.
+    }
+
+    connectedCallback() {
+      if (this._built) return;
+      this._built = true;
+      this.innerHTML = `
+        <ha-card>
+          <button type="button" style="
+            width: 100%;
+            padding: 8px 16px;
+            border: none;
+            border-radius: var(--ha-card-border-radius, 12px);
+            background: var(--card-background-color, transparent);
+            color: var(--primary-text-color);
+            font: inherit;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+          ">
+            <ha-icon icon="mdi:refresh"></ha-icon>
+            Dashboard neu laden
+          </button>
+        </ha-card>`;
+      this.querySelector("button").addEventListener("click", () => {
+        window.location.reload();
+      });
+    }
+
+    getCardSize() {
+      return 1;
+    }
+  }
+
+  if (typeof customElements !== "undefined" && !customElements.get("oekofen-reload-button")) {
+    customElements.define("oekofen-reload-button", OekofenReloadButton);
   }
 
   if (typeof window !== "undefined") {
