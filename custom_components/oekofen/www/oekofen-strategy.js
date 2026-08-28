@@ -175,6 +175,29 @@
     return { type: "vertical-stack", cards };
   }
 
+  /** 7-day history-graph + 90-day mean/min/max statistics-graph pair for a Kesselstatus phase-duration sensor. */
+  function phaseDurationCards(title, ids, extraHistoryIds) {
+    if (!ids.length) return [];
+    const historyIds = extraHistoryIds ? [...ids, ...extraHistoryIds] : ids;
+    return [
+      {
+        type: "history-graph",
+        title,
+        hours_to_show: 168,
+        refresh_interval: 60,
+        entities: historyIds.map((id) => ({ entity: id })),
+      },
+      {
+        type: "statistics-graph",
+        title: `${title} (Langzeit, 90 Tage)`,
+        entities: ids.map((id) => ({ entity: id })),
+        days_to_show: 90,
+        period: "day",
+        stat_types: ["mean", "min", "max"],
+      },
+    ];
+  }
+
   /** All entities of a circuit under a given domain, sorted by entity_id (stable, no hardcoded catalog). */
   function domainEntities(circuit, domain) {
     const out = [];
@@ -502,16 +525,23 @@
     // change bar chart. Pull it out of the generic duration-tile bucket
     // into its own chart, same treatment as Feuerraumtemperatur above.
     const zuendzeitIds = sensorIds.filter((id) => /gluhstab_zundzeit/.test(objectIdOf(id)));
+    // Saugdauer (pellet-feed suction duration), Softstartdauer and
+    // Nachlaufdauer - same "updates irregularly, trend matters more than a
+    // per-day count" reasoning as Zündzeit above.
+    const saugdauerIds = sensorIds.filter((id) => /saugdauer/.test(objectIdOf(id)));
+    const softstartdauerIds = sensorIds.filter((id) => /softstartdauer/.test(objectIdOf(id)));
+    const nachlaufdauerIds = sensorIds.filter((id) => /nachlaufdauer/.test(objectIdOf(id)));
+    const phaseDurationBuckets = [zuendzeitIds, saugdauerIds, softstartdauerIds, nachlaufdauerIds];
     const statsTileIds = sensorIds
       .filter((id) => {
-        if (zuendzeitIds.includes(id)) return false;
+        if (phaseDurationBuckets.some((bucket) => bucket.includes(id))) return false;
         const a = states[id].attributes;
         if (a.device_class === "temperature") return false;
         return a.device_class === "duration" || DURATION_UNITS.has(a.unit_of_measurement) || a.state_class === "total_increasing";
       })
       .sort();
 
-    if (!tempIds.length && !statsTileIds.length && !zuendzeitIds.length) return null;
+    if (!tempIds.length && !statsTileIds.length && !phaseDurationBuckets.some((bucket) => bucket.length)) return null;
 
     const cards = [];
 
@@ -555,29 +585,15 @@
       });
     }
 
-    if (zuendzeitIds.length) {
-      // The warning-threshold number entity has no long-term statistics of
-      // its own (HA's recorder only compiles those for sensor state_class
-      // entities), but its plain state history still works fine in a
-      // history-graph, alongside the actual duration, as a reference line.
-      const warnschwelleId = entityIds.find((id) => domainOf(id) === "number" && /gluhstab_warnschwelle/.test(objectIdOf(id)));
-      const zuendzeitHistoryIds = warnschwelleId ? [...zuendzeitIds, warnschwelleId] : zuendzeitIds;
-      cards.push({
-        type: "history-graph",
-        title: "Zündzeit",
-        hours_to_show: 168,
-        refresh_interval: 60,
-        entities: zuendzeitHistoryIds.map((id) => ({ entity: id })),
-      });
-      cards.push({
-        type: "statistics-graph",
-        title: "Zündzeit (Langzeit, 90 Tage)",
-        entities: zuendzeitIds.map((id) => ({ entity: id })),
-        days_to_show: 90,
-        period: "day",
-        stat_types: ["mean", "min", "max"],
-      });
-    }
+    // The warning-threshold number entity has no long-term statistics of its
+    // own (HA's recorder only compiles those for sensor state_class
+    // entities), but its plain state history still works fine in a
+    // history-graph, alongside the actual duration, as a reference line.
+    const warnschwelleId = entityIds.find((id) => domainOf(id) === "number" && /gluhstab_warnschwelle/.test(objectIdOf(id)));
+    cards.push(...phaseDurationCards("Zündzeit", zuendzeitIds, warnschwelleId ? [warnschwelleId] : null));
+    cards.push(...phaseDurationCards("Saugdauer", saugdauerIds));
+    cards.push(...phaseDurationCards("Softstartdauer", softstartdauerIds));
+    cards.push(...phaseDurationCards("Nachlaufdauer", nachlaufdauerIds));
 
     if (counterCountIds.length) {
       cards.push({
