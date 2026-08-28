@@ -306,6 +306,18 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.6
+
+- 📊 **Neue Sensoren "Softstartdauer" und "Nachlaufdauer"**: Dauer der
+  letzten "Softstart"- bzw. "Nachlauf"-Phase des Kesselstatus, in Minuten -
+  gleicher `_KesselstatusPhaseDuration`-Mechanismus wie bei Zündzeit und
+  Saugdauer, jeweils mit eigenem 7-Tage-Verlaufs- plus
+  90-Tage-Langzeitstatistik-Chart im Dashboard. Übersteht HA-Neustarts
+  (auch mitten in einer laufenden Phase). Keine Warnschwelle/Benachrichtigung.
+- 🧹 Dashboard-Strategy: die vier Phasen-Dauer-Charts (Zündzeit, Saugdauer,
+  Softstartdauer, Nachlaufdauer) teilen sich jetzt einen gemeinsamen
+  `phaseDurationCards()`-Helper statt vier fast identischer Code-Blöcke.
+
 ### Version 0.9.5
 
 - 📊 **Neuer Sensor "Saugdauer"**: Dauer der letzten "Saugen"-Phase
@@ -699,5 +711,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.5
+**Version**: 0.9.6
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

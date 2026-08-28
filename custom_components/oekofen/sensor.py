@@ -23,7 +23,12 @@ from homeassistant.config_entries import ConfigEntry
 
 from .coordinator import OekofenCoordinator
 from .entity_helpers import build_device_info
-from .ignition_diagnostics import OekofenGluehstabZuendzeit, OekofenSaugdauer
+from .ignition_diagnostics import (
+    OekofenGluehstabZuendzeit,
+    OekofenNachlaufdauer,
+    OekofenSaugdauer,
+    OekofenSoftstartdauer,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -347,6 +352,8 @@ async def async_setup_entry(
 
     entities.append(OekofenGluehstabZuendzeit(coordinator, config_entry.entry_id, device_name))
     entities.append(OekofenSaugdauer(coordinator, config_entry.entry_id, device_name))
+    entities.append(OekofenSoftstartdauer(coordinator, config_entry.entry_id, device_name))
+    entities.append(OekofenNachlaufdauer(coordinator, config_entry.entry_id, device_name))
     entities.append(OekofenIntegrationVersion(config_entry.entry_id, device_name))
 
     _register_fault_relay_watcher(hass, coordinator, config_entry.entry_id)

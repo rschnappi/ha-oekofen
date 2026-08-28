@@ -11,7 +11,9 @@ from custom_components.oekofen.ignition_diagnostics import (
     KESSELSTATUS_PARAMETER,
     OekofenGluehstabWarnschwelle,
     OekofenGluehstabZuendzeit,
+    OekofenNachlaufdauer,
     OekofenSaugdauer,
+    OekofenSoftstartdauer,
     _is_zuendung,
     _label_matches,
     _resolve_label,
@@ -350,3 +352,53 @@ def test_saugdauer_records_duration_without_notification():
         assert entity._attr_native_value is not None
         assert entity._attr_native_value >= 0
         mock_notify.assert_not_called()
+
+
+# --- OekofenSoftstartdauer / OekofenNachlaufdauer ---------------------------
+# Same _KesselstatusPhaseDuration base as Zündzeit/Saugdauer above - only
+# check what's specific to each subclass (label tracked, key/name).
+
+def test_softstartdauer_unique_id_and_name():
+    entity = _make_entity(FakeCoordinator({}), cls=OekofenSoftstartdauer)
+    assert entity.unique_id == "entry1_softstartdauer"
+    assert entity._attr_name == "Softstartdauer"
+
+
+def test_softstartdauer_tracks_softstart_and_records_duration():
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Zuendung")})
+    entity = _make_entity(coord, cls=OekofenSoftstartdauer)
+    entity._handle_coordinator_update()
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Softstart")
+    entity._handle_coordinator_update()
+    assert entity._phase_since is not None
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Leistungsbrand")
+    entity._handle_coordinator_update()
+
+    assert entity._phase_since is None
+    assert entity._attr_native_value is not None
+    assert entity._attr_native_value >= 0
+
+
+def test_nachlaufdauer_unique_id_and_name():
+    entity = _make_entity(FakeCoordinator({}), cls=OekofenNachlaufdauer)
+    assert entity.unique_id == "entry1_nachlaufdauer"
+    assert entity._attr_name == "Nachlaufdauer"
+
+
+def test_nachlaufdauer_tracks_nachlauf_and_records_duration():
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Leistungsbrand")})
+    entity = _make_entity(coord, cls=OekofenNachlaufdauer)
+    entity._handle_coordinator_update()
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Nachlauf")
+    entity._handle_coordinator_update()
+    assert entity._phase_since is not None
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Aus")
+    entity._handle_coordinator_update()
+
+    assert entity._phase_since is None
+    assert entity._attr_native_value is not None
+    assert entity._attr_native_value >= 0

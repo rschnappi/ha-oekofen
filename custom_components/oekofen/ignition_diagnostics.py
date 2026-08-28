@@ -1,4 +1,5 @@
-"""Kesselstatus-phase-duration diagnostics (Zündzeit, Saugdauer).
+"""Kesselstatus-phase-duration diagnostics (Zündzeit, Saugdauer,
+Softstartdauer, Nachlaufdauer).
 
 Tracks how long the boiler spends in specific CAPPL:FA[0].L_kesselstatus
 phases - each occurrence's duration is exposed as its own sensor (in
@@ -16,8 +17,19 @@ minutes, with automatic long-term statistics for trend viewing):
   this one additionally gets a persistent notification once a
   user-adjustable threshold is exceeded.
 - "Saugen" (suction): the pellet-feed vacuum-conveying phase.
+- "Softstart": the power-up ramp between "Zuendung" and full-load
+  "Leistungsbrand" - a lengthening ramp can indicate reduced combustion
+  efficiency or fuel-quality drift.
+- "Nachlauf": the post-burn fan run-on after "Leistungsbrand" ends - a
+  lengthening run-on can indicate fan or sensor wear.
 
-Both share the same "track how long Kesselstatus stays in one label"
+Only the four Kesselstatus labels confirmed present on real device data
+(see FORMAT_TEXTS in tests/test_ignition_diagnostics.py) are tracked here.
+"Leistungsbrand" (main burn) and "Aus" (idle) already have their own
+device-native counters (burner_runtime/average_runtime/standby_time in
+sensor.py) rather than a per-occurrence duration sensor here.
+
+All four share the same "track how long Kesselstatus stays in one label"
 mechanism (_KesselstatusPhaseDuration below); only the label matched and
 what (if anything) happens once a duration is recorded differ.
 
@@ -58,8 +70,12 @@ DOMAIN = "oekofen"
 KESSELSTATUS_PARAMETER = "CAPPL:FA[0].L_kesselstatus"
 ZUENDUNG_LABEL = "zuendung"
 SAUGEN_LABEL = "saugen"
+SOFTSTART_LABEL = "softstart"
+NACHLAUF_LABEL = "nachlauf"
 ZUENDZEIT_KEY = "gluehstab_zuendzeit"
 SAUGDAUER_KEY = "saugdauer"
+SOFTSTARTDAUER_KEY = "softstartdauer"
+NACHLAUFDAUER_KEY = "nachlaufdauer"
 WARNSCHWELLE_KEY = "gluehstab_warnschwelle"
 # Based on one observed real cold-start ignition (~408s/6.8min) - tune
 # this via the "Glühstab Warnschwelle" number entity once more samples
@@ -302,6 +318,26 @@ class OekofenSaugdauer(_KesselstatusPhaseDuration):
 
     def __init__(self, coordinator, entry_id: str, device_name: str) -> None:
         super().__init__(coordinator, entry_id, device_name, SAUGDAUER_KEY, "Saugdauer", "mdi:vacuum")
+
+
+class OekofenSoftstartdauer(_KesselstatusPhaseDuration):
+    """Duration of the boiler's last "Softstart" (power-up ramp after
+    ignition, before full-load "Leistungsbrand") Kesselstatus phase."""
+
+    PHASE_LABEL = SOFTSTART_LABEL
+
+    def __init__(self, coordinator, entry_id: str, device_name: str) -> None:
+        super().__init__(coordinator, entry_id, device_name, SOFTSTARTDAUER_KEY, "Softstartdauer", "mdi:fire-alert")
+
+
+class OekofenNachlaufdauer(_KesselstatusPhaseDuration):
+    """Duration of the boiler's last "Nachlauf" (post-burn fan run-on)
+    Kesselstatus phase."""
+
+    PHASE_LABEL = NACHLAUF_LABEL
+
+    def __init__(self, coordinator, entry_id: str, device_name: str) -> None:
+        super().__init__(coordinator, entry_id, device_name, NACHLAUFDAUER_KEY, "Nachlaufdauer", "mdi:fan-clock")
 
 
 class OekofenGluehstabWarnschwelle(RestoreNumber):
