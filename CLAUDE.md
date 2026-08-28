@@ -59,7 +59,18 @@ geraten/konfiguriert.
 - Wird über `add_extra_js_url()` registriert, URL cache-gebustet mit der
   `manifest.json`-Version als Query-Param (`?v=<version>`) — **jede**
   Änderung an der JS-Datei braucht einen Versions-Bump, sonst kommt sie bei
-  Nutzern nicht automatisch an (siehe PR #30/#31).
+  Nutzern nicht automatisch an (siehe PR #30/#31). Seit 0.9.7 gilt das
+  doppelt: die Datei wird mit `max-age=31536000, immutable` ausgeliefert,
+  ohne Bump kommt sie also **gar nicht** mehr an.
+- **Die Strategy-JS muss cachebar bleiben.** HA's Frontend gibt einem
+  Custom-Strategy-Element nur wenige Sekunden zum Registrieren. Mit
+  `no-store` (0.9.2–0.9.6) brauchte *jeder* Dashboard-Aufruf einen frischen
+  Netz-Roundtrip innerhalb dieser Frist — im Desktop-Browser am LAN
+  unauffällig, in der Android-App-WebView reproduzierbar zu langsam →
+  „Timeout waiting for strategy element …" bei jedem Versuch, über WLAN,
+  Mobilfunk und VPN gleichermaßen (siehe PR #52). `no-store` zielte
+  ohnehin auf die falsche Datei: die JS kann durch `?v=` nicht veralten,
+  veralten kann nur HA's `index.html` mit dem `<script>`-Tag darin.
 - `thermostat`-Karten zeigen `hvac_mode`/`preset_mode` **nicht** von sich
   aus direkt an — braucht explizite `features: [{type: "climate-hvac-modes"}, ...]`
   (siehe PR #37/#39).
@@ -67,8 +78,11 @@ geraten/konfiguriert.
   0-1000°C vs. alles andere 0-100°C) brauchen eigene Charts, sonst
   flacht ein `history-graph` alles andere zu einer Linie ab (siehe PR #30).
 - Bekannter Fehler `"Timeout waiting for strategy element ... to be
-  registered"` → siehe Setup-Reihenfolge oben, nicht vorschnell auf Cache
-  schieben.
+  registered"` → zwei bekannte Ursachen, **beide keine Cache-Sache**:
+  Setup-Reihenfolge (oben) und ein zu langsamer JS-Fetch innerhalb der
+  Registrierungsfrist (`no-store`, siehe oben). Nicht vorschnell auf Cache
+  schieben — und Nutzer nicht wiederholt Cache leeren lassen, das macht es
+  bei der zweiten Ursache sogar schlimmer.
 
 ## Testing
 

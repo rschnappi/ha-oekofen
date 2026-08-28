@@ -127,18 +127,63 @@ async def test_platforms_forwarded_before_first_coordinator_refresh(mocks):
     assert order == ["forward", "refresh"]
 
 
-async def test_strategy_js_view_serves_content_with_no_store_header():
-    """The whole point of serving this from a custom view instead of HA's
-    built-in static-path helper: an explicit no-store header, so a
-    browser/WebView can never serve a stale cached copy regardless of its
-    own caching heuristics - see the class docstring for the "works after
-    clearing cache, breaks again after a couple of loads" symptom this
-    fixes."""
+def _request(headers=None):
+    request = MagicMock()
+    request.headers = headers or {}
+    return request
+
+
+async def test_strategy_js_view_serves_content_cacheable():
+    """The URL is version-busted (?v=<manifest version>), so its content
+    can never change - and it *must* be cacheable: with no-store, every
+    dashboard load had to complete a fresh fetch inside the frontend's
+    few-second strategy-registration timeout, which the Android app's
+    WebView regularly missed ("Timeout waiting for strategy element ...").
+    See _StrategyJSView's docstring."""
     view = _StrategyJSView("// the actual js content")
-    response = await view.get(MagicMock())
+    response = await view.get(_request())
 
     assert response.text == "// the actual js content"
-    assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
+    assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+    assert response.headers["ETag"]
+
+
+async def test_strategy_js_view_etag_changes_with_content():
+    """A forgotten manifest version bump would leave the URL unchanged; the
+    ETag is content-derived so it stays truthful regardless."""
+    assert (
+        _StrategyJSView("// one")._etag != _StrategyJSView("// two")._etag
+    )
+
+
+async def test_strategy_js_view_answers_matching_if_none_match_with_304():
+    """Clients that revalidate anyway despite "immutable" get an empty 304
+    instead of the full body - still fast enough to beat the strategy
+    timeout."""
+    view = _StrategyJSView("// the actual js content")
+
+    response = await view.get(_request({"If-None-Match": view._etag}))
+
+    assert response.status == 304
+
+
+async def test_strategy_js_view_handles_weak_and_multiple_if_none_match():
+    """A proxy may weaken the tag and/or send several candidates."""
+    view = _StrategyJSView("// the actual js content")
+
+    header = f'"something-else", W/{view._etag}'
+    response = await view.get(_request({"If-None-Match": header}))
+
+    assert response.status == 304
+
+
+async def test_strategy_js_view_serves_body_on_etag_mismatch():
+    view = _StrategyJSView("// the actual js content")
+
+    response = await view.get(_request({"If-None-Match": '"stale-tag"'}))
+
+    assert response.status == 200
+    assert response.text == "// the actual js content"
 
 
 async def test_concurrent_frontend_registration_second_caller_waits_for_first():

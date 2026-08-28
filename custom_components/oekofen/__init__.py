@@ -1,5 +1,6 @@
 """The ÖkOfen Pellematic integration."""
 import asyncio
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -39,23 +40,45 @@ PLATFORMS = [
 
 
 class _StrategyJSView(HomeAssistantView):
-    """Serves the bundled dashboard-strategy JS with an explicit no-store
-    Cache-Control header.
+    """Serves the bundled dashboard-strategy JS, cacheable *because* its URL
+    is version-busted.
 
-    HA's built-in static-path helper only offers a binary choice:
-    cache_headers=True (a month-long Cache-Control) or cache_headers=False
-    (no explicit header at all, falling back to aiohttp's FileResponse
-    defaults - ETag/Last-Modified only). The latter still leaves it up to
-    each browser/WebView's own heuristics whether to treat the response as
-    cacheable, which some kiosk-tablet WebViews apparently do quite
-    aggressively: even with the version-based cache-busting query param
-    (see add_extra_js_url below), the strategy element registration kept
-    intermittently timing out on repeat loads - working right after
-    clearing the browser cache, then failing again after a couple of
-    loads, exactly the pattern of a client occasionally serving a cached
-    response instead of asking the server. An explicit no-store header
-    removes that ambiguity instead of relying on cache_headers=False's
-    unspecified fallback behavior.
+    The URL always carries ?v=<manifest version> (see add_extra_js_url
+    below), so a given URL's content never changes - which makes
+    "immutable" both correct and, more importantly, necessary.
+
+    This deliberately replaces the earlier no-store header, which caused a
+    worse bug than the one it was meant to fix:
+
+    HA's frontend gives a custom dashboard strategy only a couple of
+    seconds to register its custom element before giving up with "Timeout
+    waiting for strategy element ll-strategy-dashboard-oekofen-strategy to
+    be registered". With no-store, every single dashboard load had to
+    complete a fresh network round-trip for this file inside that window,
+    with no local copy to fall back on. A desktop browser on the LAN does
+    that in milliseconds and never notices; the Android companion app's
+    WebView - cold-started, competing with the rest of the frontend bundle
+    and the user's other custom-card resources - regularly did not, and
+    failed with exactly that timeout on every attempt, over WLAN, mobile
+    and VPN alike, and *more* reliably right after clearing its cache.
+
+    no-store was also aimed at the wrong resource: the JS is already
+    version-busted, so it cannot go stale. What can go stale is HA's
+    index.html, which is what carries the <script type="module"> tag
+    pointing at this URL - and a no-store header on the JS does nothing
+    about that.
+
+    Caching it properly means each client fetches a given version once and
+    then registers the element straight from its local cache on every
+    later load, well inside the frontend's timeout. The trade-off is that
+    editing the JS *without* bumping manifest.json's version leaves
+    clients on the old copy indefinitely - that version bump is already
+    mandatory for any JS change (see CLAUDE.md).
+
+    The ETag/304 path only matters for clients that revalidate anyway
+    despite "immutable" (some proxies, some WebViews): they get an empty
+    304 instead of the full body, which is still fast enough to beat the
+    strategy timeout.
     """
 
     url = STRATEGY_URL_PATH
@@ -64,12 +87,33 @@ class _StrategyJSView(HomeAssistantView):
 
     def __init__(self, js_content: str) -> None:
         self._js_content = js_content
+        # Hash the content rather than reusing the manifest version, so the
+        # ETag stays honest even if a JS edit ever does ship without the
+        # required version bump.
+        self._etag = f'"{hashlib.sha256(js_content.encode()).hexdigest()[:32]}"'
+
+    def _cache_headers(self) -> dict[str, str]:
+        return {
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "ETag": self._etag,
+        }
 
     async def get(self, request: web.Request) -> web.Response:
+        # If-None-Match may carry several candidates, and/or a weak ("W/")
+        # prefix a proxy added along the way - match on the bare tag.
+        if_none_match = request.headers.get("If-None-Match", "")
+        candidates = {
+            candidate.strip().removeprefix("W/")
+            for candidate in if_none_match.split(",")
+            if candidate.strip()
+        }
+        if self._etag in candidates:
+            return web.Response(status=304, headers=self._cache_headers())
+
         return web.Response(
             text=self._js_content,
             content_type="application/javascript",
-            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+            headers=self._cache_headers(),
         )
 
 
@@ -101,10 +145,12 @@ async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
         js_content = await hass.async_add_executor_job(js_path.read_text)
         hass.http.register_view(_StrategyJSView(js_content))
 
-        # Also cache-bust with the integration version, so a URL a browser
-        # somehow already has cached (proxies, some WebViews ignoring
-        # Cache-Control) still gets treated as a different resource after an
-        # update, on top of the view's own no-store header above.
+        # The version in the query string is what makes the view's long
+        # immutable Cache-Control above safe: an update changes the URL, so
+        # every client refetches exactly once per version and serves it from
+        # its own cache on every load after that - fast enough to register
+        # the strategy element inside the frontend's registration timeout
+        # even on a slow WebView. See _StrategyJSView's docstring.
         add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={_MANIFEST_VERSION}")
     finally:
         event.set()
