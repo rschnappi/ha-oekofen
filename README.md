@@ -306,6 +306,18 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.5
+
+- 📊 **Neuer Sensor "Saugdauer"**: Dauer der letzten "Saugen"-Phase
+  (Pellet-Förderung per Unterdruck) des Kesselstatus, in Minuten - analog
+  zur bestehenden Glühstab-Zündzeit (gleicher zugrunde liegende
+  Mechanismus, `_KesselstatusPhaseDuration` in `ignition_diagnostics.py`,
+  jetzt für beide gemeinsam genutzt). Übersteht HA-Neustarts (auch
+  mitten in einer laufenden Saugphase) und bekommt ein eigenes
+  7-Tage-Verlaufs- plus 90-Tage-Langzeitstatistik-Chart im Dashboard,
+  genau wie die Zündzeit. Keine Warnschwelle/Benachrichtigung (die ist
+  spezifisch für Glühstab-Verschleiß).
+
 ### Version 0.9.4
 
 - 🐛 **Zündzeit zeigte trotz 0.9.3 weiter Sekunden statt Minuten an.**
@@ -687,5 +699,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.4
+**Version**: 0.9.5
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

@@ -502,16 +502,19 @@
     // change bar chart. Pull it out of the generic duration-tile bucket
     // into its own chart, same treatment as Feuerraumtemperatur above.
     const zuendzeitIds = sensorIds.filter((id) => /gluhstab_zundzeit/.test(objectIdOf(id)));
+    // Saugdauer (pellet-feed suction duration) - same "updates irregularly,
+    // trend matters more than a per-day count" reasoning as Zündzeit above.
+    const saugdauerIds = sensorIds.filter((id) => /saugdauer/.test(objectIdOf(id)));
     const statsTileIds = sensorIds
       .filter((id) => {
-        if (zuendzeitIds.includes(id)) return false;
+        if (zuendzeitIds.includes(id) || saugdauerIds.includes(id)) return false;
         const a = states[id].attributes;
         if (a.device_class === "temperature") return false;
         return a.device_class === "duration" || DURATION_UNITS.has(a.unit_of_measurement) || a.state_class === "total_increasing";
       })
       .sort();
 
-    if (!tempIds.length && !statsTileIds.length && !zuendzeitIds.length) return null;
+    if (!tempIds.length && !statsTileIds.length && !zuendzeitIds.length && !saugdauerIds.length) return null;
 
     const cards = [];
 
@@ -573,6 +576,24 @@
         type: "statistics-graph",
         title: "Zündzeit (Langzeit, 90 Tage)",
         entities: zuendzeitIds.map((id) => ({ entity: id })),
+        days_to_show: 90,
+        period: "day",
+        stat_types: ["mean", "min", "max"],
+      });
+    }
+
+    if (saugdauerIds.length) {
+      cards.push({
+        type: "history-graph",
+        title: "Saugdauer",
+        hours_to_show: 168,
+        refresh_interval: 60,
+        entities: saugdauerIds.map((id) => ({ entity: id })),
+      });
+      cards.push({
+        type: "statistics-graph",
+        title: "Saugdauer (Langzeit, 90 Tage)",
+        entities: saugdauerIds.map((id) => ({ entity: id })),
         days_to_show: 90,
         period: "day",
         stat_types: ["mean", "min", "max"],

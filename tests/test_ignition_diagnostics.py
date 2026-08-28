@@ -1,4 +1,5 @@
-"""Tests for the Zündzeit (ignition-duration) diagnostics (ignition_diagnostics.py)."""
+"""Tests for the Kesselstatus-phase-duration diagnostics (Zündzeit, Saugdauer -
+ignition_diagnostics.py)."""
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,9 +11,11 @@ from custom_components.oekofen.ignition_diagnostics import (
     KESSELSTATUS_PARAMETER,
     OekofenGluehstabWarnschwelle,
     OekofenGluehstabZuendzeit,
+    OekofenSaugdauer,
     _is_zuendung,
+    _label_matches,
     _resolve_label,
-    _ZuendzeitExtraStoredData,
+    _PhaseDurationExtraStoredData,
     get_warnschwelle,
 )
 
@@ -51,6 +54,13 @@ def test_is_zuendung_case_and_whitespace_insensitive():
     assert _is_zuendung(None) is None
 
 
+def test_label_matches_is_generic_over_target():
+    assert _label_matches("Saugen", "saugen") is True
+    assert _label_matches(" Saugen ", "saugen") is True
+    assert _label_matches("Zuendung", "saugen") is False
+    assert _label_matches(None, "saugen") is None
+
+
 def test_get_warnschwelle_default_when_entity_missing():
     hass = MagicMock()
     with patch("custom_components.oekofen.ignition_diagnostics.er.async_get") as mock_er:
@@ -74,51 +84,51 @@ def test_get_warnschwelle_falls_back_on_unavailable_state():
         assert get_warnschwelle(hass, "entry1") == DEFAULT_WARNSCHWELLE_MINUTES
 
 
-def _make_entity(coordinator):
-    entity = OekofenGluehstabZuendzeit(coordinator, "entry1", "Test")
+def _make_entity(coordinator, cls=OekofenGluehstabZuendzeit):
+    entity = cls(coordinator, "entry1", "Test")
     entity.hass = MagicMock()
     entity.async_write_ha_state = MagicMock()
     return entity
 
 
-def test_extra_stored_data_round_trip_preserves_in_progress_ignition():
+def test_extra_stored_data_round_trip_preserves_in_progress_phase():
     since = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
-    data = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=since, last_is_zuendung=True)
+    data = _PhaseDurationExtraStoredData(native_value=408, phase_since=since, last_in_phase=True)
 
-    restored = _ZuendzeitExtraStoredData.from_dict(data.as_dict())
+    restored = _PhaseDurationExtraStoredData.from_dict(data.as_dict())
 
     assert restored.native_value == 408
-    assert restored.zuendung_since == since
-    assert restored.last_is_zuendung is True
+    assert restored.phase_since == since
+    assert restored.last_in_phase is True
 
 
-def test_extra_stored_data_round_trip_handles_no_in_progress_ignition():
-    data = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=None, last_is_zuendung=False)
-    restored = _ZuendzeitExtraStoredData.from_dict(data.as_dict())
-    assert restored.zuendung_since is None
-    assert restored.last_is_zuendung is False
+def test_extra_stored_data_round_trip_handles_no_in_progress_phase():
+    data = _PhaseDurationExtraStoredData(native_value=408, phase_since=None, last_in_phase=False)
+    restored = _PhaseDurationExtraStoredData.from_dict(data.as_dict())
+    assert restored.phase_since is None
+    assert restored.last_in_phase is False
 
 
 def test_extra_restore_state_data_reflects_current_tracking_state():
     entity = _make_entity(FakeCoordinator({}))
     since = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
-    entity._zuendung_since = since
-    entity._last_is_zuendung = True
+    entity._phase_since = since
+    entity._last_in_phase = True
     entity._attr_native_value = None
 
     stored = entity.extra_restore_state_data
 
-    assert stored.zuendung_since == since
-    assert stored.last_is_zuendung is True
+    assert stored.phase_since == since
+    assert stored.last_in_phase is True
 
 
-async def test_async_added_to_hass_restores_in_progress_ignition_across_restart():
-    """A restart landing mid-ignition must not lose track of when it
-    started - otherwise that cycle's duration is silently never recorded
-    once it later completes."""
+async def test_async_added_to_hass_restores_in_progress_phase_across_restart():
+    """A restart landing mid-occurrence must not lose track of when it
+    started - otherwise that occurrence's duration is silently never
+    recorded once it later completes."""
     entity = _make_entity(FakeCoordinator({}))
     since = datetime(2026, 8, 19, 12, 0, 0, tzinfo=timezone.utc)
-    stored = _ZuendzeitExtraStoredData(native_value=6.8, zuendung_since=since, last_is_zuendung=True)
+    stored = _PhaseDurationExtraStoredData(native_value=6.8, phase_since=since, last_in_phase=True)
 
     with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
         entity.async_get_last_extra_data = AsyncMock(
@@ -127,8 +137,8 @@ async def test_async_added_to_hass_restores_in_progress_ignition_across_restart(
         await entity.async_added_to_hass()
 
     assert entity._attr_native_value == 6.8
-    assert entity._zuendung_since == since
-    assert entity._last_is_zuendung is True
+    assert entity._phase_since == since
+    assert entity._last_in_phase is True
 
 
 def test_migrates_away_from_stale_seconds_unit_override():
@@ -189,8 +199,8 @@ def test_first_seen_value_does_not_trigger_transition():
     coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Zuendung")})
     entity = _make_entity(coord)
     entity._handle_coordinator_update()
-    assert entity._zuendung_since is None  # no prior state to compare against yet
-    assert entity._last_is_zuendung is True
+    assert entity._phase_since is None  # no prior state to compare against yet
+    assert entity._last_in_phase is True
 
 
 def test_warm_restart_skipping_zuendung_never_starts_a_timer():
@@ -204,7 +214,7 @@ def test_warm_restart_skipping_zuendung_never_starts_a_timer():
     entity._handle_coordinator_update()
 
     assert entity._attr_native_value is None
-    assert entity._zuendung_since is None
+    assert entity._phase_since is None
 
 
 def test_zuendung_to_softstart_records_duration_and_checks_threshold():
@@ -214,14 +224,14 @@ def test_zuendung_to_softstart_records_duration_and_checks_threshold():
 
     coord.data[KESSELSTATUS_PARAMETER] = _point("Zuendung")
     entity._handle_coordinator_update()  # -> Zuendung
-    assert entity._zuendung_since is not None
+    assert entity._phase_since is not None
 
     with patch("custom_components.oekofen.ignition_diagnostics.get_warnschwelle", return_value=999):
         with patch("custom_components.oekofen.ignition_diagnostics.async_create_notification") as mock_notify:
             coord.data[KESSELSTATUS_PARAMETER] = _point("Softstart")
             entity._handle_coordinator_update()  # Zuendung -> Softstart
 
-            assert entity._zuendung_since is None
+            assert entity._phase_since is None
             assert entity._attr_native_value is not None
             assert entity._attr_native_value >= 0
             mock_notify.assert_not_called()  # under threshold
@@ -286,7 +296,7 @@ async def test_warnschwelle_restores_plausible_minutes_value_unchanged():
 
 async def test_zuendzeit_restores_legacy_seconds_value_as_minutes():
     entity = _make_entity(FakeCoordinator({}))
-    stored = _ZuendzeitExtraStoredData(native_value=408, zuendung_since=None, last_is_zuendung=False)
+    stored = _PhaseDurationExtraStoredData(native_value=408, phase_since=None, last_in_phase=False)
 
     with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
         entity.async_get_last_extra_data = AsyncMock(
@@ -295,3 +305,48 @@ async def test_zuendzeit_restores_legacy_seconds_value_as_minutes():
         await entity.async_added_to_hass()
 
     assert entity._attr_native_value == 6.8
+
+
+# --- OekofenSaugdauer -------------------------------------------------------
+# Same _KesselstatusPhaseDuration base as Zündzeit above (restore, unit
+# migration, transition-detection are already covered there) - these only
+# check what's specific to this subclass: which label it tracks, its
+# key/name, and that it does *not* fire a warning notification (that's
+# Zündzeit-only behaviour, tied to glow-plug wear, not suction duration).
+
+def test_saugdauer_unique_id_and_name():
+    entity = _make_entity(FakeCoordinator({}), cls=OekofenSaugdauer)
+    assert entity.unique_id == "entry1_saugdauer"
+    assert entity._attr_name == "Saugdauer"
+
+
+def test_saugdauer_tracks_saugen_not_zuendung():
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Start")})
+    entity = _make_entity(coord, cls=OekofenSaugdauer)
+    entity._handle_coordinator_update()
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Zuendung")
+    entity._handle_coordinator_update()
+    assert entity._phase_since is None  # ignition isn't this sensor's phase
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Saugen")
+    entity._handle_coordinator_update()
+    assert entity._phase_since is not None
+
+
+def test_saugdauer_records_duration_without_notification():
+    coord = FakeCoordinator({KESSELSTATUS_PARAMETER: _point("Nachlauf")})
+    entity = _make_entity(coord, cls=OekofenSaugdauer)
+    entity._handle_coordinator_update()
+
+    coord.data[KESSELSTATUS_PARAMETER] = _point("Saugen")
+    entity._handle_coordinator_update()
+
+    with patch("custom_components.oekofen.ignition_diagnostics.async_create_notification") as mock_notify:
+        coord.data[KESSELSTATUS_PARAMETER] = _point("Start")
+        entity._handle_coordinator_update()
+
+        assert entity._phase_since is None
+        assert entity._attr_native_value is not None
+        assert entity._attr_native_value >= 0
+        mock_notify.assert_not_called()

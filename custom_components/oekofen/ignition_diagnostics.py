@@ -1,26 +1,32 @@
-"""Zündzeit (ignition-duration) diagnostics.
+"""Kesselstatus-phase-duration diagnostics (Zündzeit, Saugdauer).
 
-Tracks how long the boiler spends in its own "Zuendung" (ignition)
-Kesselstatus phase - the window between "Start" and "Softstart" where the
-Glühstab (glow plug) heats the fuel bed until flame is established. This
-is the device's own, explicit ignition window (CAPPL:FA[0].L_kesselstatus),
-which turned out to be far more accurate than an earlier attempt at
-inferring it from the Glühstab relay's own on/off time: warm restarts
-(embers still present) skip the Glühstab entirely and jump straight to
-"Softstart"/"Leistungsbrand", so relay-on-time alone doesn't isolate a
-real cold-start ignition the way the "Zuendung" status does.
+Tracks how long the boiler spends in specific CAPPL:FA[0].L_kesselstatus
+phases - each occurrence's duration is exposed as its own sensor (in
+minutes, with automatic long-term statistics for trend viewing):
 
-A lengthening ignition time is a leading indicator of a worn/failing
-glow plug, so this is exposed as its own sensor (with automatic
-long-term statistics for trend viewing) plus a persistent notification
-once a user-adjustable threshold is exceeded.
+- "Zuendung" (ignition): the window between "Start" and "Softstart" where
+  the Glühstab (glow plug) heats the fuel bed until flame is established.
+  This is the device's own, explicit ignition window, which turned out to
+  be far more accurate than an earlier attempt at inferring it from the
+  Glühstab relay's own on/off time: warm restarts (embers still present)
+  skip the Glühstab entirely and jump straight to "Softstart"/
+  "Leistungsbrand", so relay-on-time alone doesn't isolate a real
+  cold-start ignition the way the "Zuendung" status does. A lengthening
+  ignition time is a leading indicator of a worn/failing glow plug, so
+  this one additionally gets a persistent notification once a
+  user-adjustable threshold is exceeded.
+- "Saugen" (suction): the pellet-feed vacuum-conveying phase.
 
-The threshold is a plain Home Assistant-side setting (not backed by any
-device parameter), so it's looked up by unique_id via the entity
-registry rather than by guessing its entity_id - Home Assistant's
-slugify only strips umlauts rather than transliterating them (ä -> a,
-not ae), which has already caused mismatched dashboard entity_ids once
-this session.
+Both share the same "track how long Kesselstatus stays in one label"
+mechanism (_KesselstatusPhaseDuration below); only the label matched and
+what (if anything) happens once a duration is recorded differ.
+
+The ignition-duration warning threshold is a plain Home Assistant-side
+setting (not backed by any device parameter), so it's looked up by
+unique_id via the entity registry rather than by guessing its entity_id -
+Home Assistant's slugify only strips umlauts rather than transliterating
+them (ä -> a, not ae), which has already caused mismatched dashboard
+entity_ids once this session.
 """
 import logging
 from dataclasses import dataclass
@@ -51,7 +57,9 @@ DOMAIN = "oekofen"
 
 KESSELSTATUS_PARAMETER = "CAPPL:FA[0].L_kesselstatus"
 ZUENDUNG_LABEL = "zuendung"
+SAUGEN_LABEL = "saugen"
 ZUENDZEIT_KEY = "gluehstab_zuendzeit"
+SAUGDAUER_KEY = "saugdauer"
 WARNSCHWELLE_KEY = "gluehstab_warnschwelle"
 # Based on one observed real cold-start ignition (~408s/6.8min) - tune
 # this via the "Glühstab Warnschwelle" number entity once more samples
@@ -85,10 +93,14 @@ def _resolve_label(point: Optional[Dict[str, Any]]) -> Optional[str]:
     return str(value)
 
 
-def _is_zuendung(label: Optional[str]) -> Optional[bool]:
+def _label_matches(label: Optional[str], target: str) -> Optional[bool]:
     if label is None:
         return None
-    return label.strip().lower() == ZUENDUNG_LABEL
+    return label.strip().lower() == target
+
+
+def _is_zuendung(label: Optional[str]) -> Optional[bool]:
+    return _label_matches(label, ZUENDUNG_LABEL)
 
 
 def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAULT_WARNSCHWELLE_MINUTES) -> float:
@@ -106,69 +118,77 @@ def get_warnschwelle(hass: HomeAssistant, entry_id: str, default: float = DEFAUL
 
 
 @dataclass
-class _ZuendzeitExtraStoredData(ExtraStoredData):
-    """Adds the in-progress-ignition tracking state to what RestoreSensor
-    normally persists (just native_value) - see the class docstring below
-    on why that in-progress state needs restoring too."""
+class _PhaseDurationExtraStoredData(ExtraStoredData):
+    """Adds the in-progress-phase tracking state to what RestoreSensor
+    normally persists (just native_value) - see
+    _KesselstatusPhaseDuration's docstring on why that in-progress state
+    needs restoring too."""
 
-    native_value: Optional[int]
-    zuendung_since: Optional[datetime]
-    last_is_zuendung: Optional[bool]
+    native_value: Optional[float]
+    phase_since: Optional[datetime]
+    last_in_phase: Optional[bool]
 
     def as_dict(self) -> Dict[str, Any]:
         return {
             "native_value": self.native_value,
-            "zuendung_since": self.zuendung_since.isoformat() if self.zuendung_since else None,
-            "last_is_zuendung": self.last_is_zuendung,
+            "phase_since": self.phase_since.isoformat() if self.phase_since else None,
+            "last_in_phase": self.last_in_phase,
         }
 
     @classmethod
-    def from_dict(cls, restored: Dict[str, Any]) -> "_ZuendzeitExtraStoredData":
-        zuendung_since = restored.get("zuendung_since")
+    def from_dict(cls, restored: Dict[str, Any]) -> "_PhaseDurationExtraStoredData":
+        phase_since = restored.get("phase_since")
         return cls(
             native_value=restored.get("native_value"),
-            zuendung_since=dt_util.parse_datetime(zuendung_since) if zuendung_since else None,
-            last_is_zuendung=restored.get("last_is_zuendung"),
+            phase_since=dt_util.parse_datetime(phase_since) if phase_since else None,
+            last_in_phase=restored.get("last_in_phase"),
         )
 
 
-class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
-    """Duration of the boiler's last "Zuendung" (ignition) Kesselstatus phase.
+class _KesselstatusPhaseDuration(CoordinatorEntity, RestoreSensor):
+    """Duration of the boiler's last occurrence of one Kesselstatus phase.
 
     Restores its value across HA restarts (RestoreSensor) - it's only
-    updated once per completed ignition, which can be hours or days apart,
-    so without restoring it the sensor would drop to "unknown" on every
-    restart until the next ignition happens to complete.
+    updated once per completed occurrence, which can be hours or days
+    apart, so without restoring it the sensor would drop to "unknown" on
+    every restart until the next occurrence happens to complete.
 
-    Also restores _zuendung_since/_last_is_zuendung (via a custom
+    Also restores _phase_since/_last_in_phase (via a custom
     extra_restore_state_data, not RestoreSensor's default which only covers
     native_value): without that, a restart landing while the boiler is
-    actively mid-ignition loses track of when it started, and that cycle's
-    duration is silently never recorded once it completes - not a crash,
-    just a dropped sample, but exactly the kind of restart-shaped gap this
-    integration has already been bitten by elsewhere.
+    actively mid-phase loses track of when it started, and that
+    occurrence's duration is silently never recorded once it completes -
+    not a crash, just a dropped sample, but exactly the kind of
+    restart-shaped gap this integration has already been bitten by
+    elsewhere.
+
+    Subclasses set PHASE_LABEL (the Kesselstatus label to track) and may
+    override _on_duration_recorded to react to a freshly completed
+    occurrence (e.g. Zündzeit's warning notification).
     """
+
+    PHASE_LABEL: str = ""
 
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
-    _attr_icon = "mdi:heating-coil"
 
-    def __init__(self, coordinator, entry_id: str, device_name: str) -> None:
+    def __init__(self, coordinator, entry_id: str, device_name: str, key: str, name: str, icon: str) -> None:
         super().__init__(coordinator)
         self._entry_id = entry_id
-        self._attr_unique_id = f"{entry_id}_{ZUENDZEIT_KEY}"
-        self._attr_name = "Glühstab Zündzeit"
+        self._attr_unique_id = f"{entry_id}_{key}"
+        self._attr_name = name
+        self._attr_icon = icon
         self._attr_device_info = build_device_info(entry_id, device_name)
-        self._zuendung_since: Optional[datetime] = None
-        self._last_is_zuendung: Optional[bool] = None
+        self._phase_since: Optional[datetime] = None
+        self._last_in_phase: Optional[bool] = None
 
     @property
-    def extra_restore_state_data(self) -> _ZuendzeitExtraStoredData:
-        return _ZuendzeitExtraStoredData(
+    def extra_restore_state_data(self) -> _PhaseDurationExtraStoredData:
+        return _PhaseDurationExtraStoredData(
             native_value=self.native_value,
-            zuendung_since=self._zuendung_since,
-            last_is_zuendung=self._last_is_zuendung,
+            phase_since=self._phase_since,
+            last_in_phase=self._last_in_phase,
         )
 
     async def async_added_to_hass(self) -> None:
@@ -177,7 +197,7 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
         last_extra_data = await self.async_get_last_extra_data()
         if last_extra_data is None:
             return
-        restored = _ZuendzeitExtraStoredData.from_dict(last_extra_data.as_dict())
+        restored = _PhaseDurationExtraStoredData.from_dict(last_extra_data.as_dict())
         if restored.native_value is not None:
             value = restored.native_value
             if value > _LEGACY_SECONDS_VALUE_THRESHOLD:
@@ -185,8 +205,8 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
                 # minutes - convert rather than displaying e.g. "408 min".
                 value = round(value / 60, 1)
             self._attr_native_value = value
-        self._zuendung_since = restored.zuendung_since
-        self._last_is_zuendung = restored.last_is_zuendung
+        self._phase_since = restored.phase_since
+        self._last_in_phase = restored.last_in_phase
 
     def _async_migrate_unit_override(self) -> None:
         """Undo HA's own automatic "keep the old unit" protection.
@@ -199,11 +219,11 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
         suggested_unit_of_measurement` registry option pinned to the *old*
         unit - specifically so existing statistics/dashboards don't break
         when an integration changes its native unit. That's exactly what
-        happened here: switching this sensor from seconds to minutes just
-        made every future minute value get converted back to seconds for
-        display (a native 8.2 stayed correct internally, but showed as
-        "492 s"). Since minutes is what we actually want going forward,
-        clear that pin once it's stale.
+        happened when Zündzeit switched from seconds to minutes: every
+        future minute value got converted back to seconds for display (a
+        native 8.2 stayed correct internally, but showed as "492 s").
+        Since minutes is what we actually want going forward, clear that
+        pin once it's stale.
         """
         if self.registry_entry is None:
             return
@@ -220,28 +240,44 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
     def _handle_coordinator_update(self) -> None:
         point = self.coordinator.data.get(KESSELSTATUS_PARAMETER)
         label = _resolve_label(point)
-        is_zuendung = _is_zuendung(label)
+        in_phase = _label_matches(label, self.PHASE_LABEL)
 
         if (
-            is_zuendung is not None
-            and self._last_is_zuendung is not None
-            and is_zuendung != self._last_is_zuendung
+            in_phase is not None
+            and self._last_in_phase is not None
+            and in_phase != self._last_in_phase
         ):
             now = datetime.now(timezone.utc)
-            if is_zuendung and not self._last_is_zuendung:
-                # Kesselstatus wechselt in "Zuendung": neuer Zündvorgang beginnt
-                self._zuendung_since = now
-            elif not is_zuendung and self._last_is_zuendung and self._zuendung_since is not None:
-                # Kesselstatus verlässt "Zuendung": Zündvorgang beendet, Dauer auswerten
-                duration_minutes = round((now - self._zuendung_since).total_seconds() / 60, 1)
+            if in_phase and not self._last_in_phase:
+                # Kesselstatus wechselt in die Phase: neuer Vorgang beginnt
+                self._phase_since = now
+            elif not in_phase and self._last_in_phase and self._phase_since is not None:
+                # Kesselstatus verlässt die Phase: Vorgang beendet, Dauer auswerten
+                duration_minutes = round((now - self._phase_since).total_seconds() / 60, 1)
                 self._attr_native_value = duration_minutes
-                self._zuendung_since = None
-                self._maybe_warn(duration_minutes)
+                self._phase_since = None
+                self._on_duration_recorded(duration_minutes)
 
-        if is_zuendung is not None:
-            self._last_is_zuendung = is_zuendung
+        if in_phase is not None:
+            self._last_in_phase = in_phase
 
         super()._handle_coordinator_update()
+
+    def _on_duration_recorded(self, duration_minutes: float) -> None:
+        """Hook for subclasses that need to react to a freshly completed
+        occurrence. No-op by default."""
+
+
+class OekofenGluehstabZuendzeit(_KesselstatusPhaseDuration):
+    """Duration of the boiler's last "Zuendung" (ignition) Kesselstatus phase."""
+
+    PHASE_LABEL = ZUENDUNG_LABEL
+
+    def __init__(self, coordinator, entry_id: str, device_name: str) -> None:
+        super().__init__(coordinator, entry_id, device_name, ZUENDZEIT_KEY, "Glühstab Zündzeit", "mdi:heating-coil")
+
+    def _on_duration_recorded(self, duration_minutes: float) -> None:
+        self._maybe_warn(duration_minutes)
 
     def _maybe_warn(self, duration_minutes: float) -> None:
         threshold = get_warnschwelle(self.hass, self._entry_id)
@@ -257,6 +293,15 @@ class OekofenGluehstabZuendzeit(CoordinatorEntity, RestoreSensor):
             title="ÖkOfen: Zündzeit auffällig",
             notification_id=f"oekofen_gluehstab_warnung_{self._entry_id}",
         )
+
+
+class OekofenSaugdauer(_KesselstatusPhaseDuration):
+    """Duration of the boiler's last "Saugen" (pellet-feed suction) Kesselstatus phase."""
+
+    PHASE_LABEL = SAUGEN_LABEL
+
+    def __init__(self, coordinator, entry_id: str, device_name: str) -> None:
+        super().__init__(coordinator, entry_id, device_name, SAUGDAUER_KEY, "Saugdauer", "mdi:vacuum")
 
 
 class OekofenGluehstabWarnschwelle(RestoreNumber):
