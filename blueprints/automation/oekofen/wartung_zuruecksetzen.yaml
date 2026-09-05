@@ -1,0 +1,55 @@
+blueprint:
+  name: "ÖkOfen: Auf Vor-Wartungszustand zurückstellen"
+  description: >
+    Reagiert auf den "Zurückstellen"-Button aus der Benachrichtigung von
+    "ÖkOfen: Erinnerung nach Wartungstermin" und stellt die Anlage wieder auf
+    den mit "ÖkOfen: Anlage vor Wartungstermin ausschalten" gesicherten
+    Zustand zurück.
+
+    Teil 3 von 3 des ÖkOfen-Wartungstermin-Blueprint-Sets - siehe
+    `blueprints/automation/oekofen/README.md` im Repo.
+  domain: automation
+  source_url: https://github.com/rschnappi/ha-oekofen/blob/main/blueprints/automation/oekofen/wartung_zuruecksetzen.yaml
+  input:
+    szene:
+      name: Szene
+      description: >
+        Die Szene mit dem Zustand vor der Wartung (dieselbe Szenen-ID wie in
+        "ÖkOfen: Anlage vor Wartungstermin ausschalten").
+      selector:
+        entity:
+          domain: scene
+    aktions_id:
+      name: Aktions-ID des "Zurückstellen"-Buttons
+      description: >
+        Muss exakt mit der Aktions-ID im "Erinnerung"-Blueprint (Teil 2)
+        übereinstimmen.
+      default: OEKOFEN_RESTORE_ANLAGE
+      selector:
+        text:
+    benachrichtigung:
+      name: Bestätigungs-Benachrichtigung
+      description: Wird informiert, sobald die Anlage zurückgestellt wurde.
+      selector:
+        entity:
+          domain: notify
+
+trigger:
+  - trigger: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: !input aktions_id
+
+condition: []
+
+action:
+  - action: scene.turn_on
+    target:
+      entity_id: !input szene
+  - action: notify.send_message
+    target:
+      entity_id: !input benachrichtigung
+    data:
+      title: "ÖkOfen"
+      message: "Anlage wurde auf den Zustand vor der Wartung zurückgestellt."
+mode: single

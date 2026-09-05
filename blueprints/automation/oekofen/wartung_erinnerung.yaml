@@ -1,0 +1,70 @@
+blueprint:
+  name: "ÖkOfen: Erinnerung nach Wartungstermin"
+  description: >
+    Schickt nach Ende eines Wartungstermins (siehe "ÖkOfen: Anlage vor
+    Wartungstermin ausschalten") eine Benachrichtigung mit einem
+    Aktions-Button, um die Anlage bequem wieder auf den vor der Wartung
+    gesicherten Zustand zurückzustellen.
+
+    Teil 2 von 3 des ÖkOfen-Wartungstermin-Blueprint-Sets - siehe
+    `blueprints/automation/oekofen/README.md` im Repo.
+  domain: automation
+  source_url: https://github.com/rschnappi/ha-oekofen/blob/main/blueprints/automation/oekofen/wartung_erinnerung.yaml
+  input:
+    kalender:
+      name: Wartungs-Kalender
+      description: 'Derselbe Kalender wie in "ÖkOfen: Anlage vor Wartungstermin ausschalten".'
+      selector:
+        entity:
+          domain: calendar
+    stichworte:
+      name: Termin-Stichworte
+      description: >
+        Dieselbe Stichwort-Liste wie in "ÖkOfen: Anlage vor Wartungstermin
+        ausschalten".
+      default: "Rauchfangkehrer, Service Ofen"
+      selector:
+        text:
+    benachrichtigung:
+      name: Benachrichtigungsziel
+      selector:
+        entity:
+          domain: notify
+    aktions_id:
+      name: Aktions-ID des "Zurückstellen"-Buttons
+      description: >
+        Muss exakt mit der Aktions-ID im "Zurückstellen"-Blueprint (Teil 3)
+        übereinstimmen.
+      default: OEKOFEN_RESTORE_ANLAGE
+      selector:
+        text:
+
+trigger:
+  - trigger: calendar
+    entity_id: !input kalender
+    event: end
+
+variables:
+  stichwort_liste: !input stichworte
+  aktion_id: !input aktions_id
+
+condition:
+  - condition: template
+    value_template: >
+      {% set stichworte = stichwort_liste.split(',') | map('trim') | map('lower') | list %}
+      {{ (trigger.calendar_event.summary | lower) in stichworte }}
+
+action:
+  - action: notify.send_message
+    target:
+      entity_id: !input benachrichtigung
+    data:
+      title: "ÖkOfen: Wartung beendet"
+      message: >
+        Die Wartung ist vorbei. Anlage wieder auf den alten Zustand
+        zurückstellen?
+      data:
+        actions:
+          - action: "{{ aktion_id }}"
+            title: "Zurückstellen"
+mode: single
