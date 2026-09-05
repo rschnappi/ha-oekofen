@@ -50,6 +50,53 @@ liefert nur für die tatsächlich aktive Variante echte Daten — welche das
 ist, wird zur Laufzeit anhand von "hat einen Wert" entschieden, nicht
 geraten/konfiguriert.
 
+## Geräteuhrzeit (`datetime.py`'s `device_clock`)
+
+- **Einziges Feld mit `commit_parameter`**: anders als Party-Endzeit/
+  Urlaub-Start/-Ende (die nur einen zukünftigen Zeitpunkt speichern, den
+  das Gerät später mit seiner eigenen laufenden Uhr vergleicht) setzt
+  dieses Feld die **laufende Systemuhr des Geräts selbst** — ein
+  Schreibvorgang auf `L_fernwartung_uhrzeit_neu` wird erst mit
+  `L_fernwartung_setze_uhrzeit=1` im selben Request wirksam (`set_data_multi`,
+  nicht `set_data`).
+- **Das Gerät addiert beim Commit selbst nochmal +2h** auf den
+  gesendeten Wert — bestätigt live gegen ein echtes Gerät (2026-09-05),
+  sowohl über diese Integration als auch direkt über die native
+  ÖkoFEN-Web-UI des Geräts (dessen eigenes Datum/Uhrzeit-Feld zeigt
+  denselben +2h-Versatz zwischen Eingabe und übernommenem Wert). Das ist
+  also eine Eigenheit der Geräte-Firmware selbst beim *Commit* der
+  laufenden Uhr, keine Bug in `datetime_common.py`s gemeinsamer
+  Umrechnung — die Lese-Seite (`device_seconds_to_datetime`, für den
+  separaten `read_parameter`) und alle anderen Datetime-Felder sind
+  bereits gegen ein echtes Gerät verifiziert und bleiben unangetastet.
+  `async_set_value()` zieht deshalb **nur für dieses eine Feld**
+  (`self._commit_parameter` gesetzt) 2 Stunden vom berechneten
+  Sekundenwert ab, bevor er gesendet wird.
+- **Ein einzelner Fehlversuch hat einmal die komplette Integration
+  ausgesperrt**: ein falsch gesetzter Uhrzeit-Wert (Gerät landete ~4h in
+  der Zukunft) führte dazu, dass jede folgende Anfrage — nicht nur an
+  dieses Feld, an die **gesamte** Integration — mit `HTTP 403` abgelehnt
+  wurde (alle Entities "nicht verfügbar"). Vermutung: das
+  `pksession`-Cookie wird geräteseitig zeitbasiert validiert, ein
+  Uhrsprung um mehrere Stunden macht die eigene, gerade noch gültige
+  Session ungültig. **401 löst automatisches Reauth in
+  `pellematic_api.py` aus, 403 nicht** (wird als harter Fehler
+  durchgereicht) — die Integration erholt sich von diesem Zustand also
+  nicht von selbst.
+  - **Recovery**: `homeassistant.reload_config_entry` mit der
+    `oekofen`-Config-Entry-ID (erzwingt ein komplett neues
+    `PellematicAPI`-Objekt inkl. frischer `aiohttp.ClientSession`/
+    Cookie-Jar → neuer Login → neues Cookie). Ein voller HA-Neustart
+    wäre nicht nötig gewesen. NICHT wiederholt mit anderen Werten gegen
+    das Feld schreiben in der Hoffnung, es löst sich - das verlängert im
+    Zweifel nur die Downtime.
+  - Die 2h-Kompensation oben ist nur an EINEM validierten Datenpunkt
+    (Eingabe über diese Integration, direkt beobachtetes Ergebnis)
+    kalibriert. Falls sie sich als nicht robust erweist (andere
+    ÖkOfen-Firmware-Version, andere Zeitzone als Europe/Vienna, DST-Wechsel
+    exakt am Schreibzeitpunkt), das Feld eher konservativ behandeln
+    (z. B. nur lesend nutzen) statt den Offset blind größer zu drehen.
+
 ## Frontend/Dashboard (`dashboard.py`)
 
 - **Bis 0.9.8**: eine clientseitige [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/)

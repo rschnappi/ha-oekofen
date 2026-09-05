@@ -307,6 +307,22 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.11.4
+
+- 🐛 **Fix: Geräteuhrzeit setzen landete 2 Stunden zu weit in der
+  Zukunft**: Live gegen ein echtes Gerät entdeckt und bestätigt - das
+  Übernehmen eines neuen Uhrzeit-Werts (`L_fernwartung_setze_uhrzeit=1`)
+  addiert geräteseitig selbst nochmal +2 Stunden, unabhängig von der
+  Integration (derselbe Versatz zeigt sich auch über die native
+  ÖkoFEN-Web-Oberfläche des Geräts). Die Integration zieht diese 2 Stunden
+  jetzt beim Schreiben der Geräteuhrzeit-Entity vorab ab, damit der
+  übernommene Wert stimmt. Betrifft ausschließlich die Geräteuhrzeit -
+  Party-Endzeit/Urlaub-Start/-Ende waren nie betroffen.
+  ⚠️ Ein einzelner falscher Wert kann das Gerät vorübergehend komplett
+  aussperren (HTTP 403 auf jede Anfrage, vermutlich weil das
+  Session-Cookie zeitbasiert geprüft wird) - siehe CLAUDE.md für die
+  Recovery (Config-Entry-Reload, kein Neustart nötig).
+
 ### Version 0.11.3
 
 - 🐛 **Fix: Blueprint-Erkennung matchte nur den exakten Ordnerpfad
@@ -848,5 +864,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.11.3
+**Version**: 0.11.4
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

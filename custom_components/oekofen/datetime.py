@@ -128,6 +128,29 @@ class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
     async def async_set_value(self, value: datetime) -> None:
         seconds = datetime_to_device_seconds(value)
         if self._commit_parameter:
+            # The device_clock field (this is the only field with a
+            # commit_parameter) applies its own extra +2h shift once
+            # L_fernwartung_setze_uhrzeit actually commits the staged value
+            # into the device's *running* clock - unlike every other
+            # datetime field here (Party endzeit, Urlaub start/ende), which
+            # just store a future timestamp compared against that running
+            # clock later and don't exhibit this. Confirmed live against a
+            # real device (2026-09-05): setting this entity to a value X
+            # made the device's own clock show X+2h, both via this
+            # integration and via the device's native web UI's own
+            # date/time field - so this correction belongs here, not in
+            # datetime_common.py's shared conversion, which the read side
+            # (device_seconds_to_datetime, for the read_parameter) and the
+            # other fields are already verified correct against.
+            # CAUTION: setting this field wrong once briefly locked the
+            # whole device out (HTTP 403 on every request) - the device's
+            # session cookie appears to be time-bound, so a clock that
+            # jumps by hours can invalidate the very session used to fix
+            # it. Recovery: homeassistant.reload_config_entry on this
+            # entry (forces a fresh login/cookie) - do NOT restart HA for
+            # this alone, and don't retry writes to this field in a loop
+            # hoping a different value fixes it.
+            seconds -= 2 * 3600
             await self.api.set_data_multi({self._parameter: seconds, self._commit_parameter: 1})
         else:
             await self.api.set_data(self._parameter, seconds)
