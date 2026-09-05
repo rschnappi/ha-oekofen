@@ -147,6 +147,19 @@ geraten/konfiguriert.
     Best-effort — nicht sicher extrahierbare Felder (z. B. Termin-
     Stichworte in einem frei formulierten Jinja-Template) werden
     weggelassen statt geraten.
+    **Erkennung matcht nur auf den Dateinamen** (`wartung_vorbereiten.yaml`),
+    nicht den vollen Blueprint-Pfad inkl. Ordner: der Ordner hängt davon ab,
+    wie/wo der Nutzer die Datei abgelegt hat (dokumentierte
+    `blueprints/automation/oekofen/`-Konvention, ein abweichender
+    Ordnername bei URL-Import, oder - da diese Integration selbst keinen
+    neuen Unterordner anlegen kann, siehe unten - flach direkt in
+    `blueprints/automation/`).
+  - **Diese Integration kann keine neuen Unterordner unter
+    `blueprints/automation/` anlegen** - die verfügbaren Werkzeuge dafür
+    setzen voraus, dass der Zielordner bereits existiert. Blueprint-Dateien
+    für einen Nutzer müssen entweder in einen bereits existierenden Ordner
+    oder flach direkt in `blueprints/automation/` geschrieben werden (daher
+    das Dateiname-only-Matching oben statt eines festen Ordnerpfads).
 - `thermostat`-Karten zeigen `hvac_mode`/`preset_mode` **nicht** von sich
   aus direkt an — braucht explizite `features: [{type: "climate-hvac-modes"}, ...]`
   (siehe PR #37/#39).

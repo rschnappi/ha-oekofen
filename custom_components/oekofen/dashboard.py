@@ -694,27 +694,35 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
     }
 
 
-WARTUNG_VORBEREITEN_BLUEPRINT = "oekofen/wartung_vorbereiten.yaml"
+WARTUNG_VORBEREITEN_BLUEPRINT_FILENAME = "wartung_vorbereiten.yaml"
 
 
-def _blueprint_input_values(hass: HomeAssistant, blueprint_path: str) -> list[dict[str, Any]]:
-    """Return the raw `input:` mapping for every automation using the given
-    blueprint path, together with that automation's own entity_id.
+def _blueprint_input_values(hass: HomeAssistant, blueprint_filename: str) -> list[dict[str, Any]]:
+    """Return the raw `input:` mapping for every automation using a blueprint
+    whose file matches the given filename, together with that automation's
+    own entity_id.
 
-    automations_with_blueprint() is HA core's own public helper (the same
-    one powering the blueprint page's "N automations use this blueprint"
-    listing). It only returns entity_ids though - the actual field values
-    the user configured (which select entity, which notify target, ...)
-    live in AutomationEntity's private _blueprint_inputs attribute, which
-    has no public accessor beyond referenced_blueprint (just the path).
-    This is the same private attribute HA's own "automation/config"
-    websocket command reaches into to power the UI's own blueprint-input
-    editing view, so it's a stable-enough internal to build on - but
-    still reached defensively (getattr, no exceptions raised) since it
-    isn't a committed public API.
+    Matches by filename only, not the full blueprint path
+    (`<folder>/<filename>.yaml`) HA core's own public
+    automations_with_blueprint() compares exactly - the folder is just
+    wherever the *user* placed the file (following the documented
+    `blueprints/automation/oekofen/` convention, imported via URL under
+    some other folder name, or dropped flat directly in
+    `blueprints/automation/` because creating a new subfolder wasn't
+    possible from this integration's own reach), so matching on that would
+    silently miss it depending on installation history.
+
+    The actual field values the user configured (which select entity,
+    which notify target, ...) live in AutomationEntity's private
+    _blueprint_inputs attribute, which has no public accessor beyond
+    referenced_blueprint (just the path). This is the same private
+    attribute HA's own "automation/config" websocket command reaches into
+    to power the UI's own blueprint-input editing view, so it's a
+    stable-enough internal to build on - but still reached defensively
+    (getattr, no exceptions raised) since it isn't a committed public API.
     """
     try:
-        from homeassistant.components.automation import DATA_COMPONENT, automations_with_blueprint
+        from homeassistant.components.automation import DATA_COMPONENT
     except ImportError:
         return []
 
@@ -723,12 +731,14 @@ def _blueprint_input_values(hass: HomeAssistant, blueprint_path: str) -> list[di
         return []
 
     results = []
-    for entity_id in automations_with_blueprint(hass, blueprint_path):
-        entity = component.get_entity(entity_id)
-        blueprint_inputs = getattr(entity, "_blueprint_inputs", None) if entity else None
+    for entity in component.entities:
+        referenced_blueprint = getattr(entity, "referenced_blueprint", None)
+        if not referenced_blueprint or referenced_blueprint.rsplit("/", 1)[-1] != blueprint_filename:
+            continue
+        blueprint_inputs = getattr(entity, "_blueprint_inputs", None)
         inputs = (blueprint_inputs or {}).get("use_blueprint", {}).get("input")
         if inputs:
-            results.append({"entity_id": entity_id, "input": inputs})
+            results.append({"entity_id": entity.entity_id, "input": inputs})
     return results
 
 
@@ -840,7 +850,7 @@ def _build_wartung_automation_cards(hass: HomeAssistant) -> list[dict[str, Any]]
     that automation's own configuration rather than a generic,
     always-the-same explanation."""
     try:
-        instances = _blueprint_input_values(hass, WARTUNG_VORBEREITEN_BLUEPRINT)
+        instances = _blueprint_input_values(hass, WARTUNG_VORBEREITEN_BLUEPRINT_FILENAME)
         instances += _plain_wartung_automation_inputs(hass)
     except Exception:
         _LOGGER.warning("Could not read Wartung automation config", exc_info=True)

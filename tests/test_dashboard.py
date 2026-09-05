@@ -219,6 +219,7 @@ async def test_async_build_wartung_view_shows_automatic_shutdown_info():
 
     automation_entity = MagicMock()
     automation_entity.entity_id = "automation.oekofen_wartung_vorbereiten"
+    automation_entity.referenced_blueprint = "oekofen/wartung_vorbereiten.yaml"
     automation_entity._blueprint_inputs = {
         "use_blueprint": {
             "path": "oekofen/wartung_vorbereiten.yaml",
@@ -234,14 +235,10 @@ async def test_async_build_wartung_view_shows_automatic_shutdown_info():
         }
     }
     automation_component = MagicMock()
-    automation_component.get_entity.return_value = automation_entity
+    automation_component.entities = [automation_entity]
     hass.data = {AUTOMATION_DATA_COMPONENT: automation_component}
 
-    with patch(
-        "homeassistant.components.automation.automations_with_blueprint",
-        return_value=["automation.oekofen_wartung_vorbereiten"],
-    ):
-        view = await async_build_wartung_view(hass)
+    view = await async_build_wartung_view(hass)
 
     entities_card = next(c for c in view["cards"] if c.get("type") == "entities")
     assert entities_card["entities"][0] == "automation.oekofen_wartung_vorbereiten"
@@ -319,11 +316,7 @@ async def test_async_build_wartung_view_detects_hand_written_shutdown_automation
     automation_component.entities = [automation_entity]
     hass.data = {AUTOMATION_DATA_COMPONENT: automation_component}
 
-    with patch(
-        "homeassistant.components.automation.automations_with_blueprint",
-        return_value=[],
-    ):
-        view = await async_build_wartung_view(hass)
+    view = await async_build_wartung_view(hass)
 
     entities_card = next(c for c in view["cards"] if c.get("type") == "entities")
     assert entities_card["entities"][0] == "automation.ofen_vor_wartungstermin_ausschalten"
@@ -353,6 +346,7 @@ async def test_async_build_wartung_view_hides_restore_row_when_scene_not_yet_cre
 
     automation_entity = MagicMock()
     automation_entity.entity_id = "automation.oekofen_wartung_vorbereiten"
+    automation_entity.referenced_blueprint = "oekofen/wartung_vorbereiten.yaml"
     automation_entity._blueprint_inputs = {
         "use_blueprint": {
             "path": "oekofen/wartung_vorbereiten.yaml",
@@ -365,14 +359,10 @@ async def test_async_build_wartung_view_hides_restore_row_when_scene_not_yet_cre
         }
     }
     automation_component = MagicMock()
-    automation_component.get_entity.return_value = automation_entity
+    automation_component.entities = [automation_entity]
     hass.data = {AUTOMATION_DATA_COMPONENT: automation_component}
 
-    with patch(
-        "homeassistant.components.automation.automations_with_blueprint",
-        return_value=["automation.oekofen_wartung_vorbereiten"],
-    ):
-        view = await async_build_wartung_view(hass)
+    view = await async_build_wartung_view(hass)
 
     entities_card = next(c for c in view["cards"] if c.get("type") == "entities")
     assert not any(

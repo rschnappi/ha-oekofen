@@ -307,6 +307,16 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.11.3
+
+- 🐛 **Fix: Blueprint-Erkennung matchte nur den exakten Ordnerpfad
+  `oekofen/wartung_vorbereiten.yaml`**: Wird das Blueprint über einen
+  anderen Ordner importiert (z. B. automatisch nach GitHub-Nutzername
+  benannt) oder - mangels Möglichkeit, aus der Integration heraus einen
+  neuen Unterordner anzulegen - direkt flach in `blueprints/automation/`
+  abgelegt, wurde es nicht gefunden. Erkennung läuft jetzt nur noch über
+  den Dateinamen (`wartung_vorbereiten.yaml`), unabhängig vom Ordner.
+
 ### Version 0.11.2
 
 - 🐛 **Fix: "Entität nicht gefunden"-Warnung bei der Vor-Wartungs-Szene**:
@@ -838,5 +848,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.11.2
+**Version**: 0.11.3
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
