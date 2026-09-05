@@ -307,6 +307,19 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.11.0
+
+- ✨ **Wartungs-Tab zeigt jetzt auch die automatische Vor-Termin-Abschaltung**:
+  Ist eine "ÖkOfen: Anlage vor Wartungstermin ausschalten"-Automatisierung
+  (siehe `blueprints/automation/oekofen/`) konfiguriert, erscheint auf dem
+  "Wartung"-Tab zusätzlich eine Karte mit dem Ein/Aus-Zustand dieser
+  Automatisierung selbst, der aktuell geschalteten Betriebsart-Entity und
+  einem Knopf, der die gesicherte Vor-Wartungs-Szene wieder aktiviert -
+  plus eine Infokarte mit Prüfzeit, Termin-Stichworten und
+  Benachrichtigungsziel, live aus der tatsächlich konfigurierten
+  Automatisierung ausgelesen (nicht nur eine allgemeine Erklärung). Ohne
+  eine solche Automatisierung ändert sich am Tab nichts.
+
 ### Version 0.10.3
 
 - 🐛 **Fix: "Wartung"-Tab in der Tab-Leiste unsichtbar, obwohl die Ansicht
@@ -800,5 +813,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.10.3
+**Version**: 0.11.0
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
