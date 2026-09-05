@@ -307,6 +307,16 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.11.2
+
+- 🐛 **Fix: "Entität nicht gefunden"-Warnung bei der Vor-Wartungs-Szene**:
+  Der "Auf Vor-Wartungszustand zurückstellen"-Knopf auf dem Wartungs-Tab
+  wurde immer angezeigt, auch bevor die zugehörige Szene je existiert hat
+  (sie wird erst beim ersten tatsächlichen Auslösen der Abschalt-
+  Automatisierung angelegt) - das sah wie ein Fehler aus, obwohl es normal
+  ist. Die Zeile erscheint jetzt erst, sobald die Szene tatsächlich
+  existiert.
+
 ### Version 0.11.1
 
 - 🐛 **Fix: Automatisierungs-Karte aus 0.11.0 blieb leer, obwohl die
@@ -828,5 +838,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.11.1
+**Version**: 0.11.2
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

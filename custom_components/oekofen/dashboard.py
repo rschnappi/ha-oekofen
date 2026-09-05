@@ -863,7 +863,12 @@ def _build_wartung_automation_cards(hass: HomeAssistant) -> list[dict[str, Any]]
         entities_rows = [instance["entity_id"]]
         if anlage_select:
             entities_rows.append(anlage_select)
-        if szene_entity:
+        # scene.create only runs the first time the shutdown automation
+        # actually fires - before that, the scene entity doesn't exist yet,
+        # and an entities-card row for a nonexistent entity renders as a
+        # scary "Entität nicht gefunden" warning. Only show the restore
+        # row once there's something to restore.
+        if szene_entity and hass.states.get(szene_entity) is not None:
             entities_rows.append(
                 {
                     "entity": szene_entity,

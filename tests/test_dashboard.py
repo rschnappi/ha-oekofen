@@ -209,8 +209,12 @@ async def test_async_build_wartung_view_shows_automatic_shutdown_info():
     hass = MagicMock()
     calendar_state = fake_state("on", friendly_name="Ofen Wartung")
     calendar_state.entity_id = "calendar.ofen_wartung"
+    scene_state = fake_state("2026-09-05T20:00:00+00:00")
     hass.states.async_all.return_value = [calendar_state]
-    hass.states.get.return_value = calendar_state
+    hass.states.get.side_effect = lambda eid: {
+        "calendar.ofen_wartung": calendar_state,
+        "scene.oekofen_zustand_vor_wartung": scene_state,
+    }.get(eid)
     hass.services.async_call = AsyncMock(return_value={"calendar.ofen_wartung": {"events": []}})
 
     automation_entity = MagicMock()
@@ -266,8 +270,12 @@ async def test_async_build_wartung_view_detects_hand_written_shutdown_automation
     hass = MagicMock()
     calendar_state = fake_state("on", friendly_name="Ofen Wartung")
     calendar_state.entity_id = "calendar.ofen_wartung"
+    scene_state = fake_state("2026-09-05T20:00:00+00:00")
     hass.states.async_all.return_value = [calendar_state]
-    hass.states.get.return_value = calendar_state
+    hass.states.get.side_effect = lambda eid: {
+        "calendar.ofen_wartung": calendar_state,
+        "scene.oekofen_zustand_vor_wartung": scene_state,
+    }.get(eid)
     hass.services.async_call = AsyncMock(return_value={"calendar.ofen_wartung": {"events": []}})
 
     automation_entity = MagicMock()
@@ -326,6 +334,52 @@ async def test_async_build_wartung_view_detects_hand_written_shutdown_automation
     )
     info_card = next(c for c in view["cards"] if "pixel_10_pro_xl" in c.get("content", ""))
     assert "20:00" in info_card["content"]
+
+
+async def test_async_build_wartung_view_hides_restore_row_when_scene_not_yet_created():
+    """scene.create only runs the first time the shutdown automation
+    actually fires - before that, scene.<szene_id> doesn't exist yet.
+    Showing it anyway used to render as a scary "Entität nicht gefunden"
+    warning in the entities card (live-reported UX issue); the row must be
+    omitted entirely until the scene actually exists."""
+    from homeassistant.components.automation import DATA_COMPONENT as AUTOMATION_DATA_COMPONENT
+
+    hass = MagicMock()
+    calendar_state = fake_state("on", friendly_name="Ofen Wartung")
+    calendar_state.entity_id = "calendar.ofen_wartung"
+    hass.states.async_all.return_value = [calendar_state]
+    hass.states.get.side_effect = lambda eid: calendar_state if eid == "calendar.ofen_wartung" else None
+    hass.services.async_call = AsyncMock(return_value={"calendar.ofen_wartung": {"events": []}})
+
+    automation_entity = MagicMock()
+    automation_entity.entity_id = "automation.oekofen_wartung_vorbereiten"
+    automation_entity._blueprint_inputs = {
+        "use_blueprint": {
+            "path": "oekofen/wartung_vorbereiten.yaml",
+            "input": {
+                "anlage_select": "select.heizraum_ofen_anlage_betriebsart",
+                "szene_id": "oekofen_zustand_vor_wartung",
+                "benachrichtigung": "notify.handy",
+                "uhrzeit": "20:00:00",
+            },
+        }
+    }
+    automation_component = MagicMock()
+    automation_component.get_entity.return_value = automation_entity
+    hass.data = {AUTOMATION_DATA_COMPONENT: automation_component}
+
+    with patch(
+        "homeassistant.components.automation.automations_with_blueprint",
+        return_value=["automation.oekofen_wartung_vorbereiten"],
+    ):
+        view = await async_build_wartung_view(hass)
+
+    entities_card = next(c for c in view["cards"] if c.get("type") == "entities")
+    assert not any(
+        isinstance(e, dict) and e.get("entity") == "scene.oekofen_zustand_vor_wartung"
+        for e in entities_card["entities"]
+    )
+    assert "scene.oekofen_zustand_vor_wartung" not in entities_card["entities"]
 
 
 async def test_async_build_wartung_view_omits_automation_cards_when_none_configured():
