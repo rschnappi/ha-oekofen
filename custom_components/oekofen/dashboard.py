@@ -677,7 +677,13 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
     return {
         "title": "Wartung",
         "path": "wartung",
-        "icon": "mdi:calendar-wrench",
+        # "mdi:calendar-wrench" doesn't exist in the MDI icon set - HA
+        # silently renders no glyph at all for an unknown icon name rather
+        # than erroring, so the tab still worked (reachable by URL,
+        # correct content) but looked like blank, unclickable-seeming
+        # space in the tab strip instead of a visible tab. "wrench" is a
+        # foundational MDI icon, guaranteed to exist.
+        "icon": "mdi:wrench",
         "cards": [
             markdown(f"## \U0001F5D3️ Nächste Termine\n\n" + ("\n".join(lines) if lines else "Keine anstehenden Termine.")),
             {"type": "calendar", "entities": [calendar_entity]},
