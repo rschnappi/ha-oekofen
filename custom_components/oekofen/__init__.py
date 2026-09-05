@@ -1,6 +1,6 @@
 """The ÖkOfen Pellematic integration."""
 import asyncio
-import json
+import hashlib
 import logging
 from pathlib import Path
 
@@ -23,9 +23,6 @@ DOMAIN = "oekofen"
 STRATEGY_URL_PATH = "/oekofen_static/oekofen-strategy.js"
 _FRONTEND_KEY = "_frontend_registered"
 
-# Read once at import time (module import already runs off the event loop),
-# not inside the async setup below, to avoid HA's blocking-call detector.
-_MANIFEST_VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
 PLATFORMS = [
     Platform.SENSOR,
     Platform.NUMBER,
@@ -39,37 +36,71 @@ PLATFORMS = [
 
 
 class _StrategyJSView(HomeAssistantView):
-    """Serves the bundled dashboard-strategy JS with an explicit no-store
-    Cache-Control header.
+    """Serves the bundled dashboard-strategy JS, cacheable *because* its URL
+    is content-hash-busted (see add_extra_js_url below) - a given URL's
+    content can never change, which makes "immutable" both correct and,
+    more importantly, necessary.
 
-    HA's built-in static-path helper only offers a binary choice:
-    cache_headers=True (a month-long Cache-Control) or cache_headers=False
-    (no explicit header at all, falling back to aiohttp's FileResponse
-    defaults - ETag/Last-Modified only). The latter still leaves it up to
-    each browser/WebView's own heuristics whether to treat the response as
-    cacheable, which some kiosk-tablet WebViews apparently do quite
-    aggressively: even with the version-based cache-busting query param
-    (see add_extra_js_url below), the strategy element registration kept
-    intermittently timing out on repeat loads - working right after
-    clearing the browser cache, then failing again after a couple of
-    loads, exactly the pattern of a client occasionally serving a cached
-    response instead of asking the server. An explicit no-store header
-    removes that ambiguity instead of relying on cache_headers=False's
-    unspecified fallback behavior.
+    This deliberately does NOT use a no-store header, which caused a worse
+    bug than the one it might look like it prevents: HA's frontend gives a
+    custom dashboard strategy only a couple of seconds to register its
+    custom element before giving up with "Timeout waiting for strategy
+    element ll-strategy-dashboard-oekofen-strategy to be registered". With
+    no-store, every single dashboard load has to complete a fresh network
+    round-trip for this file inside that window, with no local copy to
+    fall back on. A desktop browser on the LAN does that in milliseconds
+    and never notices; a cold-started WebView (e.g. the Android companion
+    app), competing with the rest of the frontend bundle and other
+    custom-card resources, regularly does not - and fails with exactly
+    that timeout, on every attempt, and *more* reliably right after
+    clearing its cache (which guarantees the worst-case cold fetch).
+
+    no-store was also aimed at the wrong resource: the JS is already
+    hash-busted, so it cannot go stale under a given URL. What can go
+    stale is HA's index.html, which is what carries the
+    <script type="module"> tag pointing at this URL - a no-store header on
+    the JS itself does nothing about that.
+
+    Caching it properly means each client fetches a given version once and
+    then registers the element straight from its local cache on every
+    later load, well inside the frontend's timeout.
+
+    The ETag/304 path only matters for clients that revalidate anyway
+    despite "immutable" (some proxies, some WebViews): they get an empty
+    304 instead of the full body, still fast enough to beat the strategy
+    timeout.
     """
 
     url = STRATEGY_URL_PATH
     name = "oekofen_strategy_js"
     requires_auth = False
 
-    def __init__(self, js_content: str) -> None:
+    def __init__(self, js_content: str, content_hash: str) -> None:
         self._js_content = js_content
+        self._etag = f'"{content_hash}"'
+
+    def _cache_headers(self) -> dict[str, str]:
+        return {
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "ETag": self._etag,
+        }
 
     async def get(self, request: web.Request) -> web.Response:
+        # If-None-Match may carry several candidates, and/or a weak ("W/")
+        # prefix a proxy added along the way - match on the bare tag.
+        if_none_match = request.headers.get("If-None-Match", "")
+        candidates = {
+            candidate.strip().removeprefix("W/")
+            for candidate in if_none_match.split(",")
+            if candidate.strip()
+        }
+        if self._etag in candidates:
+            return web.Response(status=304, headers=self._cache_headers())
+
         return web.Response(
             text=self._js_content,
             content_type="application/javascript",
-            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+            headers=self._cache_headers(),
         )
 
 
@@ -99,13 +130,19 @@ async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
     try:
         js_path = Path(__file__).parent / "www" / "oekofen-strategy.js"
         js_content = await hass.async_add_executor_job(js_path.read_text)
-        hass.http.register_view(_StrategyJSView(js_content))
-
-        # Also cache-bust with the integration version, so a URL a browser
-        # somehow already has cached (proxies, some WebViews ignoring
-        # Cache-Control) still gets treated as a different resource after an
-        # update, on top of the view's own no-store header above.
-        add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={_MANIFEST_VERSION}")
+        # Hash the file's actual bytes once, and use it both as the view's
+        # ETag and as the URL's cache-busting query param - rather than
+        # manifest.json's version, which is bumped by hand and, in
+        # practice, has gone multiple releases in a row without anyone
+        # remembering to bump it while this very file kept changing
+        # underneath it, silently defeating a version-based cache-buster
+        # for every one of those releases (and, combined with the view's
+        # now-immutable Cache-Control below, leaving clients on stale JS
+        # indefinitely instead of just for one release). A content hash
+        # can't be forgotten.
+        content_hash = hashlib.sha256(js_content.encode()).hexdigest()[:32]
+        hass.http.register_view(_StrategyJSView(js_content, content_hash))
+        add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={content_hash[:12]}")
     finally:
         event.set()
 

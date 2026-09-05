@@ -127,18 +127,55 @@ async def test_platforms_forwarded_before_first_coordinator_refresh(mocks):
     assert order == ["forward", "refresh"]
 
 
-async def test_strategy_js_view_serves_content_with_no_store_header():
-    """The whole point of serving this from a custom view instead of HA's
-    built-in static-path helper: an explicit no-store header, so a
-    browser/WebView can never serve a stale cached copy regardless of its
-    own caching heuristics - see the class docstring for the "works after
-    clearing cache, breaks again after a couple of loads" symptom this
-    fixes."""
-    view = _StrategyJSView("// the actual js content")
-    response = await view.get(MagicMock())
+def _request(headers=None):
+    request = MagicMock()
+    request.headers = headers or {}
+    return request
+
+
+async def test_strategy_js_view_serves_content_cacheable():
+    """The URL is content-hash-busted (?v=<hash of the JS>), so its content
+    can never change under a given URL - and it *must* be cacheable: with
+    no-store, every dashboard load had to complete a fresh fetch inside the
+    frontend's few-second strategy-registration timeout, which a
+    cold-started WebView (e.g. the Android companion app) regularly missed
+    ("Timeout waiting for strategy element ..."). See _StrategyJSView's
+    docstring."""
+    view = _StrategyJSView("// the actual js content", "deadbeef")
+    response = await view.get(_request())
 
     assert response.text == "// the actual js content"
-    assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
+    assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+    assert response.headers["ETag"] == '"deadbeef"'
+
+
+async def test_strategy_js_view_answers_matching_if_none_match_with_304():
+    """Clients that revalidate anyway despite "immutable" get an empty 304
+    instead of the full body - still fast enough to beat the strategy
+    timeout."""
+    view = _StrategyJSView("// the actual js content", "deadbeef")
+
+    response = await view.get(_request({"If-None-Match": '"deadbeef"'}))
+
+    assert response.status == 304
+
+
+async def test_strategy_js_view_handles_weak_and_multiple_if_none_match():
+    """A proxy may weaken the tag and/or send several candidates."""
+    view = _StrategyJSView("// the actual js content", "deadbeef")
+
+    response = await view.get(_request({"If-None-Match": '"something-else", W/"deadbeef"'}))
+
+    assert response.status == 304
+
+
+async def test_strategy_js_view_serves_body_on_etag_mismatch():
+    view = _StrategyJSView("// the actual js content", "deadbeef")
+
+    response = await view.get(_request({"If-None-Match": '"stale-tag"'}))
+
+    assert response.status == 200
+    assert response.text == "// the actual js content"
 
 
 async def test_concurrent_frontend_registration_second_caller_waits_for_first():
