@@ -317,6 +317,25 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.9.8
+
+- 🐛 **Fix "Timeout waiting for strategy element ... to be registered"**:
+  Die Dashboard-Strategy-JS wurde seit 0.9.2 mit `no-store` ausgeliefert,
+  musste also bei *jedem* Dashboard-Aufruf frisch über's Netz geladen
+  werden - und zwar innerhalb der wenigen Sekunden, die HA's Frontend einem
+  Custom-Strategy-Element zum Registrieren einräumt. Im Desktop-Browser
+  (LAN, Millisekunden) fiel das kaum auf, ein langsamer/kalt gestarteter
+  Client (z. B. die Companion-App-WebView) hat die Frist dagegen
+  reproduzierbar gerissen. Die Datei wird jetzt wieder normal cachebar
+  ausgeliefert (`immutable`, plus ETag/304 für Clients, die trotzdem
+  revalidieren) - unbedenklich, weil die URL durch einen Hash des
+  Datei-Inhalts cachegebustet ist (`?v=<hash>`), nicht mehr durch die
+  manuell zu pflegende `manifest.json`-Version. Jeder Client lädt eine
+  Version genau einmal und registriert die Strategy danach lokal aus dem
+  Cache. Da der Hash automatisch aus dem tatsächlichen Dateiinhalt berechnet
+  wird, kann ein vergessener Versions-Bump diesen Mechanismus nicht mehr
+  außer Kraft setzen.
+
 ### Version 0.9.6
 
 - 📊 **Neue Sensoren "Softstartdauer" und "Nachlaufdauer"**: Dauer der
@@ -722,5 +741,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.6
+**Version**: 0.9.8
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
