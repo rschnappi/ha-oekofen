@@ -133,6 +133,20 @@ geraten/konfiguriert.
     inputs` zu (privates Attribut ohne öffentlichen Getter außer dem
     Blueprint-Pfad selbst über `referenced_blueprint`) — defensiv über
     `getattr`/`try-except`, kein Absturz bei fehlender/geänderter Struktur.
+    **0.11.0 fand live gegen eine echte Instanz trotzdem nichts**: der
+    Nutzer hatte die identische Logik von Hand als normale
+    YAML-Automatisierung geschrieben, nie das eigentliche Blueprint
+    importiert — `automations_with_blueprint()` findet solche Automat-
+    isierungen naturgemäß nicht. Seit 0.11.1 zusätzlich Erkennung
+    handgeschriebener Automatisierungen über das öffentliche
+    `AutomationEntity.raw_config`-Attribut (im Gegensatz zu
+    `_blueprint_inputs` für JEDE Automatisierung befüllt, nicht nur
+    Blueprint-Instanzen): Muster `scene.create` → `select.select_option`
+    (→ optional `notify.send_message`), rekursiv auch in
+    `if/then/else`- und `choose/sequence`-verschachtelten Actions gesucht.
+    Best-effort — nicht sicher extrahierbare Felder (z. B. Termin-
+    Stichworte in einem frei formulierten Jinja-Template) werden
+    weggelassen statt geraten.
 - `thermostat`-Karten zeigen `hvac_mode`/`preset_mode` **nicht** von sich
   aus direkt an — braucht explizite `features: [{type: "climate-hvac-modes"}, ...]`
   (siehe PR #37/#39).

@@ -307,6 +307,21 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.11.1
+
+- 🐛 **Fix: Automatisierungs-Karte aus 0.11.0 blieb leer, obwohl die
+  Wartungs-Automatisierung lief**: Live gegen eine echte Instanz getestet -
+  0.11.0 suchte ausschließlich nach Automatisierungen, die tatsächlich
+  **aus dem Blueprint erstellt** wurden (`use_blueprint:`). Wer die gleiche
+  Logik stattdessen von Hand als normale YAML-Automatisierung geschrieben
+  hat (ohne das Blueprint zu importieren), ging leer aus. Erkennt jetzt
+  zusätzlich handgeschriebene Automatisierungen mit demselben Muster
+  (`scene.create` gefolgt von `select.select_option`, meist gefolgt von
+  `notify.send_message`) direkt aus deren `raw_config` - best-effort:
+  Felder, die sich nicht sicher extrahieren lassen (z. B. Termin-Stichworte
+  in einem freien Jinja-Template), werden einfach weggelassen statt
+  geraten.
+
 ### Version 0.11.0
 
 - ✨ **Wartungs-Tab zeigt jetzt auch die automatische Vor-Termin-Abschaltung**:
@@ -813,5 +828,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.11.0
+**Version**: 0.11.1
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

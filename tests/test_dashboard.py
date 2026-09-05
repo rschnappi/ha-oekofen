@@ -252,6 +252,82 @@ async def test_async_build_wartung_view_shows_automatic_shutdown_info():
     assert "Rauchfangkehrer" in info_card["content"]
 
 
+async def test_async_build_wartung_view_detects_hand_written_shutdown_automation():
+    """Not every user imports the actual Blueprint - some write the
+    equivalent automation by hand instead (real-world regression: a live
+    deployment had exactly this "Ofen: Vor Wartungstermin ausschalten"
+    automation, hand-written with the same scene.create + select.select_option
+    + notify.send_message shape, and got nothing on the Wartung tab because
+    automations_with_blueprint() naturally found no Blueprint-based match).
+    This must be detected too, best-effort, from the automation's own
+    raw_config."""
+    from homeassistant.components.automation import DATA_COMPONENT as AUTOMATION_DATA_COMPONENT
+
+    hass = MagicMock()
+    calendar_state = fake_state("on", friendly_name="Ofen Wartung")
+    calendar_state.entity_id = "calendar.ofen_wartung"
+    hass.states.async_all.return_value = [calendar_state]
+    hass.states.get.return_value = calendar_state
+    hass.services.async_call = AsyncMock(return_value={"calendar.ofen_wartung": {"events": []}})
+
+    automation_entity = MagicMock()
+    automation_entity.entity_id = "automation.ofen_vor_wartungstermin_ausschalten"
+    automation_entity.referenced_blueprint = None
+    automation_entity.raw_config = {
+        "alias": "Ofen: Vor Wartungstermin ausschalten",
+        "trigger": [{"platform": "time", "at": "20:00:00"}],
+        "condition": [],
+        "action": [
+            {
+                "action": "calendar.get_events",
+                "target": {"entity_id": "calendar.ofen_wartung"},
+                "response_variable": "kalender_morgen",
+            },
+            {
+                "if": [{"condition": "template", "value_template": "{{ True }}"}],
+                "then": [
+                    {
+                        "action": "scene.create",
+                        "data": {
+                            "scene_id": "oekofen_zustand_vor_wartung",
+                            "snapshot_entities": ["select.heizraum_ofen_anlage_betriebsart"],
+                        },
+                    },
+                    {
+                        "action": "select.select_option",
+                        "target": {"entity_id": "select.heizraum_ofen_anlage_betriebsart"},
+                        "data": {"option": "Aus"},
+                    },
+                    {
+                        "action": "notify.send_message",
+                        "target": {"entity_id": "notify.pixel_10_pro_xl"},
+                        "data": {"title": "ÖkOfen: Wartung vorbereitet", "message": "..."},
+                    },
+                ],
+            },
+        ],
+    }
+    automation_component = MagicMock()
+    automation_component.entities = [automation_entity]
+    hass.data = {AUTOMATION_DATA_COMPONENT: automation_component}
+
+    with patch(
+        "homeassistant.components.automation.automations_with_blueprint",
+        return_value=[],
+    ):
+        view = await async_build_wartung_view(hass)
+
+    entities_card = next(c for c in view["cards"] if c.get("type") == "entities")
+    assert entities_card["entities"][0] == "automation.ofen_vor_wartungstermin_ausschalten"
+    assert "select.heizraum_ofen_anlage_betriebsart" in entities_card["entities"]
+    assert any(
+        isinstance(e, dict) and e.get("entity") == "scene.oekofen_zustand_vor_wartung"
+        for e in entities_card["entities"]
+    )
+    info_card = next(c for c in view["cards"] if "pixel_10_pro_xl" in c.get("content", ""))
+    assert "20:00" in info_card["content"]
+
+
 async def test_async_build_wartung_view_omits_automation_cards_when_none_configured():
     """No "wartung_vorbereiten" blueprint automation configured -> no extra
     cards, just the plain calendar view (regression guard: this must not
