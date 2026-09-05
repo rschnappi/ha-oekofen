@@ -140,6 +140,21 @@ def test_build_overview_views_splits_diagnose_and_mail_smtp():
     assert titles == ["Übersicht", "Diagnose", "Mail / SMTP"]
 
 
+def test_build_overview_views_surfaces_button_entities():
+    """Regression test: button.py's device-clock sync button (and any
+    future button entity) is a leftover entity like datetime/select/switch/
+    number - it must show up in the Übersicht, not silently disappear
+    because "button" was missing from _DOMAIN_TITLES."""
+    circuits = []
+    leftover = ["button.x_gerateuhrzeit_synchronisieren"]
+    states = {}
+
+    views = build_overview_views(circuits, leftover, states)
+
+    rendered = str(views[0])
+    assert "button.x_gerateuhrzeit_synchronisieren" in rendered
+
+
 def test_build_statistik_view_splits_feuerraum_from_normal_temperatures():
     entity_ids = ["sensor.x_kesseltemperatur", "sensor.x_feuerraumtemperatur"]
     states = {
