@@ -9,6 +9,7 @@ from custom_components.oekofen.datetime import (
     OekofenDateTime,
     build_datetime_definitions,
 )
+from custom_components.oekofen.datetime_common import datetime_to_device_seconds
 
 from .conftest import FakeCoordinator, make_point
 
@@ -109,3 +110,24 @@ async def test_device_clock_set_value_writes_value_and_commit_flag_together():
     }
     assert sent_values["CAPPL:LOCAL.L_fernwartung_setze_uhrzeit"] == 1
     assert coord.refresh_calls == 1
+
+
+async def test_device_clock_set_value_compensates_devices_own_plus_2h_commit_shift():
+    """Live-confirmed against a real device (2026-09-05): committing a
+    staged device_clock value via L_fernwartung_setze_uhrzeit=1 makes the
+    device's own running clock end up 2 hours ahead of whatever was sent -
+    both through this integration and through the device's native web UI's
+    own date/time field, so it's the device's own commit-time behavior,
+    not a bug in datetime_common.py's shared conversion (which the read
+    side and every other datetime field remain verified correct against).
+    Regression test for the -2h compensation this needs."""
+    api = AsyncMock()
+    coord = FakeCoordinator({"CAPPL:LOCAL.L_fernwartung_datum_zeit_sek": make_point("0")})
+    entity = _make_device_clock_entity(coord, api=api)
+    value = dt_util.as_utc(datetime(2026, 8, 1, 10, 0, 0))
+
+    await entity.async_set_value(value)
+
+    (sent_values,), _ = api.set_data_multi.call_args
+    uncompensated = datetime_to_device_seconds(value)
+    assert sent_values["CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"] == uncompensated - 2 * 3600
