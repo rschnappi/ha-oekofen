@@ -514,6 +514,61 @@
     return { title: "Statistik", path: "statistik", icon: "mdi:chart-line", cards };
   }
 
+  /**
+   * If a calendar entity looks like it's used for ÖkOfen maintenance
+   * appointments (see blueprints/automation/oekofen/), add a view with the
+   * next 3 upcoming events plus the native HA calendar card (which already
+   * has add/edit/delete built in for a locally-editable calendar) - not
+   * tied to any specific device, so it's built once, outside the
+   * per-device loop.
+   */
+  async function buildWartungView(hass) {
+    const states = hass.states || {};
+    const calendarEntity = Object.keys(states)
+      .filter((id) => domainOf(id) === "calendar")
+      .find((id) => {
+        const name = `${id} ${states[id].attributes.friendly_name || ""}`.toLowerCase();
+        return name.includes("ofen") || name.includes("wartung");
+      });
+    if (!calendarEntity) return null;
+
+    let upcoming = [];
+    try {
+      const start = new Date();
+      const end = new Date(start.getTime() + 1000 * 60 * 60 * 24 * 180);
+      const events = await hass.callWS({
+        type: "calendar/event/list",
+        entity_id: calendarEntity,
+        start: start.toISOString(),
+        end: end.toISOString(),
+      });
+      upcoming = (events || [])
+        .slice()
+        .sort((a, b) => new Date(a.start.dateTime || a.start.date) - new Date(b.start.dateTime || b.start.date))
+        .slice(0, 3);
+    } catch (e) {
+      upcoming = [];
+    }
+
+    const lines = upcoming.map((ev) => {
+      const raw = ev.start.dateTime || ev.start.date;
+      const d = new Date(raw);
+      const datum = d.toLocaleDateString("de-AT", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+      const uhrzeit = ev.start.dateTime ? d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }) : "";
+      return `- **${ev.summary}** – ${datum}${uhrzeit ? " " + uhrzeit : ""}`;
+    });
+
+    return {
+      title: "Wartung",
+      path: "wartung",
+      icon: "mdi:calendar-wrench",
+      cards: [
+        markdown(`## \u{1F5D3}️ Nächste Termine\n\n${lines.length ? lines.join("\n") : "Keine anstehenden Termine."}`),
+        { type: "calendar", entities: [calendarEntity] },
+      ],
+    };
+  }
+
   class OekofenStrategy {
     static async generate(config, hass) {
       const devices = Object.values(hass.devices || {});
@@ -580,6 +635,9 @@
         views.push(...deviceViews);
       }
 
+      const wartungView = await buildWartungView(hass);
+      if (wartungView) views.push(wartungView);
+
       return { views };
     }
   }
@@ -605,6 +663,7 @@
       domainOf,
       buildPufferPumpenView,
       buildStatistikView,
+      buildWartungView,
     };
   }
 })();
