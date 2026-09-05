@@ -307,6 +307,20 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.10.3
+
+- 🐛 **Fix: "Wartung"-Tab in der Tab-Leiste unsichtbar, obwohl die Ansicht
+  korrekt erzeugt wurde und direkt per URL (`/oekofen/wartung`) erreichbar
+  war**: Live gegen die tatsächliche Instanz des Melders debuggt (direkter
+  MCP-Zugriff auf `hass`) - kein Fehler im Log, der Kalender wurde korrekt
+  erkannt und die Ansicht korrekt gespeichert. Ursache war ein
+  Tippfehler: `mdi:calendar-wrench` existiert nicht im Material-Design-
+  Icon-Set. HA rendert für einen unbekannten Icon-Namen einfach gar kein
+  Icon, statt einen Fehler zu werfen - der Tab war dadurch technisch da
+  und klickbar, sah aber wie leerer Platz in der Tab-Leiste aus und wurde
+  deshalb übersehen. Auf `mdi:wrench` gewechselt (garantiert existierendes
+  Basis-Icon).
+
 ### Version 0.10.2
 
 - 🐛 **Fix: "Wartung"-Tab fehlte im Dashboard komplett, obwohl der
@@ -786,5 +800,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.10.2
+**Version**: 0.10.3
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

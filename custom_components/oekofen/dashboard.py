@@ -630,13 +630,27 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
 
     start = dt_util.now()
     end = start + timedelta(days=180)
-    response = await hass.services.async_call(
-        "calendar",
-        "get_events",
-        {"entity_id": calendar_entity, "start_date_time": start, "end_date_time": end},
-        blocking=True,
-        return_response=True,
-    )
+    try:
+        response = await hass.services.async_call(
+            "calendar",
+            "get_events",
+            {"entity_id": calendar_entity, "start_date_time": start, "end_date_time": end},
+            blocking=True,
+            return_response=True,
+        )
+    except Exception:
+        # Fetching upcoming events is a nice-to-have on top of the native
+        # calendar card below, not a reason to drop the whole "Wartung" tab
+        # (and, since this whole function runs inside
+        # async_build_dashboard_config with no caller-side try/except, an
+        # unhandled error here would silently abort saving the *entire*
+        # dashboard for this regeneration - not just this one view). A
+        # transient failure right as the calendar entity itself first
+        # appears (its own service may not be registered in the same
+        # instant its state is) is exactly the case
+        # async_track_state_added_domain's retrigger can otherwise hit.
+        _LOGGER.warning("Could not fetch events for %s; showing calendar without a preview", calendar_entity, exc_info=True)
+        response = None
     events = (response or {}).get(calendar_entity, {}).get("events", [])
 
     def _event_start(ev: dict[str, Any]) -> datetime:
@@ -663,7 +677,13 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
     return {
         "title": "Wartung",
         "path": "wartung",
-        "icon": "mdi:calendar-wrench",
+        # "mdi:calendar-wrench" doesn't exist in the MDI icon set - HA
+        # silently renders no glyph at all for an unknown icon name rather
+        # than erroring, so the tab still worked (reachable by URL,
+        # correct content) but looked like blank, unclickable-seeming
+        # space in the tab strip instead of a visible tab. "wrench" is a
+        # foundational MDI icon, guaranteed to exist.
+        "icon": "mdi:wrench",
         "cards": [
             markdown(f"## \U0001F5D3️ Nächste Termine\n\n" + ("\n".join(lines) if lines else "Keine anstehenden Termine.")),
             {"type": "calendar", "entities": [calendar_entity]},
