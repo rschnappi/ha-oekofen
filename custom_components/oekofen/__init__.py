@@ -1,27 +1,23 @@
 """The ÖkOfen Pellematic integration."""
-import asyncio
-import hashlib
 import logging
-from pathlib import Path
 
-from aiohttp import web
+import voluptuous as vol
 
-from homeassistant.components.frontend import add_extra_js_url
-from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.event import async_track_state_change_event
 
 from .coordinator import OekofenCoordinator
+from .dashboard import async_build_wartung_view, async_regenerate_dashboard
 from .discovery import async_discover_circuits
 from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "oekofen"
-STRATEGY_URL_PATH = "/oekofen_static/oekofen-strategy.js"
-_FRONTEND_KEY = "_frontend_registered"
+SERVICE_REGENERATE_DASHBOARD = "regenerate_dashboard"
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -35,132 +31,41 @@ PLATFORMS = [
 ]
 
 
-class _StrategyJSView(HomeAssistantView):
-    """Serves the bundled dashboard-strategy JS, cacheable *because* its URL
-    is content-hash-busted (see add_extra_js_url below) - a given URL's
-    content can never change, which makes "immutable" both correct and,
-    more importantly, necessary.
-
-    This deliberately does NOT use a no-store header, which caused a worse
-    bug than the one it might look like it prevents: HA's frontend gives a
-    custom dashboard strategy only a couple of seconds to register its
-    custom element before giving up with "Timeout waiting for strategy
-    element ll-strategy-dashboard-oekofen-strategy to be registered". With
-    no-store, every single dashboard load has to complete a fresh network
-    round-trip for this file inside that window, with no local copy to
-    fall back on. A desktop browser on the LAN does that in milliseconds
-    and never notices; a cold-started WebView (e.g. the Android companion
-    app), competing with the rest of the frontend bundle and other
-    custom-card resources, regularly does not - and fails with exactly
-    that timeout, on every attempt, and *more* reliably right after
-    clearing its cache (which guarantees the worst-case cold fetch).
-
-    no-store was also aimed at the wrong resource: the JS is already
-    hash-busted, so it cannot go stale under a given URL. What can go
-    stale is HA's index.html, which is what carries the
-    <script type="module"> tag pointing at this URL - a no-store header on
-    the JS itself does nothing about that.
-
-    Caching it properly means each client fetches a given version once and
-    then registers the element straight from its local cache on every
-    later load, well inside the frontend's timeout.
-
-    The ETag/304 path only matters for clients that revalidate anyway
-    despite "immutable" (some proxies, some WebViews): they get an empty
-    304 instead of the full body, still fast enough to beat the strategy
-    timeout.
+async def _async_regenerate_dashboard_and_track_calendar(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Build the auto-managed ÖkOfen dashboard (see dashboard.py), then keep
+    it in sync with the maintenance calendar without requiring a restart:
+    whenever that calendar's state changes - a new/edited/deleted
+    appointment - re-running the dashboard build picks up the change and
+    saves it, which in turn tells any already-open dashboard tab to refetch
+    (see LovelaceStorage.async_save's EVENT_LOVELACE_UPDATED).
     """
+    await async_regenerate_dashboard(hass)
 
-    url = STRATEGY_URL_PATH
-    name = "oekofen_strategy_js"
-    requires_auth = False
+    wartung_view = await async_build_wartung_view(hass)
+    if not wartung_view:
+        return
+    calendar_entity_id = wartung_view["cards"][1]["entities"][0]
 
-    def __init__(self, js_content: str, content_hash: str) -> None:
-        self._js_content = js_content
-        self._etag = f'"{content_hash}"'
+    async def _on_calendar_changed(event) -> None:
+        await async_regenerate_dashboard(hass)
 
-    def _cache_headers(self) -> dict[str, str]:
-        return {
-            "Cache-Control": "public, max-age=31536000, immutable",
-            "ETag": self._etag,
-        }
-
-    async def get(self, request: web.Request) -> web.Response:
-        # If-None-Match may carry several candidates, and/or a weak ("W/")
-        # prefix a proxy added along the way - match on the bare tag.
-        if_none_match = request.headers.get("If-None-Match", "")
-        candidates = {
-            candidate.strip().removeprefix("W/")
-            for candidate in if_none_match.split(",")
-            if candidate.strip()
-        }
-        if self._etag in candidates:
-            return web.Response(status=304, headers=self._cache_headers())
-
-        return web.Response(
-            text=self._js_content,
-            content_type="application/javascript",
-            headers=self._cache_headers(),
-        )
+    entry.async_on_unload(
+        async_track_state_change_event(hass, [calendar_entity_id], _on_calendar_changed)
+    )
 
 
-async def _async_register_frontend_resources(hass: HomeAssistant) -> None:
-    """Serve the bundled ÖkOfen dashboard-strategy JS and register it with the
-    frontend, so `strategy: {type: custom:oekofen-strategy}` works without the
-    user manually adding a Lovelace resource. Idempotent across config
-    entries/reloads.
-
-    With two ÖkOfen devices configured, HA sets up both config entries
-    concurrently, and this is the very first thing each one does. A bare
-    "already registered" boolean would let a second, concurrent call return
-    immediately while the first call is still mid-`await` on the actual
-    registration - reopening (in a much narrower window) the same "Timeout
-    waiting for strategy element ... to be registered" race this function was
-    reordered to fix in the first place. An Event lets a concurrent caller
-    wait for registration to actually finish instead of racing past it.
-    """
-    domain_data = hass.data.setdefault(DOMAIN, {})
-    existing_event = domain_data.get(_FRONTEND_KEY)
-    if existing_event is not None:
-        await existing_event.wait()
+async def _async_setup_services(hass: HomeAssistant) -> None:
+    if hass.services.has_service(DOMAIN, SERVICE_REGENERATE_DASHBOARD):
         return
 
-    event = asyncio.Event()
-    domain_data[_FRONTEND_KEY] = event
-    try:
-        js_path = Path(__file__).parent / "www" / "oekofen-strategy.js"
-        js_content = await hass.async_add_executor_job(js_path.read_text)
-        # Hash the file's actual bytes once, and use it both as the view's
-        # ETag and as the URL's cache-busting query param - rather than
-        # manifest.json's version, which is bumped by hand and, in
-        # practice, has gone multiple releases in a row without anyone
-        # remembering to bump it while this very file kept changing
-        # underneath it, silently defeating a version-based cache-buster
-        # for every one of those releases (and, combined with the view's
-        # now-immutable Cache-Control below, leaving clients on stale JS
-        # indefinitely instead of just for one release). A content hash
-        # can't be forgotten.
-        content_hash = hashlib.sha256(js_content.encode()).hexdigest()[:32]
-        hass.http.register_view(_StrategyJSView(js_content, content_hash))
-        add_extra_js_url(hass, f"{STRATEGY_URL_PATH}?v={content_hash[:12]}")
-    finally:
-        event.set()
+    async def _handle_regenerate_dashboard(call: ServiceCall) -> None:
+        await async_regenerate_dashboard(hass)
+
+    hass.services.async_register(DOMAIN, SERVICE_REGENERATE_DASHBOARD, _handle_regenerate_dashboard, schema=vol.Schema({}))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ÖkOfen from a config entry."""
-
-    # Register the dashboard-strategy JS first, before any network I/O to
-    # the device below (authenticate/discover circuits) - those can easily
-    # take a few seconds, and a dashboard loading a "strategy:
-    # custom:oekofen-strategy" view in that window (e.g. a kiosk tablet
-    # reconnecting as soon as HA/frontend is reachable, which can happen
-    # before this integration's own setup finishes) gets HA's frontend
-    # index.html rendered without our script tag yet - "Timeout waiting for
-    # strategy element ... to be registered", unrelated to browser caching.
-    # This call has no dependency on api/circuits/coordinator, so it's safe
-    # to run first.
-    await _async_register_frontend_resources(hass)
 
     # Extract configuration
     host = entry.data[CONF_HOST]
@@ -171,7 +76,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Ensure URL format
     if not host.startswith(('http://', 'https://')):
         host = f"http://{host}"
-    
+
     # Create API instance
     api = PellematicAPI(host, username, password, language)
 
@@ -188,7 +93,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # reauthenticate repair in Settings instead of just failing setup
         # with no indication of why or how to fix it.
         raise ConfigEntryAuthFailed("Authentication failed - check username/password")
-    
+
     # Discover which heating circuits, hot-water circuits, circulation
     # pumps and Pellematic units actually exist on this device, so the
     # schedule/number/select platforms only create entities for hardware
@@ -230,30 +135,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # unavailable until the coordinator's own next scheduled poll succeeds.
     await coordinator.async_refresh()
 
+    # Build (or refresh) the auto-managed ÖkOfen dashboard now that every
+    # entity exists with real state - including "warnhinweis" attributes and
+    # the maintenance calendar's events, both of which the dashboard's
+    # structure depends on. This is a plain, static Lovelace config (see
+    # dashboard.py for why, replacing the old client-side dashboard-strategy
+    # JS), so it renders reliably on every load with nothing for a client to
+    # race against - including right after this very restart.
+    await _async_regenerate_dashboard_and_track_calendar(hass, entry)
+    await _async_setup_services(hass)
+
     # Register update listener for options flow (enables reload button)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-    
+
     _LOGGER.info(f"ÖkOfen integration setup complete for {host}")
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    
+
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
+
     if unload_ok:
         # Close API connection
         api_data = hass.data[DOMAIN][entry.entry_id]
         if "api" in api_data:
             await api_data["api"].close()
-        
+
         # Remove entry data
         hass.data[DOMAIN].pop(entry.entry_id)
-        
+
         _LOGGER.info("ÖkOfen integration unloaded successfully")
-    
+
     return unload_ok
 
 

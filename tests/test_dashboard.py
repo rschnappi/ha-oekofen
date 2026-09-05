@@ -1,0 +1,227 @@
+"""Tests for dashboard.py - the Python port of the old oekofen-strategy.js
+dashboard-strategy view-building logic (see dashboard.py's module docstring
+for why it moved server-side)."""
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from custom_components.oekofen.dashboard import (
+    Circuit,
+    analyze_entities,
+    async_build_wartung_view,
+    async_regenerate_dashboard,
+    build_circuit_view,
+    build_overview_views,
+    build_puffer_pumpen_view,
+    build_settings_grid,
+    build_statistik_view,
+    common_prefix,
+    domain_of,
+    object_id_of,
+)
+
+
+def fake_state(state, **attributes):
+    return SimpleNamespace(state=state, attributes=attributes)
+
+
+def test_domain_and_object_id_of():
+    assert domain_of("sensor.heizraum_ofen_kesseltemperatur") == "sensor"
+    assert object_id_of("sensor.heizraum_ofen_kesseltemperatur") == "heizraum_ofen_kesseltemperatur"
+
+
+def test_common_prefix_trims_back_to_last_underscore():
+    ids = ["heizraum_ofen_heizkreis_1_betriebsart", "heizraum_ofen_heizkreis_1_temperatur"]
+    assert common_prefix(ids) == "heizraum_ofen_heizkreis_1_"
+
+
+def test_common_prefix_stops_at_first_divergent_underscore_group():
+    ids = ["heizraum_ofen_kesseltemperatur", "heizraum_ofen_aussentemperatur"]
+    assert common_prefix(ids) == "heizraum_ofen_"
+
+
+def test_common_prefix_empty_for_no_ids():
+    assert common_prefix([]) == ""
+
+
+def test_analyze_entities_groups_circuit_entities_by_relative_suffix():
+    entity_ids = [
+        "select.heizraum_ofen_heizkreis_1_betriebsart",
+        "sensor.heizraum_ofen_heizkreis_1_temperatur",
+        "climate.heizraum_ofen_heizkreis_1",
+        "sensor.heizraum_ofen_kesseltemperatur",
+    ]
+
+    result = analyze_entities(entity_ids)
+
+    assert result.prefix == "heizraum_ofen_"
+    assert len(result.circuits) == 1
+    circuit = result.circuits[0]
+    assert circuit.type == "heizkreis"
+    assert circuit.index == 1
+    assert circuit.entity("select", "betriebsart") == "select.heizraum_ofen_heizkreis_1_betriebsart"
+    assert circuit.entity("sensor", "temperatur") == "sensor.heizraum_ofen_heizkreis_1_temperatur"
+    # The climate entity's own suffix *is* the circuit suffix (no trailing
+    # "_something"), so its "relative" key is the empty string.
+    assert circuit.entity("climate", "") == "climate.heizraum_ofen_heizkreis_1"
+    assert result.leftover == ["sensor.heizraum_ofen_kesseltemperatur"]
+
+
+def test_analyze_entities_orders_circuits_by_type_then_index():
+    entity_ids = [
+        "sensor.x_warmwasser_1_a",
+        "sensor.x_heizkreis_2_a",
+        "sensor.x_heizkreis_1_a",
+    ]
+
+    result = analyze_entities(entity_ids)
+
+    assert [(c.type, c.index) for c in result.circuits] == [
+        ("heizkreis", 1),
+        ("heizkreis", 2),
+        ("warmwasser", 1),
+    ]
+
+
+def test_build_settings_grid_splits_installer_warned_entities():
+    circuit = Circuit(type="heizkreis", index=1, suffix="heizkreis_1")
+    circuit.entities["number:normal_feld"] = "number.x_heizkreis_1_normal_feld"
+    circuit.entities["number:installateur_feld"] = "number.x_heizkreis_1_installateur_feld"
+    states = {
+        "number.x_heizkreis_1_normal_feld": fake_state("5"),
+        "number.x_heizkreis_1_installateur_feld": fake_state("2", warnhinweis="Nur vom Installateur ändern!"),
+    }
+
+    cards, warned_ids, warning_text = build_settings_grid(circuit, [], states)
+
+    assert [c["entity"] for c in cards] == ["number.x_heizkreis_1_normal_feld"]
+    assert warned_ids == ["number.x_heizkreis_1_installateur_feld"]
+    assert warning_text == "Nur vom Installateur ändern!"
+
+
+def test_build_settings_grid_excludes_zeitprogramm_entities():
+    circuit = Circuit(type="heizkreis", index=1, suffix="heizkreis_1")
+    circuit.entities["select:zeit_1_montag_aktiv"] = "select.x_heizkreis_1_zeit_1_montag_aktiv"
+    states = {"select.x_heizkreis_1_zeit_1_montag_aktiv": fake_state("on")}
+
+    cards, warned_ids, _ = build_settings_grid(circuit, [], states)
+
+    assert cards == []
+    assert warned_ids == []
+
+
+def test_build_circuit_view_does_not_duplicate_installer_only_extra_fields():
+    """Regression test: Vorrang/Legionellenschutz (in the Party/Urlaub extra-
+    field list) must not also show up in the generic Einstellungen grid -
+    that duplication was a real, previously-shipped bug (see git history),
+    caused by reserving the extra fields via used_for_settings only *after*
+    build_settings_grid had already scanned for unclaimed entities."""
+    circuit = Circuit(type="heizkreis", index=1, suffix="heizkreis_1")
+    circuit.entities["select:vorrang"] = "select.x_heizkreis_1_vorrang"
+    states = {"select.x_heizkreis_1_vorrang": fake_state("aus", warnhinweis="Nur vom Installateur ändern!")}
+
+    view = build_circuit_view(circuit, states)
+
+    rendered = str(view)
+    assert rendered.count("select.x_heizkreis_1_vorrang") == 1
+
+
+def test_build_overview_views_splits_diagnose_and_mail_smtp():
+    circuits = []
+    leftover = [
+        "sensor.x_diag_1",
+        "text.x_smtp_server",
+    ]
+    states = {}
+
+    views = build_overview_views(circuits, leftover, states)
+
+    titles = [v["title"] for v in views]
+    assert titles == ["Übersicht", "Diagnose", "Mail / SMTP"]
+
+
+def test_build_statistik_view_splits_feuerraum_from_normal_temperatures():
+    entity_ids = ["sensor.x_kesseltemperatur", "sensor.x_feuerraumtemperatur"]
+    states = {
+        "sensor.x_kesseltemperatur": fake_state("60", device_class="temperature"),
+        "sensor.x_feuerraumtemperatur": fake_state("400", device_class="temperature"),
+    }
+
+    view = build_statistik_view(entity_ids, states)
+
+    history_titles = [c["title"] for c in view["cards"] if c.get("type") == "history-graph"]
+    assert "Temperaturverlauf" in history_titles
+    assert "Feuerraumtemperatur" in history_titles
+
+
+def test_build_statistik_view_returns_none_when_nothing_to_show():
+    assert build_statistik_view(["sensor.x_text_only"], {"sensor.x_text_only": fake_state("hello")}) is None
+
+
+def test_build_puffer_pumpen_view_labels_known_suffixes():
+    view = build_puffer_pumpen_view(["sensor.x_buffer_top_temperature"], "x_")
+
+    tile = view["cards"][0]["cards"][1]["cards"][0]
+    assert tile["name"] == "Puffer Oben Ist"
+
+
+async def test_async_build_wartung_view_returns_none_without_matching_calendar():
+    hass = MagicMock()
+    hass.states.async_all.return_value = []
+
+    assert await async_build_wartung_view(hass) is None
+
+
+async def test_async_build_wartung_view_lists_next_three_events():
+    hass = MagicMock()
+    calendar_state = fake_state("on", friendly_name="Ofen Wartung")
+    calendar_state.entity_id = "calendar.ofen_wartung"
+    hass.states.async_all.return_value = [calendar_state]
+    hass.states.get.return_value = calendar_state
+    hass.services.async_call = AsyncMock(
+        return_value={
+            "calendar.ofen_wartung": {
+                "events": [
+                    {"summary": "Rauchfangkehrer", "start": "2026-11-05T09:00:00+00:00"},
+                    {"summary": "Service Ofen", "start": "2026-10-01T09:00:00+00:00"},
+                ]
+            }
+        }
+    )
+
+    view = await async_build_wartung_view(hass)
+
+    assert view["title"] == "Wartung"
+    assert view["cards"][1]["entities"] == ["calendar.ofen_wartung"]
+    assert "Service Ofen" in view["cards"][0]["content"]
+    assert view["cards"][0]["content"].index("Service Ofen") < view["cards"][0]["content"].index("Rauchfangkehrer")
+
+
+async def test_async_regenerate_dashboard_creates_dashboard_once():
+    """The first call creates the dashboard item (visible in the sidebar);
+    every later call must just overwrite its content, not try (and fail) to
+    create it again."""
+    hass = MagicMock()
+    hass.data = {}
+    hass.states.async_all.return_value = []
+
+    dashboards_collection = MagicMock()
+    dashboards_collection.async_create_item = AsyncMock()
+    store = MagicMock()
+    store.async_save = AsyncMock()
+    dashboards = {}
+
+    async def _create_item(data):
+        dashboards[data["url_path"]] = store
+
+    dashboards_collection.async_create_item.side_effect = _create_item
+    hass.data["lovelace"] = {"dashboards": dashboards, "dashboards_collection": dashboards_collection}
+
+    empty_device_registry = MagicMock(devices=MagicMock(values=lambda: []))
+    with patch("custom_components.oekofen.dashboard.dr.async_get", return_value=empty_device_registry), patch(
+        "custom_components.oekofen.dashboard.er.async_get", return_value=MagicMock()
+    ):
+        await async_regenerate_dashboard(hass)
+        await async_regenerate_dashboard(hass)
+
+    dashboards_collection.async_create_item.assert_awaited_once()
+    assert store.async_save.await_count == 2

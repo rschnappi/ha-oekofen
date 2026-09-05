@@ -8,9 +8,12 @@ the coordinator's first refresh runs, and that first refresh must be a
 plain async_refresh() rather than async_config_entry_first_refresh() so a
 transient failure can't wedge the config entry into a permanent
 SETUP_ERROR. test_platforms_forwarded_before_first_coordinator_refresh
-below is a direct regression test for that ordering.
+below is a direct regression test for that ordering. Dashboard generation
+must run *after* the first coordinator refresh too - see
+test_dashboard_regenerated_after_first_coordinator_refresh - the dashboard's
+structure depends on entity state (warnhinweis attributes, sensor
+device_class) that doesn't exist until at least one successful poll.
 """
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,8 +21,6 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 
 from custom_components.oekofen import (
     DOMAIN,
-    _async_register_frontend_resources,
-    _StrategyJSView,
     async_reload_entry,
     async_setup_entry,
     async_unload_entry,
@@ -44,7 +45,7 @@ def _make_hass():
     hass.config_entries.async_forward_entry_setups = AsyncMock()
     hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
     hass.config_entries.async_reload = AsyncMock()
-    hass.async_add_executor_job = AsyncMock(return_value="// mock strategy js")
+    hass.services.has_service.return_value = False
     return hass
 
 
@@ -55,8 +56,10 @@ def mocks():
     with patch("custom_components.oekofen.PellematicAPI") as api_cls, patch(
         "custom_components.oekofen.async_discover_circuits", new=AsyncMock(return_value={})
     ) as discover, patch("custom_components.oekofen.OekofenCoordinator") as coordinator_cls, patch(
-        "custom_components.oekofen.add_extra_js_url"
-    ):
+        "custom_components.oekofen.async_regenerate_dashboard", new=AsyncMock()
+    ) as regenerate_dashboard, patch(
+        "custom_components.oekofen.async_build_wartung_view", new=AsyncMock(return_value=None)
+    ) as build_wartung_view:
         api = AsyncMock()
         api.authenticate = AsyncMock(return_value=True)
         api_cls.return_value = api
@@ -71,35 +74,9 @@ def mocks():
             "discover": discover,
             "coordinator_cls": coordinator_cls,
             "coordinator": coordinator,
+            "regenerate_dashboard": regenerate_dashboard,
+            "build_wartung_view": build_wartung_view,
         }
-
-
-async def test_frontend_resources_registered_before_any_device_network_io(mocks):
-    """A dashboard loading "strategy: custom:oekofen-strategy" needs the JS
-    resource registered before it renders - e.g. a kiosk tablet reconnecting
-    as soon as HA/frontend is reachable, which can happen before this
-    integration finishes its own setup. authenticate()/async_discover_
-    circuits() are real network round-trips to the device that can easily
-    take a few seconds, so the frontend registration (a purely local,
-    hass-only operation) must happen before them, not after - see
-    __init__.py's comment on the "Timeout waiting for strategy element ...
-    to be registered" error this caused."""
-    order = []
-
-    async def _authenticate():
-        order.append("authenticate")
-        return True
-
-    def _add_extra_js_url(*args, **kwargs):
-        order.append("register_frontend")
-
-    hass = _make_hass()
-    mocks["api"].authenticate.side_effect = _authenticate
-
-    with patch("custom_components.oekofen.add_extra_js_url", side_effect=_add_extra_js_url):
-        await async_setup_entry(hass, _make_entry())
-
-    assert order == ["register_frontend", "authenticate"]
 
 
 async def test_platforms_forwarded_before_first_coordinator_refresh(mocks):
@@ -127,91 +104,26 @@ async def test_platforms_forwarded_before_first_coordinator_refresh(mocks):
     assert order == ["forward", "refresh"]
 
 
-def _request(headers=None):
-    request = MagicMock()
-    request.headers = headers or {}
-    return request
-
-
-async def test_strategy_js_view_serves_content_cacheable():
-    """The URL is content-hash-busted (?v=<hash of the JS>), so its content
-    can never change under a given URL - and it *must* be cacheable: with
-    no-store, every dashboard load had to complete a fresh fetch inside the
-    frontend's few-second strategy-registration timeout, which a
-    cold-started WebView (e.g. the Android companion app) regularly missed
-    ("Timeout waiting for strategy element ..."). See _StrategyJSView's
-    docstring."""
-    view = _StrategyJSView("// the actual js content", "deadbeef")
-    response = await view.get(_request())
-
-    assert response.text == "// the actual js content"
-    assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
-    assert response.headers["ETag"] == '"deadbeef"'
-
-
-async def test_strategy_js_view_answers_matching_if_none_match_with_304():
-    """Clients that revalidate anyway despite "immutable" get an empty 304
-    instead of the full body - still fast enough to beat the strategy
-    timeout."""
-    view = _StrategyJSView("// the actual js content", "deadbeef")
-
-    response = await view.get(_request({"If-None-Match": '"deadbeef"'}))
-
-    assert response.status == 304
-
-
-async def test_strategy_js_view_handles_weak_and_multiple_if_none_match():
-    """A proxy may weaken the tag and/or send several candidates."""
-    view = _StrategyJSView("// the actual js content", "deadbeef")
-
-    response = await view.get(_request({"If-None-Match": '"something-else", W/"deadbeef"'}))
-
-    assert response.status == 304
-
-
-async def test_strategy_js_view_serves_body_on_etag_mismatch():
-    view = _StrategyJSView("// the actual js content", "deadbeef")
-
-    response = await view.get(_request({"If-None-Match": '"stale-tag"'}))
-
-    assert response.status == 200
-    assert response.text == "// the actual js content"
-
-
-async def test_concurrent_frontend_registration_second_caller_waits_for_first():
-    """Two ÖkOfen config entries set up concurrently both call
-    _async_register_frontend_resources as their first step. The second
-    caller must not return until the first has actually finished
-    registering - otherwise it (and whatever set up right after it) could
-    proceed while the JS resource still isn't really registered yet,
-    reopening the "Timeout waiting for strategy element" race in miniature."""
-    hass = MagicMock()
-    hass.data = {}
-    started = asyncio.Event()
-    release = asyncio.Event()
+async def test_dashboard_regenerated_after_first_coordinator_refresh(mocks):
+    """The dashboard's structure depends on entity state that doesn't exist
+    until the coordinator's first refresh has actually run (warnhinweis
+    attributes, sensor device_class, ...) - generating it any earlier would
+    just bake in "unavailable" everywhere."""
     order = []
 
-    async def slow_read(*args, **kwargs):
-        started.set()
-        await release.wait()
-        order.append("registered")
-        return "// mock strategy js"
+    async def _refresh():
+        order.append("refresh")
 
-    hass.async_add_executor_job = slow_read
+    async def _regenerate(*args, **kwargs):
+        order.append("regenerate_dashboard")
 
-    with patch("custom_components.oekofen.add_extra_js_url"):
-        task1 = asyncio.create_task(_async_register_frontend_resources(hass))
-        await started.wait()
+    mocks["coordinator"].async_refresh.side_effect = _refresh
+    mocks["regenerate_dashboard"].side_effect = _regenerate
+    hass = _make_hass()
 
-        task2 = asyncio.create_task(_async_register_frontend_resources(hass))
-        await asyncio.sleep(0)
-        assert not task2.done()  # second caller is waiting, not racing past
+    await async_setup_entry(hass, _make_entry())
 
-        release.set()
-        await task1
-        await task2
-
-    assert order == ["registered"]
+    assert order == ["refresh", "regenerate_dashboard"]
 
 
 async def test_first_refresh_uses_async_refresh_not_config_entry_first_refresh(mocks):
@@ -263,6 +175,26 @@ async def test_setup_stores_api_circuits_and_coordinator_in_hass_data(mocks):
     assert entry_data["api"] is mocks["api"]
     assert entry_data["circuits"] == {"hk": [0]}
     assert entry_data["coordinator"] is mocks["coordinator"]
+
+
+async def test_setup_registers_regenerate_dashboard_service(mocks):
+    hass = _make_hass()
+
+    await async_setup_entry(hass, _make_entry())
+
+    hass.services.async_register.assert_called_once()
+    args, _ = hass.services.async_register.call_args
+    assert args[0] == DOMAIN
+    assert args[1] == "regenerate_dashboard"
+
+
+async def test_setup_skips_registering_service_twice(mocks):
+    hass = _make_hass()
+    hass.services.has_service.return_value = True
+
+    await async_setup_entry(hass, _make_entry())
+
+    hass.services.async_register.assert_not_called()
 
 
 async def test_unload_closes_api_and_removes_entry_data_on_success(mocks):

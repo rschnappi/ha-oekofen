@@ -1,0 +1,5 @@
+regenerate_dashboard:
+  name: Dashboard neu erzeugen
+  description: >-
+    Baut das automatisch verwaltete ÖkOfen-Dashboard neu auf (z. B. nach
+    manuellen Änderungen an Entities, oder als Diagnose-Schritt).

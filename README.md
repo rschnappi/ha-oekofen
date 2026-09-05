@@ -125,28 +125,18 @@ weiter unten.
 
 Zwei Wege zu einem fertigen Dashboard - für die meisten reicht **Option A**.
 
-### Option A: Dashboard-Strategy (empfohlen)
+### Option A: Automatisch generiertes Dashboard (empfohlen)
 
-Die Integration bringt eine eigene [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/) mit (`custom_components/oekofen/www/oekofen-strategy.js`), die das komplette Dashboard **automatisch aus den tatsächlich vorhandenen Entities generiert** - kein Suchen-und-Ersetzen von Platzhaltern, keine manuelle Pflege bei mehreren Heizkreisen. Kein manuelles Eintragen unter **Einstellungen → Dashboards → Ressourcen** nötig, die Integration registriert die Ressource beim Start selbst.
+Die Integration legt beim Start automatisch ein eigenes Dashboard **"ÖkOfen"** an (sichtbar in der Seitenleiste, Pfad `/oekofen`) und baut dessen Inhalt **serverseitig aus den tatsächlich vorhandenen Entities** zusammen - kein Suchen-und-Ersetzen von Platzhaltern, keine manuelle Pflege bei mehreren Heizkreisen, keine Einrichtung nötig.
 
-**So richtest du es ein:**
-1. **Einstellungen → Dashboards → + Dashboard hinzufügen**
-2. **Neue Ansicht aus YAML erstellen**
-3. Den Beispiel-Inhalt der neuen Ansicht komplett löschen und stattdessen einfügen:
-   ```yaml
-   strategy:
-     type: custom:oekofen-strategy
-   ```
-4. Speichern - das Dashboard baut sich jetzt automatisch auf.
+Bis Version 0.9.8 geschah das über eine clientseitige [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/) (JavaScript, im Browser ausgeführt). Seit 0.10.0 generiert die Integration stattdessen ein ganz normales, statisches Dashboard direkt in Python und speichert es über HAs eigene Dashboard-Storage-API - denselben Mechanismus, mit dem HA selbst das Onboarding-Dashboard "Karte" anlegt. Grund: eine Dashboard-Strategy bekommt von HAs Frontend nur wenige Sekunden Zeit, sich zu registrieren, sonst "Timeout waiting for strategy element ... to be registered" - ein Wettlauf, den ein kalt gestarteter Client (Kiosk-Tablet direkt nach einem Neustart, langsames WLAN) verlässlich verlieren kann, ganz unabhängig von Caching. Ein normales, serverseitig generiertes Dashboard hat dieses Problem grundsätzlich nicht: HA rendert es wie jedes von Hand angelegte Dashboard, garantiert bei jedem Laden.
 
-Bei **mehreren ÖkOfen-Geräten** in derselben HA-Instanz werden die Ansichten aller Geräte automatisch mit Gerätename präfixiert (Titel und URL-Pfad), du musst nichts weiter tun. Um die Strategy stattdessen auf ein einzelnes Gerät zu beschränken, dessen Geräte-ID angeben (**Einstellungen → Geräte & Dienste → Gerät auswählen → die ID steht in der URL**):
-```yaml
-strategy:
-  type: custom:oekofen-strategy
-  device_id: <geraete-id>
-```
+Das Dashboard wird automatisch aktuell gehalten:
+- **Bei jedem Neustart/Reload** der Integration (nachdem der erste Koordinator-Refresh durchgelaufen ist, damit Installateur-Warnhinweise & Co. schon echte Werte haben).
+- **Automatisch**, sobald sich der erkannte Wartungstermin-Kalender ändert (neuer/geänderter/gelöschter Termin) - kein Neustart nötig.
+- **Manuell** über den Dienst **ÖkOfen: Dashboard neu erzeugen** (`oekofen.regenerate_dashboard`), z. B. nach Änderungen an Entities.
 
-**Was die Strategy generiert** (pro Gerät, automatisch angepasst an die vorhandene Hardware):
+**Was generiert wird** (pro Gerät, automatisch angepasst an die vorhandene Hardware):
 - **Übersicht**: Betriebsarten aller Kreise als Kacheln, plus alles, was keinem Kreis zugeordnet werden konnte (z.B. Anlage-Betriebsart, weitere Schalter/Datum-Zeit-Felder)
 - **Puffer & Pumpen** *(nur wenn vorhanden)*: Puffertemperatur-Fühler und Umwälz-/Zirkulationspumpen-Sensoren
 - **Je eine Ansicht pro Kreis** - Heizkreis 1, 2, ...; Warmwasser 1, ...; Pellematic 1, ...; Zirkulationspumpe 1, ... (nur was am Gerät wirklich existiert):
@@ -189,7 +179,7 @@ Seit v0.6.0/v0.8.0 liefert die Integration native, direkt editierbare `number.*`
 
 ### ⚠️ Installateur-Ebene-Felder
 
-Ein Teil der Sollwerte ist am Original-Gerät selbst **hinter dem Installateur-/Techniker-Code** (`main.codeebene`) versteckt – am Touchdisplay bzw. in der Geräte-Weboberfläche kommt man ohne diesen Code gar nicht an sie heran. Diese Integration liest das Gerät über dieselbe API an, die auch die Weboberfläche nutzt, und kann diese Werte deshalb technisch trotzdem schreiben. Sie sind bewusst **nicht** auf reinen Lesezugriff beschränkt (falls du sie doch mal brauchst), aber in Name (Präfix "⚠️") und Icon markiert und tragen ein `warnhinweis`-Attribut (sichtbar in Entwicklertools → Zustand bzw. im Mehr-Info-Dialog der Entity). Die Dashboard-Strategy (Option A oben) fasst sie zusätzlich in einem eigenen "⚠️ Installateur-Ebene"-Bereich pro Kreis zusammen, mit dem Warnhinweis direkt als Überschrift:
+Ein Teil der Sollwerte ist am Original-Gerät selbst **hinter dem Installateur-/Techniker-Code** (`main.codeebene`) versteckt – am Touchdisplay bzw. in der Geräte-Weboberfläche kommt man ohne diesen Code gar nicht an sie heran. Diese Integration liest das Gerät über dieselbe API an, die auch die Weboberfläche nutzt, und kann diese Werte deshalb technisch trotzdem schreiben. Sie sind bewusst **nicht** auf reinen Lesezugriff beschränkt (falls du sie doch mal brauchst), aber in Name (Präfix "⚠️") und Icon markiert und tragen ein `warnhinweis`-Attribut (sichtbar in Entwicklertools → Zustand bzw. im Mehr-Info-Dialog der Entity). Das automatisch generierte Dashboard (Option A oben) fasst sie zusätzlich in einem eigenen "⚠️ Installateur-Ebene"-Bereich pro Kreis zusammen, mit dem Warnhinweis direkt als Überschrift:
 
 - Heizkreis: Vorlauf Max, Vorlauf Min
 - Warmwasser: Vorrang, Überhöhung, Nachlaufzeit, Einschalthysterese, Legionellenschutz
@@ -203,7 +193,7 @@ Am Original-Gerät ist die Heizkreis-/Warmwasser-Betriebsart (`select.*_betriebs
 
 ### Langzeitstatistik
 
-Sensoren mit numerischem Wert haben bereits die passende `state_class` (measurement bzw. total_increasing), wodurch Home Assistant automatisch **Langzeitstatistiken** führt (im Gegensatz zur normalen Historie verfallen diese nicht nach ein paar Tagen). Für echte Langzeit-Trends (z.B. Temperaturverlauf über Monate, oder Brennerstarts pro Tag zur Kurztakt-Analyse) nutzen sowohl die Dashboard-Strategy als auch `dashboard_example.yaml` dafür `statistics-graph`-Karten statt `history-graph`.
+Sensoren mit numerischem Wert haben bereits die passende `state_class` (measurement bzw. total_increasing), wodurch Home Assistant automatisch **Langzeitstatistiken** führt (im Gegensatz zur normalen Historie verfallen diese nicht nach ein paar Tagen). Für echte Langzeit-Trends (z.B. Temperaturverlauf über Monate, oder Brennerstarts pro Tag zur Kurztakt-Analyse) nutzen sowohl das automatisch generierte Dashboard als auch `dashboard_example.yaml` dafür `statistics-graph`-Karten statt `history-graph`.
 
 ⚠️ **Wichtig bei einem Update von Version < 0.4.0**: Diese Version hat das `unique_id`-Schema der Sensoren geändert (siehe Changelog), wodurch sich auch die Entity-IDs ändern. Das **unterbricht die Kontinuität bereits gesammelter Langzeitstatistiken** – die alten Sensoren behalten ihre Historie, werden aber nicht mehr aktualisiert; die neuen Sensoren starten bei null. Um die Historie zu erhalten, kannst du nach dem Update die alte, verwaiste Entity löschen und die neue Entity in **Einstellungen → Entitäten → [Entity] → Einstellungen → Entity-ID** auf die alte ID umbenennen – Home Assistant führt die Statistik dann unter derselben Statistik-ID (die am Entity-ID-String hängt) nahtlos weiter.
 
@@ -255,8 +245,8 @@ curl -X POST "http://IHR_OEKOFEN_IP/index.cgi" \
   -d '{"user":"IHR_USERNAME","pass":"IHR_PASSWORD","submit":"Anmelden"}'
 ```
 
-#### Dashboard-Strategy zeigt "Error loading the dashboard strategy"
-Meist ein veralteter Frontend-Cache nach einem Update der Integration - Browser-Cache leeren bzw. Seite mit Strg/Cmd+Shift+R neu laden, dann Home Assistant neu starten (die Integration registriert die JS-Ressource erneut beim Start). Falls die Fehlermeldung ausdrücklich einen `ll-strategy-dashboard-...`-Elementnamen nennt, der nie registriert wurde, ist das ein Hinweis auf eine Versionsinkonsistenz zwischen `www/oekofen-strategy.js` und der geladenen Frontend-Ressource - Integration einmal komplett deaktivieren/aktivieren.
+#### Dashboard "ÖkOfen" fehlt oder zeigt veraltete Inhalte
+Seit 0.10.0 kein clientseitiges Problem mehr (siehe oben) - das Dashboard wird serverseitig generiert und gespeichert. Fehlt es trotzdem: prüfen, ob die Integration erfolgreich eingerichtet ist (**Einstellungen → Geräte & Dienste**) und ob `lovelace` überhaupt aktiv ist (Standard bei jeder normalen HA-Installation). Zeigt es veraltete Inhalte nach einer Änderung: Dienst **ÖkOfen: Dashboard neu erzeugen** (`oekofen.regenerate_dashboard`) aufrufen.
 
 ### Debug-Informationen sammeln
 
@@ -316,6 +306,26 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 - `CAPPL:FA[0].L_kesselstatus` - Kesselstatus ✅
 
 ## 📝 Changelog
+
+### Version 0.10.0
+
+- 🏗️ **Dashboard wird jetzt serverseitig generiert, nicht mehr als
+  clientseitige Dashboard-Strategy**: Trotz mehrerer Anläufe (siehe 0.9.2,
+  0.9.4, 0.9.8) blieb "Timeout waiting for strategy element ... to be
+  registered" ein Problem - der eigentliche Grund war struktureller Natur,
+  nicht Caching: HA's Frontend gibt einem Custom-Strategy-Element nur
+  wenige Sekunden Zeit, sich selbst zu registrieren, und ein kalt
+  gestarteter Client (Kiosk-Tablet direkt nach einem Neustart) kann dieses
+  Rennen verlieren, egal wie zuverlässig das JS selbst ausgeliefert wird.
+  Die komplette View-Logik ist jetzt nach Python portiert
+  (`custom_components/oekofen/dashboard.py`) und erzeugt ein ganz normales,
+  statisches Dashboard über HAs eigene Lovelace-Speicher-API - denselben
+  Mechanismus, mit dem HA selbst das Onboarding-Dashboard "Karte" anlegt.
+  Kein Custom Element mehr, kein Registrierungs-Timeout mehr möglich, keine
+  JS-Datei mehr im Repo. Das Dashboard ("ÖkOfen", in der Seitenleiste) wird
+  automatisch beim Setup/Neustart und bei jeder Änderung des
+  Wartungstermin-Kalenders aktualisiert, zusätzlich manuell über den neuen
+  Dienst `oekofen.regenerate_dashboard`.
 
 ### Version 0.9.8
 
@@ -741,5 +751,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.9.8
+**Version**: 0.10.0
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
