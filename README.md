@@ -307,6 +307,20 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.10.2
+
+- 🐛 **Fix: "Wartung"-Tab fehlte im Dashboard komplett, obwohl der
+  Wartungskalender (`calendar.ofen_wartung`) existierte und korrekt erkannt
+  worden wäre**: Existierte der Kalender beim allerersten Dashboard-Aufbau
+  (Setup/Neustart) noch nicht - seine eigene Config-Entry kann innerhalb
+  derselben Bootstrap-Stufe nach der von ÖkOfen laden, eine reale Race
+  Condition - wurde bislang **gar kein** Listener registriert, der ein
+  späteres Erscheinen des Kalenders hätte erkennen können. Die Integration
+  überwacht jetzt zusätzlich, ob überhaupt neue Kalender-Entities auftauchen
+  (`async_track_state_added_domain`), und baut das Dashboard automatisch neu,
+  sobald ein Kalender mit passendem Namen erscheint - ganz ohne weiteren
+  Neustart oder manuellen Aufruf von `oekofen.regenerate_dashboard`.
+
 ### Version 0.10.1
 
 - 🐛 **Fix: Dashboard erschien nach 0.10.0 gar nicht mehr** - `hass.data["lovelace"]`
@@ -772,5 +786,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.10.1
+**Version**: 0.10.2
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

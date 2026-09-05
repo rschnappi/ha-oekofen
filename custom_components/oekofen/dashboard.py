@@ -621,7 +621,7 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
         (
             eid
             for eid in calendar_ids
-            if _matches_wartung(eid, hass.states.get(eid))
+            if matches_wartung(eid, hass.states.get(eid))
         ),
         None,
     )
@@ -671,7 +671,7 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
     }
 
 
-def _matches_wartung(entity_id: str, state: State | None) -> bool:
+def matches_wartung(entity_id: str, state: State | None) -> bool:
     friendly_name = state.attributes.get("friendly_name", "") if state else ""
     name = f"{entity_id} {friendly_name}".lower()
     return "ofen" in name or "wartung" in name

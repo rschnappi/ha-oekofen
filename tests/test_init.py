@@ -126,6 +126,60 @@ async def test_dashboard_regenerated_after_first_coordinator_refresh(mocks):
     assert order == ["refresh", "regenerate_dashboard"]
 
 
+async def test_new_wartung_calendar_appearing_later_triggers_regeneration(mocks):
+    """If no wartung calendar exists yet when oekofen sets up - a real boot-
+    order race, since the calendar's own config entry can load after
+    oekofen's within the same bootstrap stage (see the "aber kein
+    dashboard"/live-deploy history this integration hit) - the dashboard's
+    "Wartung" view must still appear automatically once that calendar shows
+    up later, without another restart or a manual
+    oekofen.regenerate_dashboard call. Regression test: previously no
+    listener at all was registered when async_build_wartung_view found
+    nothing at boot, so a later-created calendar was invisible until the
+    next restart happened to order things the other way."""
+    hass = _make_hass()
+
+    with patch("custom_components.oekofen.async_track_state_added_domain") as track_added:
+        await async_setup_entry(hass, _make_entry())
+
+    assert mocks["regenerate_dashboard"].await_count == 1
+
+    track_added.assert_called_once()
+    args, _ = track_added.call_args
+    assert args[1] == ["calendar"]
+    on_new_calendar = args[2]
+
+    new_state = MagicMock()
+    new_state.attributes = {"friendly_name": "Ofen Wartung"}
+    event = MagicMock()
+    event.data = {"entity_id": "calendar.ofen_wartung", "new_state": new_state}
+
+    await on_new_calendar(event)
+
+    assert mocks["regenerate_dashboard"].await_count == 2
+
+
+async def test_new_non_wartung_calendar_does_not_trigger_regeneration(mocks):
+    """A newly-added calendar with an unrelated name (e.g. a shared family
+    calendar) must not spuriously re-trigger dashboard generation."""
+    hass = _make_hass()
+
+    with patch("custom_components.oekofen.async_track_state_added_domain") as track_added:
+        await async_setup_entry(hass, _make_entry())
+
+    assert mocks["regenerate_dashboard"].await_count == 1
+    on_new_calendar = track_added.call_args[0][2]
+
+    new_state = MagicMock()
+    new_state.attributes = {"friendly_name": "Familie"}
+    event = MagicMock()
+    event.data = {"entity_id": "calendar.familie", "new_state": new_state}
+
+    await on_new_calendar(event)
+
+    assert mocks["regenerate_dashboard"].await_count == 1
+
+
 async def test_first_refresh_uses_async_refresh_not_config_entry_first_refresh(mocks):
     """async_config_entry_first_refresh() raises ConfigEntryNotReady on
     failure, which re-triggers this whole function without unloading the
