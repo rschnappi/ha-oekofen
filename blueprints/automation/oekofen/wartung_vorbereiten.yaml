@@ -1,0 +1,125 @@
+blueprint:
+  name: "ÖkOfen: Anlage vor Wartungstermin ausschalten"
+  description: >
+    Prüft täglich zu einer festgelegten Uhrzeit, ob am Folgetag im gewählten
+    Kalender ein Termin mit einem der angegebenen Stichworte steht (z. B.
+    "Rauchfangkehrer", "Service Ofen"). Falls ja, wird der aktuelle Zustand
+    der gewählten Betriebsart-Entity in einer Szene gesichert und
+    anschließend auf "Aus" geschaltet, damit der Kessel zum Termin kalt ist.
+
+    Teil 1 von 3 des ÖkOfen-Wartungstermin-Blueprint-Sets - siehe
+    `blueprints/automation/oekofen/README.md` im Repo für das vollständige
+    Set und Installationshinweise:
+    1. Dieses Blueprint (Vorbereitung am Vorabend)
+    2. "ÖkOfen: Erinnerung nach Wartungstermin" (Benachrichtigung mit
+       Zurückstellen-Button)
+    3. "ÖkOfen: Auf Vor-Wartungszustand zurückstellen" (reagiert auf den
+       Button)
+  domain: automation
+  source_url: https://github.com/rschnappi/ha-oekofen/blob/main/blueprints/automation/oekofen/wartung_vorbereiten.yaml
+  input:
+    kalender:
+      name: Wartungs-Kalender
+      description: >
+        Kalender, in dem der Wartungstermin eingetragen wird (z. B. eine
+        "Lokaler Kalender"-Integration).
+      selector:
+        entity:
+          domain: calendar
+    anlage_select:
+      name: Betriebsart-Entity
+      description: >
+        Die select-Entity, die ausgeschaltet werden soll (z. B.
+        select.heizraum_ofen_anlage_betriebsart für die gesamte Anlage, oder
+        ein einzelner Heizkreis/Warmwasser).
+      selector:
+        entity:
+          domain: select
+    aus_option:
+      name: "Wert für 'Aus'"
+      description: Die Option, die die Anlage/den Kreis ausschaltet.
+      default: "Aus"
+      selector:
+        text:
+    stichworte:
+      name: Termin-Stichworte
+      description: >
+        Kommagetrennte Liste von Kalender-Titeln, die diese Automatisierung
+        auslösen (Groß-/Kleinschreibung wird ignoriert, sonst exakter
+        Abgleich).
+      default: "Rauchfangkehrer, Service Ofen"
+      selector:
+        text:
+    uhrzeit:
+      name: Prüfzeit
+      description: >
+        Uhrzeit, zu der täglich geprüft wird, ob am nächsten Tag ein Termin
+        ansteht.
+      default: "20:00:00"
+      selector:
+        time:
+    szene_id:
+      name: Szenen-ID
+      description: >
+        Interne ID der Szene, die den Zustand vor der Wartung sichert. Muss
+        exakt mit der Szenen-ID im "Zurückstellen"-Blueprint (Teil 3)
+        übereinstimmen.
+      default: oekofen_zustand_vor_wartung
+      selector:
+        text:
+    benachrichtigung:
+      name: Benachrichtigungsziel
+      description: >
+        notify-Entity (z. B. notify.<dein_handy>), die informiert wird,
+        sobald die Anlage ausgeschaltet wurde.
+      selector:
+        entity:
+          domain: notify
+
+trigger:
+  - trigger: time
+    at: !input uhrzeit
+
+condition: []
+
+action:
+  - variables:
+      kalender_entity: !input kalender
+      stichwort_liste: !input stichworte
+      szene: !input szene_id
+  - action: calendar.get_events
+    target:
+      entity_id: "{{ kalender_entity }}"
+    data:
+      start_date_time: "{{ (now() + timedelta(days=1)).strftime('%Y-%m-%d 00:00:00') }}"
+      end_date_time: "{{ (now() + timedelta(days=2)).strftime('%Y-%m-%d 00:00:00') }}"
+    response_variable: kalender_morgen
+  - if:
+      - condition: template
+        value_template: >
+          {% set stichworte = stichwort_liste.split(',') | map('trim') | map('lower') | list %}
+          {{ kalender_morgen[kalender_entity]['events']
+             | map(attribute='summary')
+             | map('lower')
+             | select('in', stichworte)
+             | list | count > 0 }}
+    then:
+      - action: scene.create
+        data:
+          scene_id: "{{ szene }}"
+          snapshot_entities:
+            - !input anlage_select
+      - action: select.select_option
+        target:
+          entity_id: !input anlage_select
+        data:
+          option: !input aus_option
+      - action: notify.send_message
+        target:
+          entity_id: !input benachrichtigung
+        data:
+          title: "ÖkOfen: Wartung vorbereitet"
+          message: >
+            Die Anlage wurde ausgeschaltet, damit der Kessel zum morgigen
+            Termin kalt ist.
+mode: single

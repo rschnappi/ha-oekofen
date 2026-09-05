@@ -207,6 +207,17 @@ Sensoren mit numerischem Wert haben bereits die passende `state_class` (measurem
 
 ⚠️ **Wichtig bei einem Update von Version < 0.4.0**: Diese Version hat das `unique_id`-Schema der Sensoren geändert (siehe Changelog), wodurch sich auch die Entity-IDs ändern. Das **unterbricht die Kontinuität bereits gesammelter Langzeitstatistiken** – die alten Sensoren behalten ihre Historie, werden aber nicht mehr aktualisiert; die neuen Sensoren starten bei null. Um die Historie zu erhalten, kannst du nach dem Update die alte, verwaiste Entity löschen und die neue Entity in **Einstellungen → Entitäten → [Entity] → Einstellungen → Entity-ID** auf die alte ID umbenennen – Home Assistant führt die Statistik dann unter derselben Statistik-ID (die am Entity-ID-String hängt) nahtlos weiter.
 
+## 🗓️ Wartungstermin automatisch vorbereiten (Blueprint)
+
+`blueprints/automation/oekofen/` enthält ein 3-teiliges Blueprint-Set: Anlage
+am Abend vor einem Kalendertermin ("Rauchfangkehrer", "Service Ofen", ...)
+automatisch ausschalten (Zustand vorher in einer Szene sichern), und nach
+dem Termin per Knopfdruck in der Benachrichtigung wieder zurückstellen.
+Braucht keine Code-Änderung an der Integration - nur Bordmittel von Home
+Assistant (Kalender, Szenen, Benachrichtigungs-Aktionen). Siehe das
+[README im Blueprint-Ordner](blueprints/automation/oekofen/README.md) für
+Installation und Konfiguration.
+
 ## 🔧 Erweiterte Konfiguration
 
 ### Update-Intervall
