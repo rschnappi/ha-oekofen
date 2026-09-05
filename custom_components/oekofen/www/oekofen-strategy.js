@@ -630,50 +630,86 @@
    * per-device loop.
    */
   async function buildWartungView(hass) {
-    const states = hass.states || {};
-    const calendarEntity = Object.keys(states)
-      .filter((id) => domainOf(id) === "calendar")
-      .find((id) => {
-        const name = `${id} ${states[id].attributes.friendly_name || ""}`.toLowerCase();
+    // TEMPORARY DIAGNOSTIC BUILD: always returns a view (never null) with a
+    // visible debug section, so a live failure shows up on the dashboard
+    // itself instead of silently vanishing - remove the debug card once the
+    // missing-view issue is understood.
+    const debugLines = [];
+    try {
+      const states = hass.states || {};
+      const calendarIds = Object.keys(states).filter((id) => domainOf(id) === "calendar");
+      debugLines.push(`hass.states keys: ${Object.keys(states).length}`);
+      debugLines.push(`calendar domain entities found: ${calendarIds.length ? calendarIds.join(", ") : "(none)"}`);
+
+      const calendarEntity = calendarIds.find((id) => {
+        const name = `${id} ${(states[id].attributes && states[id].attributes.friendly_name) || ""}`.toLowerCase();
         return name.includes("ofen") || name.includes("wartung");
       });
-    if (!calendarEntity) return null;
+      debugLines.push(`matched calendar entity: ${calendarEntity || "(none)"}`);
 
-    let upcoming = [];
-    try {
-      const start = new Date();
-      const end = new Date(start.getTime() + 1000 * 60 * 60 * 24 * 180);
-      const events = await hass.callWS({
-        type: "calendar/event/list",
-        entity_id: calendarEntity,
-        start: start.toISOString(),
-        end: end.toISOString(),
+      if (!calendarEntity) {
+        return {
+          title: "Wartung (Debug)",
+          path: "wartung-debug",
+          icon: "mdi:bug",
+          cards: [markdown(`## Debug: Kalender nicht gefunden\n\n${debugLines.map((l) => `- ${l}`).join("\n")}`)],
+        };
+      }
+
+      let upcoming = [];
+      let callWsError = null;
+      try {
+        const start = new Date();
+        const end = new Date(start.getTime() + 1000 * 60 * 60 * 24 * 180);
+        const events = await hass.callWS({
+          type: "calendar/event/list",
+          entity_id: calendarEntity,
+          start: start.toISOString(),
+          end: end.toISOString(),
+        });
+        debugLines.push(`callWS returned ${events ? events.length : "null"} events`);
+        upcoming = (events || [])
+          .slice()
+          .sort((a, b) => new Date(a.start.dateTime || a.start.date) - new Date(b.start.dateTime || b.start.date))
+          .slice(0, 3);
+      } catch (e) {
+        callWsError = e && e.message ? e.message : String(e);
+        debugLines.push(`callWS threw: ${callWsError}`);
+        upcoming = [];
+      }
+
+      const lines = upcoming.map((ev) => {
+        const raw = ev.start.dateTime || ev.start.date;
+        const d = new Date(raw);
+        const datum = d.toLocaleDateString("de-AT", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+        const uhrzeit = ev.start.dateTime ? d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }) : "";
+        return `- **${ev.summary}** – ${datum}${uhrzeit ? " " + uhrzeit : ""}`;
       });
-      upcoming = (events || [])
-        .slice()
-        .sort((a, b) => new Date(a.start.dateTime || a.start.date) - new Date(b.start.dateTime || b.start.date))
-        .slice(0, 3);
+
+      return {
+        title: "Wartung",
+        path: "wartung",
+        icon: "mdi:calendar-wrench",
+        cards: [
+          markdown(`## \u{1F5D3}️ Nächste Termine\n\n${lines.length ? lines.join("\n") : "Keine anstehenden Termine."}`),
+          { type: "calendar", entities: [calendarEntity] },
+          markdown(`## Debug\n\n${debugLines.map((l) => `- ${l}`).join("\n")}`),
+        ],
+      };
     } catch (e) {
-      upcoming = [];
+      return {
+        title: "Wartung (Debug)",
+        path: "wartung-debug",
+        icon: "mdi:bug",
+        cards: [
+          markdown(
+            `## Debug: buildWartungView threw\n\n${(e && e.stack) || (e && e.message) || String(e)}\n\n${debugLines
+              .map((l) => `- ${l}`)
+              .join("\n")}`
+          ),
+        ],
+      };
     }
-
-    const lines = upcoming.map((ev) => {
-      const raw = ev.start.dateTime || ev.start.date;
-      const d = new Date(raw);
-      const datum = d.toLocaleDateString("de-AT", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
-      const uhrzeit = ev.start.dateTime ? d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }) : "";
-      return `- **${ev.summary}** – ${datum}${uhrzeit ? " " + uhrzeit : ""}`;
-    });
-
-    return {
-      title: "Wartung",
-      path: "wartung",
-      icon: "mdi:calendar-wrench",
-      cards: [
-        markdown(`## \u{1F5D3}️ Nächste Termine\n\n${lines.length ? lines.join("\n") : "Keine anstehenden Termine."}`),
-        { type: "calendar", entities: [calendarEntity] },
-      ],
-    };
   }
 
   class OekofenStrategy {
