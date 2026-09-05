@@ -15,17 +15,9 @@ die Entity-Lifecycle/Coordinator-Timing berühren, siehe Vorfälle unten.
   Requests/Zyklus gegen den schwachbrüstigen Embedded-Webserver.
 - **`__init__.py`'s `async_setup_entry`**: Reihenfolge ist absichtlich und
   fragil, wenn man sie ändert:
-  1. `_async_register_frontend_resources(hass)` **zuerst**, vor jeglichem
-     Netzwerkzugriff zum Gerät (`api.authenticate()`,
-     `async_discover_circuits()`). Grund: ein Client (z.B. Kiosk-Tablet), der
-     das Dashboard lädt, sobald HA/Frontend erreichbar ist — was vor dem
-     Ende dieser Integration-Setup passieren kann — bekommt sonst
-     `index.html` ohne das Strategy-JS-Script-Tag ausgeliefert ("Timeout
-     waiting for strategy element ... to be registered"). War **keine**
-     Cache-Sache, wie zuerst angenommen (siehe PR #30/#31 vs. #38).
-  2. `hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)` —
+  1. `hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)` —
      jede Plattform registriert ihre Parameter.
-  3. `coordinator.async_refresh()` — **nicht**
+  2. `coordinator.async_refresh()` — **nicht**
      `async_config_entry_first_refresh()`. Letzteres wirft
      `ConfigEntryNotReady` bei Fehlschlag, was HA dazu bringt,
      `async_setup_entry` (inkl. `async_forward_entry_setups`) komplett neu
@@ -34,6 +26,10 @@ die Entity-Lifecycle/Coordinator-Timing berühren, siehe Vorfälle unten.
      → Integration hängt dauerhaft in `SETUP_ERROR`. `async_refresh()` loggt
      nur und setzt `last_update_success = False`, Entities zeigen dann
      korrekt "nicht verfügbar" bis zum nächsten Poll (siehe PR #32).
+  3. `_async_regenerate_dashboard_and_track_calendar(hass, entry)` **danach**,
+     nicht davor — das generierte Dashboard hängt von echten Entity-Zuständen
+     ab (`warnhinweis`-Attribute, Kalender-Termine), die vor dem ersten
+     Refresh noch nicht existieren (siehe Frontend/Dashboard unten).
 - **`coordinator.data` defaultet auf `{}`, nicht `None`** (überschrieben in
   `OekofenCoordinator.__init__`). Grund: Plattformen legen ihre Entities
   über `async_add_entities` an, *bevor* der erste Refresh läuft (siehe
@@ -54,35 +50,49 @@ liefert nur für die tatsächlich aktive Variante echte Daten — welche das
 ist, wird zur Laufzeit anhand von "hat einen Wert" entschieden, nicht
 geraten/konfiguriert.
 
-## Frontend/Dashboard (`www/oekofen-strategy.js`)
+## Frontend/Dashboard (`dashboard.py`)
 
-- Wird über `add_extra_js_url()` registriert, URL cache-gebustet mit einem
-  Hash des tatsächlichen Datei-Inhalts als Query-Param (`?v=<hash>`), nicht
-  mit `manifest.json`s Version — die wird von Hand gepflegt und wurde in
-  der Praxis mehrfach hintereinander vergessen, während diese Datei sich
-  weiter änderte, was einen versions-basierten Cache-Buster für jedes
-  dieser Releases lautlos wirkungslos gemacht hätte (siehe PR #30/#31/#52).
-- **Die Strategy-JS muss cachebar bleiben.** HA's Frontend gibt einem
-  Custom-Strategy-Element nur wenige Sekunden zum Registrieren. Mit
-  `no-store` (0.9.2–0.9.6) brauchte *jeder* Dashboard-Aufruf einen frischen
-  Netz-Roundtrip innerhalb dieser Frist — im Desktop-Browser am LAN
-  unauffällig, in einer kalt gestarteten WebView (z. B. Android-Companion-
-  App) reproduzierbar zu langsam → „Timeout waiting for strategy element
-  …" bei jedem Versuch (siehe PR #52). Seit 0.9.8 wird die Datei mit
-  `max-age=31536000, immutable` plus inhalts-basiertem ETag/304 ausgeliefert
-  — sicher, weil die URL bereits inhalts-gehasht ist und sich unter einer
-  gegebenen URL nie ändert.
+- **Bis 0.9.8**: eine clientseitige [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/)
+  (`www/oekofen-strategy.js`), im Browser ausgeführt. Grundproblem, trotz
+  mehrerer Anläufe (PR #30/#31/#38/#52) nie vollständig behoben: HA's
+  Frontend gibt einem Custom-Strategy-Element nur wenige Sekunden Zeit,
+  sich zu registrieren — ein kalt gestarteter Client (Kiosk-Tablet direkt
+  nach einem HA-Neustart, langsames WLAN) kann dieses Rennen verlieren,
+  unabhängig von Setup-Reihenfolge oder Caching-Headern. Ergebnis: „Timeout
+  waiting for strategy element ... to be registered", reproduzierbar auch
+  mit nachweislich korrekt ausgeliefertem, aktuellem JS.
+- **Seit 0.10.0**: `dashboard.py` generiert dieselben Views **serverseitig
+  in Python** (Port der alten `oekofen-strategy.js`-Logik, Funktion für
+  Funktion) und speichert sie als ganz normales, statisches
+  `{"views": [...]}`-Dashboard über HAs eigene Lovelace-Storage-API
+  (`hass.data["lovelace"]["dashboards_collection"]`/`LovelaceStorage`
+  — derselbe Mechanismus, mit dem HA selbst das Onboarding-Dashboard "Karte"
+  anlegt, siehe `homeassistant/components/lovelace/__init__.py`s
+  `_create_map_dashboard`). Kein Custom Element, kein Registrierungs-
+  Timeout, keine JS-Datei mehr im Repo — jede verwendete Karte
+  (`markdown`, `tile`, `grid`, `thermostat` mit `features`, `calendar`,
+  `history-graph`, `statistics-graph`, ...) ist ein in HA eingebauter
+  Kartentyp.
+  - `async_regenerate_dashboard()` legt das Dashboard (Pfad `/oekofen`,
+    Seitenleiste) beim ersten Aufruf an und überschreibt danach nur noch
+    dessen Inhalt — durch ein `asyncio.Lock` gegen die Race zweier
+    gleichzeitig setup-ender Config-Entries (zwei physische Geräte)
+    abgesichert, sonst würde der zweite `async_create_item`-Aufruf
+    scheitern (URL-Pfad schon vergeben).
+  - Wird neu erzeugt: bei jedem Setup/Reload (nach dem ersten Coordinator-
+    Refresh, siehe Architektur oben), automatisch bei jeder
+    Zustandsänderung des erkannten Wartungstermin-Kalenders (`state_changed`
+    getrackt), und manuell über den Dienst
+    `oekofen.regenerate_dashboard`.
+  - `async_build_wartung_view()` nutzt den `calendar.get_events`-Dienst
+    (`return_response=True`) statt der WebSocket-API, die die alte JS
+    verwendet hat — Serverseite hat keinen `hass.callWS`.
 - `thermostat`-Karten zeigen `hvac_mode`/`preset_mode` **nicht** von sich
   aus direkt an — braucht explizite `features: [{type: "climate-hvac-modes"}, ...]`
   (siehe PR #37/#39).
 - Temperatur-Sensoren mit stark abweichender Skala (Feuerraumtemperatur
   0-1000°C vs. alles andere 0-100°C) brauchen eigene Charts, sonst
   flacht ein `history-graph` alles andere zu einer Linie ab (siehe PR #30).
-- Bekannter Fehler `"Timeout waiting for strategy element ... to be
-  registered"` → zwei bekannte Ursachen, **beide keine reine Cache-Sache**:
-  Setup-Reihenfolge (oben) und ein zu langsamer JS-Fetch innerhalb der
-  Registrierungsfrist (behoben in 0.9.8, siehe oben). Nutzer nicht
-  wiederholt Cache leeren lassen — das erzwingt nur den Kaltstart-Fall.
 
 ## Testing
 
@@ -98,8 +108,10 @@ geraten/konfiguriert.
   ```
 - `python3 -m py_compile custom_components/oekofen/*.py` für schnellen
   Syntax-Check ohne Dependencies.
-- `node --check custom_components/oekofen/www/oekofen-strategy.js` für die
-  Dashboard-Strategy — es gibt keine JS-Testsuite dafür.
+- `tests/test_dashboard.py` testet `dashboard.py`s View-Bau-Funktionen pur
+  (Plain-Dict-Entities + einem `SimpleNamespace`-Fake für `hass.states`),
+  ohne echten `hass` — genau wie die alte JS über Node-Dry-Runs getestet
+  wurde, nur jetzt als echte pytest-Suite.
 - Style: `FakeCoordinator`/`make_point` aus `tests/conftest.py` statt eines
   echten `hass`/Event-Loops — die meisten Entity-Tests brauchen nur
   `coordinator.data`/`coordinator.last_update_success`.
@@ -111,8 +123,10 @@ geraten/konfiguriert.
   `**Version**: X.Y.Z`-Footer und eine passende `### Version X.Y.Z`-
   Changelog-Überschrift dazu existieren — beide bei jedem Versions-Bump
   mitpflegen.
-- Version bumpen bei: JS-Änderungen (Cache-Bust!), Breaking Changes,
-  nutzerspürbaren Fixes. Nicht bei rein internem Cleanup/Tests.
+- Version bumpen bei: Breaking Changes, nutzerspürbaren Fixes. Nicht bei
+  rein internem Cleanup/Tests. (Bis 0.9.8 auch bei jeder Änderung an
+  `www/oekofen-strategy.js`, wegen des versions-basierten Cache-Busters —
+  seit 0.10.0 entfällt das, siehe Frontend/Dashboard oben.)
 
 ## Git-Workflow dieses Projekts
 
