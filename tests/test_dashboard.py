@@ -197,6 +197,79 @@ async def test_async_build_wartung_view_lists_next_three_events():
     assert view["cards"][0]["content"].index("Service Ofen") < view["cards"][0]["content"].index("Rauchfangkehrer")
 
 
+async def test_async_build_wartung_view_shows_automatic_shutdown_info():
+    """When a "ÖkOfen: Anlage vor Wartungstermin ausschalten" blueprint
+    automation is configured, the Wartung view must also show: the
+    automation's own on/off state, the switched select entity, a restore
+    button for the saved scene, and an info card with the check time,
+    keywords and notify target - all read live from that automation's own
+    configured blueprint inputs, not a generic explanation."""
+    from homeassistant.components.automation import DATA_COMPONENT as AUTOMATION_DATA_COMPONENT
+
+    hass = MagicMock()
+    calendar_state = fake_state("on", friendly_name="Ofen Wartung")
+    calendar_state.entity_id = "calendar.ofen_wartung"
+    hass.states.async_all.return_value = [calendar_state]
+    hass.states.get.return_value = calendar_state
+    hass.services.async_call = AsyncMock(return_value={"calendar.ofen_wartung": {"events": []}})
+
+    automation_entity = MagicMock()
+    automation_entity.entity_id = "automation.oekofen_wartung_vorbereiten"
+    automation_entity._blueprint_inputs = {
+        "use_blueprint": {
+            "path": "oekofen/wartung_vorbereiten.yaml",
+            "input": {
+                "kalender": "calendar.ofen_wartung",
+                "anlage_select": "select.heizraum_ofen_anlage_betriebsart",
+                "aus_option": "Aus",
+                "stichworte": "Rauchfangkehrer, Service Ofen",
+                "uhrzeit": "20:00:00",
+                "szene_id": "oekofen_zustand_vor_wartung",
+                "benachrichtigung": "notify.handy",
+            },
+        }
+    }
+    automation_component = MagicMock()
+    automation_component.get_entity.return_value = automation_entity
+    hass.data = {AUTOMATION_DATA_COMPONENT: automation_component}
+
+    with patch(
+        "homeassistant.components.automation.automations_with_blueprint",
+        return_value=["automation.oekofen_wartung_vorbereiten"],
+    ):
+        view = await async_build_wartung_view(hass)
+
+    entities_card = next(c for c in view["cards"] if c.get("type") == "entities")
+    assert entities_card["entities"][0] == "automation.oekofen_wartung_vorbereiten"
+    assert "select.heizraum_ofen_anlage_betriebsart" in entities_card["entities"]
+    assert any(
+        isinstance(e, dict) and e.get("entity") == "scene.oekofen_zustand_vor_wartung"
+        for e in entities_card["entities"]
+    )
+
+    info_card = next(c for c in view["cards"] if "notify.handy" in c.get("content", ""))
+    assert "20:00" in info_card["content"]
+    assert "Rauchfangkehrer" in info_card["content"]
+
+
+async def test_async_build_wartung_view_omits_automation_cards_when_none_configured():
+    """No "wartung_vorbereiten" blueprint automation configured -> no extra
+    cards, just the plain calendar view (regression guard: this must not
+    raise even though hass.data here has no automation component at all)."""
+    hass = MagicMock()
+    calendar_state = fake_state("on", friendly_name="Ofen Wartung")
+    calendar_state.entity_id = "calendar.ofen_wartung"
+    hass.states.async_all.return_value = [calendar_state]
+    hass.states.get.return_value = calendar_state
+    hass.services.async_call = AsyncMock(return_value={"calendar.ofen_wartung": {"events": []}})
+    hass.data = {}
+
+    view = await async_build_wartung_view(hass)
+
+    assert len(view["cards"]) == 2
+    assert not any(c.get("type") == "entities" for c in view["cards"])
+
+
 def _patch_lovelace_collaborators(collection_instance, storage_instance):
     """Patch the HA core lovelace internals async_regenerate_dashboard reaches
     into: a throwaway DashboardsCollection (since real one isn't reachable via

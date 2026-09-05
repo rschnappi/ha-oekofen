@@ -64,29 +64,75 @@ geraten/konfiguriert.
 - **Seit 0.10.0**: `dashboard.py` generiert dieselben Views **serverseitig
   in Python** (Port der alten `oekofen-strategy.js`-Logik, Funktion für
   Funktion) und speichert sie als ganz normales, statisches
-  `{"views": [...]}`-Dashboard über HAs eigene Lovelace-Storage-API
-  (`hass.data["lovelace"]["dashboards_collection"]`/`LovelaceStorage`
-  — derselbe Mechanismus, mit dem HA selbst das Onboarding-Dashboard "Karte"
+  `{"views": [...]}`-Dashboard über HAs eigene Lovelace-Storage-API —
+  derselbe Mechanismus, mit dem HA selbst das Onboarding-Dashboard "Karte"
   anlegt, siehe `homeassistant/components/lovelace/__init__.py`s
-  `_create_map_dashboard`). Kein Custom Element, kein Registrierungs-
+  `_create_map_dashboard`. Kein Custom Element, kein Registrierungs-
   Timeout, keine JS-Datei mehr im Repo — jede verwendete Karte
   (`markdown`, `tile`, `grid`, `thermostat` mit `features`, `calendar`,
-  `history-graph`, `statistics-graph`, ...) ist ein in HA eingebauter
-  Kartentyp.
+  `history-graph`, `statistics-graph`, `entities`, ...) ist ein in HA
+  eingebauter Kartentyp.
+  - **`hass.data["lovelace"]` ist ein `LovelaceData`-Dataclass
+    (Attribut-Zugriff `.dashboards`), kein Dict** — der ursprüngliche
+    0.10.0-Code ging von einem Dict mit `"dashboards"`/
+    `"dashboards_collection"`-Keys aus (stimmte mit dem lokal gepinnten,
+    2 Jahre alten Test-HA überein, brach aber live gegen 2026.9.0 mit
+    `AttributeError: 'LovelaceData' object has no attribute 'get'`, siehe
+    PR #59). **Zusätzlich hält HA-Core die für `async_create_item` nötige
+    `DashboardsCollection`-Instanz nur noch als lokale Variable innerhalb
+    von lovelace's eigenem `async_setup`** — über `hass.data` für andere
+    Integrationen gar nicht mehr erreichbar. Lösung: `_async_create_and_
+    register_dashboard()` legt eine eigene, zweite `DashboardsCollection`-
+    Instanz an (zeigt auf dieselbe Storage-Datei, daher dauerhaft
+    kompatibel mit dem, was HA selbst beim nächsten Neustart einliest),
+    und registriert Sidebar-Panel + `dashboards[...]`-Eintrag für den
+    laufenden Boot manuell nach. Payload braucht `"allow_single_word":
+    True`, weil `"oekofen"` keinen Bindestrich enthält.
   - `async_regenerate_dashboard()` legt das Dashboard (Pfad `/oekofen`,
     Seitenleiste) beim ersten Aufruf an und überschreibt danach nur noch
     dessen Inhalt — durch ein `asyncio.Lock` gegen die Race zweier
     gleichzeitig setup-ender Config-Entries (zwei physische Geräte)
     abgesichert, sonst würde der zweite `async_create_item`-Aufruf
-    scheitern (URL-Pfad schon vergeben).
+    scheitern (URL-Pfad schon vergeben). Retryt sich selbst (0.5s,
+    `asyncio.create_task`), falls `hass.data["lovelace"]` bei Aufruf noch
+    nicht existiert.
   - Wird neu erzeugt: bei jedem Setup/Reload (nach dem ersten Coordinator-
     Refresh, siehe Architektur oben), automatisch bei jeder
     Zustandsänderung des erkannten Wartungstermin-Kalenders (`state_changed`
-    getrackt), und manuell über den Dienst
-    `oekofen.regenerate_dashboard`.
+    getrackt), **und automatisch sobald überhaupt ein neuer, passend
+    benannter Kalender auftaucht** (`async_track_state_added_domain(hass,
+    ["calendar"], ...)`, seit 0.10.2) — die Kalender-Integration kann
+    innerhalb derselben Bootstrap-Stufe nach oekofen laden, ohne diesen
+    zweiten Listener bliebe das Dashboard sonst permanent ohne
+    Wartungs-Tab, bis der Boot-Reihenfolge-Zufall einmal anders ausfällt.
+    Zusätzlich manuell über den Dienst `oekofen.regenerate_dashboard`.
   - `async_build_wartung_view()` nutzt den `calendar.get_events`-Dienst
     (`return_response=True`) statt der WebSocket-API, die die alte JS
-    verwendet hat — Serverseite hat keinen `hass.callWS`.
+    verwendet hat — Serverseite hat keinen `hass.callWS`. Der Service-Call
+    ist in `try/except` gekapselt: `async_build_dashboard_config()` hat
+    keinerlei eigenes Error-Handling um diesen Aufruf, eine unbehandelte
+    Exception hier würde also die **gesamte** Dashboard-Regenerierung
+    (nicht nur die Wartungs-Ansicht) abbrechen.
+  - **MDI-Icon-Namen werden von HA nicht validiert** — ein nicht
+    existierender Name (`mdi:calendar-wrench` war nie ein echtes Icon)
+    rendert einfach gar kein Icon, statt einen Fehler zu werfen. Ergebnis:
+    ein technisch vorhandener, klickbarer, aber optisch leerer Tab in der
+    Tableiste, der wie ein Bug ("Tab fehlt") aussieht, aber keiner ist
+    (PR #61). Bei neuen Icon-Strings im Zweifel ein garantiert
+    existierendes Basis-Icon nehmen (`mdi:wrench`, `mdi:calendar`, ...).
+  - **Seit 0.11.0**: Ist eine der drei `blueprints/automation/oekofen/`-
+    Automatisierungen ("Anlage vor Wartungstermin ausschalten")
+    konfiguriert, liest der Wartungs-Tab deren tatsächliche Blueprint-
+    Inputs live aus und zeigt Automatisierungs-Status, geschaltete Entity
+    und einen Szene-Wiederherstellen-Knopf plus Infokarte (Prüfzeit,
+    Stichworte, Benachrichtigungsziel). Nutzt
+    `homeassistant.components.automation.automations_with_blueprint()`
+    (öffentliche HA-Core-Funktion, dieselbe, die die Blueprint-Seite für
+    "N Automatisierungen nutzen dieses Blueprint" verwendet) zum Finden
+    der Entity-IDs, greift dann aber auf `AutomationEntity._blueprint_
+    inputs` zu (privates Attribut ohne öffentlichen Getter außer dem
+    Blueprint-Pfad selbst über `referenced_blueprint`) — defensiv über
+    `getattr`/`try-except`, kein Absturz bei fehlender/geänderter Struktur.
 - `thermostat`-Karten zeigen `hvac_mode`/`preset_mode` **nicht** von sich
   aus direkt an — braucht explizite `features: [{type: "climate-hvac-modes"}, ...]`
   (siehe PR #37/#39).
@@ -99,13 +145,25 @@ geraten/konfiguriert.
 - Sandbox hat kein Python 3.14 (das `homeassistant==2026.8.2`-Pin aus
   `requirements-test-ha.txt` braucht es). Workaround: eigenes venv mit
   Python 3.13 + `homeassistant<2026.3` (löst zu `2026.2.3` auf — nah genug,
-  um echte Regressionen zu fangen, auch wenn nicht exakt der CI-Pin).
+  um die meisten Regressionen zu fangen, auch wenn nicht exakt der CI-Pin).
   ```
   python3.13 -m venv .venv
   source .venv/bin/activate
   pip install pytest pytest-asyncio aiohttp async-timeout "homeassistant<2026.3"
   python -m pytest tests/ -q
   ```
+  **Vorsicht bei allem, was tief in HA-Core-Internals reingreift**
+  (`dashboard.py`s Lovelace-/Automation-Introspektion): "nah genug" hat bei
+  `hass.data["lovelace"]`s Struktur (Dict → `LovelaceData`-Dataclass,
+  irgendwann zwischen 2024.4 und 2026.9) und bei `frontend.
+  async_panel_exists` (existiert in 2026.9.0, fehlt noch in 2026.2.3) NICHT
+  gereicht — beides brach erst live gegen die tatsächliche Nutzerversion,
+  während die 2026.2.3-Tests weiterhin grün waren. Bei Unsicherheit: die
+  exakte Nutzerversion aus dem HA-Startlog ("Starting Home Assistant
+  X.Y.Z") per `curl https://raw.githubusercontent.com/home-assistant/core/
+  X.Y.Z/homeassistant/components/<component>/__init__.py` gegen die echte
+  getaggte Quelle prüfen, statt sich auf den lokalen Pin oder den
+  `dev`-Branch (kann selbst neuer als jede Release sein) zu verlassen.
 - `python3 -m py_compile custom_components/oekofen/*.py` für schnellen
   Syntax-Check ohne Dependencies.
 - `tests/test_dashboard.py` testet `dashboard.py`s View-Bau-Funktionen pur

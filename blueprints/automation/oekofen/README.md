@@ -1,5 +1,11 @@
 # ÖkOfen: Anlage automatisch für Wartungstermine ausschalten
 
+> Ab Integrationsversion 0.11.0 zeigt der "Wartung"-Tab im
+> auto-generierten ÖkOfen-Dashboard automatisch den Status der unten
+> beschriebenen "Vorbereiten"-Automatisierung an (Ein/Aus, geschaltete
+> Entity, Prüfzeit, Stichworte, Benachrichtigungsziel), sobald sie einmal
+> aus diesem Blueprint angelegt wurde - keine weitere Konfiguration nötig.
+
 Drei zusammengehörige Blueprints, die die Anlage (oder einen einzelnen
 Heizkreis/Warmwasser) am Abend vor einem Wartungstermin ("Rauchfangkehrer",
 "Service Ofen", ...) automatisch ausschalten, damit der Kessel kalt ist -

@@ -674,6 +674,12 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
             uhrzeit = ""
         lines.append(f"- **{ev.get('summary')}** – {datum}{uhrzeit}")
 
+    cards = [
+        markdown(f"## \U0001F5D3️ Nächste Termine\n\n" + ("\n".join(lines) if lines else "Keine anstehenden Termine.")),
+        {"type": "calendar", "entities": [calendar_entity]},
+    ]
+    cards.extend(_build_wartung_automation_cards(hass))
+
     return {
         "title": "Wartung",
         "path": "wartung",
@@ -684,11 +690,100 @@ async def async_build_wartung_view(hass: HomeAssistant) -> dict[str, Any] | None
         # space in the tab strip instead of a visible tab. "wrench" is a
         # foundational MDI icon, guaranteed to exist.
         "icon": "mdi:wrench",
-        "cards": [
-            markdown(f"## \U0001F5D3️ Nächste Termine\n\n" + ("\n".join(lines) if lines else "Keine anstehenden Termine.")),
-            {"type": "calendar", "entities": [calendar_entity]},
-        ],
+        "cards": cards,
     }
+
+
+WARTUNG_VORBEREITEN_BLUEPRINT = "oekofen/wartung_vorbereiten.yaml"
+
+
+def _blueprint_input_values(hass: HomeAssistant, blueprint_path: str) -> list[dict[str, Any]]:
+    """Return the raw `input:` mapping for every automation using the given
+    blueprint path, together with that automation's own entity_id.
+
+    automations_with_blueprint() is HA core's own public helper (the same
+    one powering the blueprint page's "N automations use this blueprint"
+    listing). It only returns entity_ids though - the actual field values
+    the user configured (which select entity, which notify target, ...)
+    live in AutomationEntity's private _blueprint_inputs attribute, which
+    has no public accessor beyond referenced_blueprint (just the path).
+    This is the same private attribute HA's own "automation/config"
+    websocket command reaches into to power the UI's own blueprint-input
+    editing view, so it's a stable-enough internal to build on - but
+    still reached defensively (getattr, no exceptions raised) since it
+    isn't a committed public API.
+    """
+    try:
+        from homeassistant.components.automation import DATA_COMPONENT, automations_with_blueprint
+    except ImportError:
+        return []
+
+    component = hass.data.get(DATA_COMPONENT)
+    if component is None:
+        return []
+
+    results = []
+    for entity_id in automations_with_blueprint(hass, blueprint_path):
+        entity = component.get_entity(entity_id)
+        blueprint_inputs = getattr(entity, "_blueprint_inputs", None) if entity else None
+        inputs = (blueprint_inputs or {}).get("use_blueprint", {}).get("input")
+        if inputs:
+            results.append({"entity_id": entity_id, "input": inputs})
+    return results
+
+
+def _build_wartung_automation_cards(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """For every "ÖkOfen: Anlage vor Wartungstermin ausschalten" automation
+    (see blueprints/automation/oekofen/), show its enabled/disabled state,
+    the switched entity's current value, and a way to restore the
+    pre-maintenance scene - plus a short explanation of when it fires and
+    who gets notified, read live from that automation's own configured
+    blueprint inputs rather than a generic, always-the-same explanation."""
+    try:
+        instances = _blueprint_input_values(hass, WARTUNG_VORBEREITEN_BLUEPRINT)
+    except Exception:
+        _LOGGER.warning("Could not read Wartung automation config", exc_info=True)
+        return []
+
+    cards: list[dict[str, Any]] = []
+    for instance in instances:
+        inp = instance["input"]
+        anlage_select = inp.get("anlage_select")
+        uhrzeit = inp.get("uhrzeit", "20:00:00")
+        stichworte = inp.get("stichworte", "")
+        benachrichtigung = inp.get("benachrichtigung")
+        szene_id = inp.get("szene_id")
+        szene_entity = f"scene.{szene_id}" if szene_id else None
+
+        entities_rows = [instance["entity_id"]]
+        if anlage_select:
+            entities_rows.append(anlage_select)
+        if szene_entity:
+            entities_rows.append(
+                {
+                    "entity": szene_entity,
+                    "name": "Auf Vor-Wartungszustand zurückstellen",
+                    "icon": "mdi:restore",
+                }
+            )
+        cards.append({"type": "entities", "title": "Automatische Abschaltung", "entities": entities_rows})
+
+        info_lines = [
+            f"- **Prüfzeit:** täglich um {str(uhrzeit)[:5]} Uhr, ob am Folgetag ein passender Termin ansteht",
+            f"- **Termin-Stichworte:** {stichworte}" if stichworte else None,
+            f"- **Benachrichtigung an:** `{benachrichtigung}`" if benachrichtigung else None,
+        ]
+        cards.append(
+            markdown(
+                "## ℹ️ Wie funktioniert die automatische Abschaltung?\n\n"
+                + "\n".join(line for line in info_lines if line)
+                + "\n\nWurde die Anlage automatisch ausgeschaltet, stellt der Knopf "
+                + "\"Auf Vor-Wartungszustand zurückstellen\" oben den vorherigen Zustand "
+                + "wieder her (nur verfügbar, nachdem die Automatisierung mindestens "
+                + "einmal ausgelöst hat)."
+            )
+        )
+    return cards
 
 
 def matches_wartung(entity_id: str, state: State | None) -> bool:
