@@ -732,15 +732,116 @@ def _blueprint_input_values(hass: HomeAssistant, blueprint_path: str) -> list[di
     return results
 
 
+def _iter_actions(actions: Any) -> list[dict[str, Any]]:
+    """Recursively flatten a HA automation action list/tree, descending into
+    if/then/else and choose/sequence blocks - the shapes wartung-style
+    automations commonly use (a time trigger, a calendar check, then
+    conditionally scene.create + select.select_option + notify.send_message)."""
+    if isinstance(actions, dict):
+        actions = [actions]
+    if not isinstance(actions, list):
+        return []
+
+    flat: list[dict[str, Any]] = []
+    for action in actions:
+        if not isinstance(action, dict):
+            continue
+        flat.append(action)
+        for key in ("then", "else", "sequence"):
+            if key in action:
+                flat.extend(_iter_actions(action[key]))
+        for choice in action.get("choose") or []:
+            if isinstance(choice, dict):
+                flat.extend(_iter_actions(choice.get("sequence", [])))
+    return flat
+
+
+def _action_type(action: dict[str, Any]) -> str | None:
+    """Return an action's service/action identifier, old- or new-style key."""
+    return action.get("action") or action.get("service")
+
+
+def _plain_wartung_automation_inputs(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Best-effort detection of hand-written (non-Blueprint) automations that
+    follow the same shape as "ÖkOfen: Anlage vor Wartungstermin ausschalten"
+    (blueprints/automation/oekofen/wartung_vorbereiten.yaml): a scene.create
+    snapshot followed by select.select_option, typically also followed by a
+    notify.send_message. Not every user imports the actual blueprint - some
+    write the equivalent automation by hand instead - so relying on
+    _blueprint_input_values() (automations_with_blueprint()) alone would
+    silently show nothing for those. Pattern-matched against the automation's
+    own `raw_config` (a stable, public AutomationEntity attribute unlike the
+    blueprint-input path, since it's populated for any automation regardless
+    of blueprint use), best-effort by nature - if a field can't be confidently
+    extracted (e.g. the appointment keywords, usually buried in a Jinja
+    template) it's just omitted rather than guessed at."""
+    try:
+        from homeassistant.components.automation import DATA_COMPONENT
+    except ImportError:
+        return []
+
+    component = hass.data.get(DATA_COMPONENT)
+    if component is None:
+        return []
+
+    results = []
+    for entity in component.entities:
+        if getattr(entity, "referenced_blueprint", None):
+            continue  # handled by _blueprint_input_values instead
+        raw_config = getattr(entity, "raw_config", None)
+        if not raw_config:
+            continue
+
+        actions = _iter_actions(raw_config.get("action", []))
+        select_option = next((a for a in actions if _action_type(a) == "select.select_option"), None)
+        scene_create = next((a for a in actions if _action_type(a) == "scene.create"), None)
+        notify_action = next((a for a in actions if _action_type(a) == "notify.send_message"), None)
+        if select_option is None or scene_create is None:
+            continue
+
+        anlage_select = (select_option.get("target") or {}).get("entity_id")
+        szene_id = (scene_create.get("data") or {}).get("scene_id")
+        if not anlage_select or not szene_id:
+            continue
+
+        benachrichtigung = (notify_action.get("target") or {}).get("entity_id") if notify_action else None
+        uhrzeit = next(
+            (
+                trig.get("at")
+                for trig in raw_config.get("trigger", []) or []
+                if isinstance(trig, dict) and (trig.get("trigger") or trig.get("platform")) == "time"
+            ),
+            None,
+        )
+
+        results.append(
+            {
+                "entity_id": getattr(entity, "entity_id", None),
+                "input": {
+                    "anlage_select": anlage_select,
+                    "szene_id": szene_id,
+                    "benachrichtigung": benachrichtigung,
+                    "uhrzeit": uhrzeit,
+                    "stichworte": None,
+                },
+            }
+        )
+    return results
+
+
 def _build_wartung_automation_cards(hass: HomeAssistant) -> list[dict[str, Any]]:
-    """For every "ÖkOfen: Anlage vor Wartungstermin ausschalten" automation
-    (see blueprints/automation/oekofen/), show its enabled/disabled state,
-    the switched entity's current value, and a way to restore the
-    pre-maintenance scene - plus a short explanation of when it fires and
-    who gets notified, read live from that automation's own configured
-    blueprint inputs rather than a generic, always-the-same explanation."""
+    """For every automation that switches off the anlage ahead of a
+    maintenance appointment - whether created from the "ÖkOfen: Anlage vor
+    Wartungstermin ausschalten" Blueprint (see
+    blueprints/automation/oekofen/) or hand-written to the same effect -
+    show its enabled/disabled state, the switched entity's current value,
+    and a way to restore the pre-maintenance scene, plus a short
+    explanation of when it fires and who gets notified, read live from
+    that automation's own configuration rather than a generic,
+    always-the-same explanation."""
     try:
         instances = _blueprint_input_values(hass, WARTUNG_VORBEREITEN_BLUEPRINT)
+        instances += _plain_wartung_automation_inputs(hass)
     except Exception:
         _LOGGER.warning("Could not read Wartung automation config", exc_info=True)
         return []
@@ -749,8 +850,12 @@ def _build_wartung_automation_cards(hass: HomeAssistant) -> list[dict[str, Any]]
     for instance in instances:
         inp = instance["input"]
         anlage_select = inp.get("anlage_select")
-        uhrzeit = inp.get("uhrzeit", "20:00:00")
-        stichworte = inp.get("stichworte", "")
+        # .get(..., default) only applies when the key is missing, not when
+        # it's explicitly None - _plain_wartung_automation_inputs() sets
+        # uhrzeit/stichworte to None outright when it can't confidently
+        # extract them, so `or` (not a dict default) is needed here.
+        uhrzeit = inp.get("uhrzeit") or None
+        stichworte = inp.get("stichworte") or None
         benachrichtigung = inp.get("benachrichtigung")
         szene_id = inp.get("szene_id")
         szene_entity = f"scene.{szene_id}" if szene_id else None
@@ -769,7 +874,9 @@ def _build_wartung_automation_cards(hass: HomeAssistant) -> list[dict[str, Any]]
         cards.append({"type": "entities", "title": "Automatische Abschaltung", "entities": entities_rows})
 
         info_lines = [
-            f"- **Prüfzeit:** täglich um {str(uhrzeit)[:5]} Uhr, ob am Folgetag ein passender Termin ansteht",
+            f"- **Prüfzeit:** täglich um {str(uhrzeit)[:5]} Uhr, ob am Folgetag ein passender Termin ansteht"
+            if uhrzeit
+            else None,
             f"- **Termin-Stichworte:** {stichworte}" if stichworte else None,
             f"- **Benachrichtigung an:** `{benachrichtigung}`" if benachrichtigung else None,
         ]
