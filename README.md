@@ -307,6 +307,27 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.10.1
+
+- 🐛 **Fix: Dashboard erschien nach 0.10.0 gar nicht mehr** - `hass.data["lovelace"]`
+  ist seit einem HA-Core-Refactor (spätestens ab 2024, live gegen 2026.9.0
+  bestätigt) ein `LovelaceData`-Dataclass-Objekt statt eines Dicts, wodurch
+  der dict-artige Zugriff aus 0.10.0 mit `AttributeError: 'LovelaceData'
+  object has no attribute 'get'` fehlschlug - die Integration blieb dadurch
+  im Setup hängen, kein Dashboard wurde je angelegt. Zusätzlich hält HA-Core
+  die für das Anlegen neuer Dashboards nötige `DashboardsCollection`
+  inzwischen nur noch als lokale Variable innerhalb der lovelace-Integration
+  selbst, nirgends über `hass.data` erreichbar - andere Integrationen können
+  seither nicht mehr direkt darauf zugreifen. Die Integration legt jetzt eine
+  eigene `DashboardsCollection`-Instanz an (dieselbe zugrunde liegende
+  Storage-Datei, daher dauerhaft kompatibel mit dem, was HA beim nächsten
+  Neustart selbst einliest), registriert das Sidebar-Panel und den
+  In-Memory-Eintrag für den laufenden Boot manuell, und ergänzt den
+  Erstellungs-Payload um `allow_single_word` (der URL-Pfad "oekofen" enthält
+  keinen Bindestrich, den HA-Core sonst verlangt). Gegen den exakten
+  `homeassistant==2026.9.0`-Quellcode verifiziert (Schema-Validierung,
+  Klassenschnittstellen).
+
 ### Version 0.10.0
 
 - 🏗️ **Dashboard wird jetzt serverseitig generiert, nicht mehr als
@@ -751,5 +772,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.10.0
+**Version**: 0.10.1
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

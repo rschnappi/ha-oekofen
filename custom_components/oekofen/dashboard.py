@@ -43,6 +43,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
+from homeassistant.components import frontend
+from homeassistant.components.lovelace import dashboard as lovelace_dashboard
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -748,6 +750,64 @@ async def async_build_dashboard_config(hass: HomeAssistant) -> dict[str, Any]:
     return {"views": views}
 
 
+async def _async_create_and_register_dashboard(hass: HomeAssistant, dashboards: dict) -> None:
+    """Create the ÖkOfen dashboard entry and register its sidebar panel.
+
+    HA core's lovelace integration keeps the live DashboardsCollection it
+    uses internally (see lovelace/__init__.py's async_setup) as a plain
+    local variable - it is never put into hass.data, so no other
+    integration can call async_create_item on that exact instance. What IS
+    shared and stable is the underlying storage file: DashboardsCollection
+    always points at the same fixed Store key regardless of which instance
+    constructs it. So we create our own throwaway DashboardsCollection here,
+    async_load() it (reads that same file), and async_create_item() on it -
+    that durably persists our entry into the same storage the real
+    lovelace integration reads on every startup.
+
+    Because our instance is separate, nothing else reacts to that write
+    during *this* boot - so we also register the frontend panel and the
+    in-memory dashboards[...] entry ourselves, right here. On every later
+    boot, lovelace's own async_setup loads that same storage file itself
+    and takes over registering the panel/dict entry through its normal
+    code path - at which point DASHBOARD_URL_PATH is already present in
+    `dashboards` and async_regenerate_dashboard's caller skips this
+    function entirely, so there's no double-registration.
+    """
+    temp_collection = lovelace_dashboard.DashboardsCollection(hass)
+    await temp_collection.async_load()
+
+    item = next(
+        (i for i in temp_collection.async_items() if i.get("url_path") == DASHBOARD_URL_PATH),
+        None,
+    )
+    if item is None:
+        item = await temp_collection.async_create_item({
+            "url_path": DASHBOARD_URL_PATH,
+            "title": DASHBOARD_TITLE,
+            "icon": DASHBOARD_ICON,
+            "show_in_sidebar": True,
+            "require_admin": False,
+            # DASHBOARD_URL_PATH ("oekofen") has no hyphen; lovelace's
+            # DashboardsCollection._process_create_data rejects single-word
+            # url_paths unless this is set.
+            "allow_single_word": True,
+        })
+
+    dashboards[DASHBOARD_URL_PATH] = lovelace_dashboard.LovelaceStorage(hass, item)
+
+    if not frontend.async_panel_exists(hass, DASHBOARD_URL_PATH):
+        frontend.async_register_built_in_panel(
+            hass,
+            "lovelace",
+            frontend_url_path=DASHBOARD_URL_PATH,
+            require_admin=False,
+            show_in_sidebar=True,
+            sidebar_title=DASHBOARD_TITLE,
+            sidebar_icon=DASHBOARD_ICON,
+            config={"mode": "storage"},
+        )
+
+
 async def async_regenerate_dashboard(hass: HomeAssistant) -> None:
     """(Re)generate the auto-managed ÖkOfen dashboard and save it.
 
@@ -773,7 +833,14 @@ async def async_regenerate_dashboard(hass: HomeAssistant) -> None:
             asyncio.create_task(_retry_lovelace())
             return
 
-        dashboards = lovelace_data.get("dashboards")
+        # Since HA core 2024.5ish, hass.data["lovelace"] is a LovelaceData
+        # dataclass (attribute access), not a plain dict - dict-style
+        # access here raised AttributeError in production against a 2026.x
+        # instance, even though it works fine against the older,
+        # dict-shaped API this integration originally targeted.
+        dashboards = getattr(lovelace_data, "dashboards", None)
+        if dashboards is None and isinstance(lovelace_data, dict):
+            dashboards = lovelace_data.get("dashboards")
         if dashboards is None:
             _LOGGER.debug("lovelace dashboards not initialized yet; scheduling retry in 0.5s")
             async def _retry():
@@ -783,13 +850,7 @@ async def async_regenerate_dashboard(hass: HomeAssistant) -> None:
             return
 
         if DASHBOARD_URL_PATH not in dashboards:
-            await lovelace_data["dashboards_collection"].async_create_item({
-                "url_path": DASHBOARD_URL_PATH,
-                "title": DASHBOARD_TITLE,
-                "icon": DASHBOARD_ICON,
-                "show_in_sidebar": True,
-                "require_admin": False,
-            })
+            await _async_create_and_register_dashboard(hass, dashboards)
 
         config = await async_build_dashboard_config(hass)
         await dashboards[DASHBOARD_URL_PATH].async_save(config)

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.oekofen.dashboard import (
+    DASHBOARD_URL_PATH,
     Circuit,
     analyze_entities,
     async_build_wartung_view,
@@ -196,6 +197,25 @@ async def test_async_build_wartung_view_lists_next_three_events():
     assert view["cards"][0]["content"].index("Service Ofen") < view["cards"][0]["content"].index("Rauchfangkehrer")
 
 
+def _patch_lovelace_collaborators(collection_instance, storage_instance):
+    """Patch the HA core lovelace internals async_regenerate_dashboard reaches
+    into: a throwaway DashboardsCollection (since real one isn't reachable via
+    hass.data - see _async_create_and_register_dashboard's docstring),
+    LovelaceStorage, and the frontend panel registry."""
+    return (
+        patch(
+            "custom_components.oekofen.dashboard.lovelace_dashboard.DashboardsCollection",
+            return_value=collection_instance,
+        ),
+        patch(
+            "custom_components.oekofen.dashboard.lovelace_dashboard.LovelaceStorage",
+            return_value=storage_instance,
+        ),
+        patch("custom_components.oekofen.dashboard.frontend.async_panel_exists", return_value=False),
+        patch("custom_components.oekofen.dashboard.frontend.async_register_built_in_panel"),
+    )
+
+
 async def test_async_regenerate_dashboard_creates_dashboard_once():
     """The first call creates the dashboard item (visible in the sidebar);
     every later call must just overwrite its content, not try (and fail) to
@@ -204,24 +224,61 @@ async def test_async_regenerate_dashboard_creates_dashboard_once():
     hass.data = {}
     hass.states.async_all.return_value = []
 
-    dashboards_collection = MagicMock()
-    dashboards_collection.async_create_item = AsyncMock()
+    dashboards = {}
+    hass.data["lovelace"] = SimpleNamespace(dashboards=dashboards)
+
     store = MagicMock()
     store.async_save = AsyncMock()
-    dashboards = {}
 
-    async def _create_item(data):
-        dashboards[data["url_path"]] = store
-
-    dashboards_collection.async_create_item.side_effect = _create_item
-    hass.data["lovelace"] = {"dashboards": dashboards, "dashboards_collection": dashboards_collection}
+    collection_instance = MagicMock()
+    collection_instance.async_load = AsyncMock()
+    collection_instance.async_items = MagicMock(return_value=[])
+    collection_instance.async_create_item = AsyncMock(
+        return_value={"id": DASHBOARD_URL_PATH, "url_path": DASHBOARD_URL_PATH}
+    )
 
     empty_device_registry = MagicMock(devices=MagicMock(values=lambda: []))
+    patches = _patch_lovelace_collaborators(collection_instance, store)
     with patch("custom_components.oekofen.dashboard.dr.async_get", return_value=empty_device_registry), patch(
         "custom_components.oekofen.dashboard.er.async_get", return_value=MagicMock()
-    ):
+    ), patches[0], patches[1], patches[2], patches[3]:
         await async_regenerate_dashboard(hass)
         await async_regenerate_dashboard(hass)
 
-    dashboards_collection.async_create_item.assert_awaited_once()
+    collection_instance.async_create_item.assert_awaited_once()
     assert store.async_save.await_count == 2
+
+
+async def test_async_regenerate_dashboard_allows_single_word_url_path():
+    """DASHBOARD_URL_PATH ("oekofen") has no hyphen - HA core's
+    DashboardsCollection._process_create_data rejects that unless
+    allow_single_word is explicitly set, so the create payload must include
+    it (regression test: this raised vol.Invalid in production once the
+    LovelaceData/dashboards_collection access itself was fixed)."""
+    hass = MagicMock()
+    hass.data = {}
+    hass.states.async_all.return_value = []
+
+    dashboards = {}
+    hass.data["lovelace"] = SimpleNamespace(dashboards=dashboards)
+
+    store = MagicMock()
+    store.async_save = AsyncMock()
+
+    collection_instance = MagicMock()
+    collection_instance.async_load = AsyncMock()
+    collection_instance.async_items = MagicMock(return_value=[])
+    collection_instance.async_create_item = AsyncMock(
+        return_value={"id": DASHBOARD_URL_PATH, "url_path": DASHBOARD_URL_PATH}
+    )
+
+    empty_device_registry = MagicMock(devices=MagicMock(values=lambda: []))
+    patches = _patch_lovelace_collaborators(collection_instance, store)
+    with patch("custom_components.oekofen.dashboard.dr.async_get", return_value=empty_device_registry), patch(
+        "custom_components.oekofen.dashboard.er.async_get", return_value=MagicMock()
+    ), patches[0], patches[1], patches[2], patches[3]:
+        await async_regenerate_dashboard(hass)
+
+    payload = collection_instance.async_create_item.call_args[0][0]
+    assert payload["allow_single_word"] is True
+    assert payload["url_path"] == DASHBOARD_URL_PATH
