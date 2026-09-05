@@ -7,10 +7,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_track_state_added_domain,
+    async_track_state_change_event,
+)
 
 from .coordinator import OekofenCoordinator
-from .dashboard import async_build_wartung_view, async_regenerate_dashboard
+from .dashboard import async_build_wartung_view, async_regenerate_dashboard, matches_wartung
 from .discovery import async_discover_circuits
 from .pellematic_api import PellematicAPI
 
@@ -40,6 +43,22 @@ async def _async_regenerate_dashboard_and_track_calendar(hass: HomeAssistant, en
     (see LovelaceStorage.async_save's EVENT_LOVELACE_UPDATED).
     """
     await async_regenerate_dashboard(hass)
+
+    # Always watch for a wartung-looking calendar entity newly *appearing*
+    # (not just changing) - the calendar entity's own config entry can set
+    # up after oekofen's within the same bootstrap stage, so on some boots
+    # it doesn't exist yet at the point above. Without this, a dashboard
+    # built before that calendar existed would never get its "Wartung" view
+    # added until a manual oekofen.regenerate_dashboard call or another
+    # restart that happens to order things the other way.
+    async def _on_new_calendar(event) -> None:
+        entity_id = event.data["entity_id"]
+        if matches_wartung(entity_id, event.data.get("new_state")):
+            await async_regenerate_dashboard(hass)
+
+    entry.async_on_unload(
+        async_track_state_added_domain(hass, ["calendar"], _on_new_calendar)
+    )
 
     wartung_view = await async_build_wartung_view(hass)
     if not wartung_view:
