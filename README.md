@@ -307,6 +307,14 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.12.0
+
+- ✨ **Neu: Button "Geräteuhrzeit synchronisieren"**: Ein-Klick-Button
+  (neue `button`-Plattform), der die Geräteuhrzeit direkt auf die aktuelle
+  Home-Assistant-Zeit setzt, statt manuell einen Zeitpunkt in der
+  Geräteuhrzeit-Entity auswählen zu müssen. Nutzt intern dieselbe Logik wie
+  diese Entity (inkl. der -2h-Kompensation aus 0.11.4) - siehe CLAUDE.md.
+
 ### Version 0.11.4
 
 - 🐛 **Fix: Geräteuhrzeit setzen landete 2 Stunden zu weit in der
@@ -864,5 +872,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.11.4
+**Version**: 0.12.0
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät
