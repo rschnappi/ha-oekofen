@@ -223,6 +223,18 @@ geraten/konfiguriert.
 - Temperatur-Sensoren mit stark abweichender Skala (Feuerraumtemperatur
   0-1000°C vs. alles andere 0-100°C) brauchen eigene Charts, sonst
   flacht ein `history-graph` alles andere zu einer Linie ab (siehe PR #30).
+- **Neue Domain = neue Plattform muss in `_DOMAIN_TITLES` eingetragen
+  werden, sonst verschwindet sie stillschweigend aus der Übersicht**: die
+  Übersicht zeigt "übrig gebliebene" (nicht in einen Circuit einsortierte)
+  Entities gruppiert nach Domain, aber nur für Domains, die als Key in
+  `_DOMAIN_TITLES` stehen - `build_overview_views()`s
+  `if domain not in _DOMAIN_TITLES: continue` überspringt jede andere
+  Domain komplett, ohne Warnung. Passiert konkret mit 0.12.0s neuer
+  `button`-Plattform (Geräteuhrzeit-Sync-Button): die Entity existierte in
+  HA ganz normal, war aber auf dem automatisch generierten Dashboard
+  nirgends zu finden, bis `_DOMAIN_TITLES` um `"button"` ergänzt wurde
+  (0.12.1). Bei jeder neuen Plattform mit eigenständigen (nicht
+  Circuit-zugehörigen) Entities daran denken.
 
 ## Testing
 

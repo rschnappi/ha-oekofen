@@ -307,6 +307,16 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.12.1
+
+- 🐛 **Fix: Sync-Button erschien nirgends auf dem Dashboard**: `button`-
+  Entities (bisher nur der neue Geräteuhrzeit-Sync-Button aus 0.12.0)
+  fehlten in der Domain-Liste, die die Übersicht für "übrig gebliebene"
+  Entities (Datum & Uhrzeit, Weitere Schalter, ...) durchgeht - der Button
+  war zwar in Home Assistant ganz normal vorhanden, tauchte aber auf dem
+  automatisch generierten ÖkOfen-Dashboard nirgends auf. Zeigt jetzt als
+  eigene Karte "🔘 Aktionen" in der Übersicht.
+
 ### Version 0.12.0
 
 - ✨ **Neu: Button "Geräteuhrzeit synchronisieren"**: Ein-Klick-Button
@@ -872,5 +882,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.12.0
+**Version**: 0.12.1
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

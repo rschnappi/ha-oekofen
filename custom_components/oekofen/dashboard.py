@@ -421,6 +421,7 @@ _DOMAIN_TITLES = {
     "number": "⚙️ Weitere Einstellungen",
     "switch": "\U0001F50C Weitere Schalter",
     "datetime": "\U0001F552 Datum & Uhrzeit",
+    "button": "\U0001F518 Aktionen",
 }
 
 
