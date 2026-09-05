@@ -17,21 +17,56 @@ from .pellematic_api import PellematicAPI
 
 _LOGGER = logging.getLogger(__name__)
 
+# The device's own clock. Unlike everything else, the *current* value and
+# the *write target* are different parameters: the running clock is
+# L_fernwartung_datum_zeit_sek, while a new value is staged in
+# L_fernwartung_uhrzeit_neu and only takes effect once
+# L_fernwartung_setze_uhrzeit=1 is sent in the same request (the device's
+# own web UI always sends these two together, see config.min.js
+# "zusatzVariable"). Exposed as module-level constants (not just inline in
+# build_datetime_definitions below) so button.py's one-press sync button
+# can target the same parameters without redefining the strings.
+DEVICE_CLOCK_PARAMETER = "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"
+DEVICE_CLOCK_READ_PARAMETER = "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek"
+DEVICE_CLOCK_COMMIT_PARAMETER = "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit"
+
+
+async def async_commit_device_clock(api: PellematicAPI, value: datetime) -> None:
+    """Stage `value` into the device's own running clock and commit it.
+
+    Shared between OekofenDateTime.async_set_value (device_clock field) and
+    button.py's one-press "sync now" button. Applies a -2h compensation:
+    the device applies its own extra +2h shift once
+    L_fernwartung_setze_uhrzeit actually commits the staged value into the
+    device's *running* clock - unlike every other datetime field here
+    (Party endzeit, Urlaub start/ende), which just store a future timestamp
+    compared against that running clock later and don't exhibit this.
+    Confirmed live against a real device (2026-09-05): setting this entity
+    to a value X made the device's own clock show X+2h, both via this
+    integration and via the device's native web UI's own date/time field -
+    so this correction belongs here, not in datetime_common.py's shared
+    conversion, which the read side (device_seconds_to_datetime, for
+    DEVICE_CLOCK_READ_PARAMETER) and the other fields are already verified
+    correct against.
+    CAUTION: setting this field wrong once briefly locked the whole device
+    out (HTTP 403 on every request) - the device's session cookie appears
+    to be time-bound, so a clock that jumps by hours can invalidate the
+    very session used to fix it. Recovery: homeassistant.reload_config_entry
+    on this entry (forces a fresh login/cookie) - do NOT restart HA for
+    this alone, and don't retry writes to this field in a loop hoping a
+    different value fixes it.
+    """
+    seconds = datetime_to_device_seconds(value) - 2 * 3600
+    await api.set_data_multi({DEVICE_CLOCK_PARAMETER: seconds, DEVICE_CLOCK_COMMIT_PARAMETER: 1})
+
 
 def build_datetime_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:
     """Build the writable-datetime definitions (Party endzeit, Urlaub start/ende)."""
     defs: Dict[str, Dict[str, Any]] = {
-        # The device's own clock. Unlike everything else, the *current*
-        # value and the *write target* are different parameters: the
-        # running clock is L_fernwartung_datum_zeit_sek, while a new value
-        # is staged in L_fernwartung_uhrzeit_neu and only takes effect once
-        # L_fernwartung_setze_uhrzeit=1 is sent in the same request (the
-        # device's own web UI always sends these two together, see
-        # config.min.js "zusatzVariable").
         "device_clock": {
-            "parameter": "CAPPL:LOCAL.L_fernwartung_uhrzeit_neu",
-            "read_parameter": "CAPPL:LOCAL.L_fernwartung_datum_zeit_sek",
-            "commit_parameter": "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit",
+            "parameter": DEVICE_CLOCK_PARAMETER,
+            "read_parameter": DEVICE_CLOCK_READ_PARAMETER,
+            "commit_parameter": DEVICE_CLOCK_COMMIT_PARAMETER,
             "name": "Geräteuhrzeit",
             "icon": "mdi:clock-edit-outline",
         },
@@ -126,32 +161,9 @@ class OekofenDateTime(CoordinatorEntity, DateTimeEntity):
         return parameter_available(self.coordinator, self._read_parameter)
 
     async def async_set_value(self, value: datetime) -> None:
-        seconds = datetime_to_device_seconds(value)
         if self._commit_parameter:
-            # The device_clock field (this is the only field with a
-            # commit_parameter) applies its own extra +2h shift once
-            # L_fernwartung_setze_uhrzeit actually commits the staged value
-            # into the device's *running* clock - unlike every other
-            # datetime field here (Party endzeit, Urlaub start/ende), which
-            # just store a future timestamp compared against that running
-            # clock later and don't exhibit this. Confirmed live against a
-            # real device (2026-09-05): setting this entity to a value X
-            # made the device's own clock show X+2h, both via this
-            # integration and via the device's native web UI's own
-            # date/time field - so this correction belongs here, not in
-            # datetime_common.py's shared conversion, which the read side
-            # (device_seconds_to_datetime, for the read_parameter) and the
-            # other fields are already verified correct against.
-            # CAUTION: setting this field wrong once briefly locked the
-            # whole device out (HTTP 403 on every request) - the device's
-            # session cookie appears to be time-bound, so a clock that
-            # jumps by hours can invalidate the very session used to fix
-            # it. Recovery: homeassistant.reload_config_entry on this
-            # entry (forces a fresh login/cookie) - do NOT restart HA for
-            # this alone, and don't retry writes to this field in a loop
-            # hoping a different value fixes it.
-            seconds -= 2 * 3600
-            await self.api.set_data_multi({self._parameter: seconds, self._commit_parameter: 1})
+            await async_commit_device_clock(self.api, value)
         else:
+            seconds = datetime_to_device_seconds(value)
             await self.api.set_data(self._parameter, seconds)
         await self.coordinator.async_request_refresh()

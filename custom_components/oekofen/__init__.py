@@ -31,6 +31,7 @@ PLATFORMS = [
     Platform.DATETIME,
     Platform.CLIMATE,
     Platform.TEXT,
+    Platform.BUTTON,
 ]
 
 

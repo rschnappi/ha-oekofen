@@ -96,6 +96,16 @@ geraten/konfiguriert.
     ÖkOfen-Firmware-Version, andere Zeitzone als Europe/Vienna, DST-Wechsel
     exakt am Schreibzeitpunkt), das Feld eher konservativ behandeln
     (z. B. nur lesend nutzen) statt den Offset blind größer zu drehen.
+- **Seit 0.12.0**: Die Commit-Logik (Stage + `L_fernwartung_setze_uhrzeit=1`
+  + die -2h-Kompensation) ist aus `OekofenDateTime.async_set_value` heraus
+  in eine eigene Funktion `async_commit_device_clock()` (`datetime.py`)
+  gezogen, damit sie sich nicht dupliziert: `button.py`s neue
+  `OekofenSyncClockButton`-Entity ("Geräteuhrzeit synchronisieren", eigene
+  `button`-Plattform) ruft dieselbe Funktion mit `dt_util.utcnow()` auf,
+  als Ein-Klick-Alternative zum manuellen Setzen eines Zeitwerts über die
+  `datetime`-Entity. Verwendet dieselben Modul-Konstanten
+  (`DEVICE_CLOCK_PARAMETER`/`_READ_PARAMETER`/`_COMMIT_PARAMETER`), damit
+  die Parameter-Strings nur an einer Stelle stehen.
 
 ## Frontend/Dashboard (`dashboard.py`)
 
