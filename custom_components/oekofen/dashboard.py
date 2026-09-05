@@ -766,10 +766,22 @@ async def async_regenerate_dashboard(hass: HomeAssistant) -> None:
     async with lock:
         lovelace_data = hass.data.get("lovelace")
         if lovelace_data is None:
-            _LOGGER.warning("lovelace is not set up; skipping ÖkOfen dashboard generation")
+            _LOGGER.debug("lovelace not set up yet; scheduling retry in 0.5s")
+            async def _retry_lovelace():
+                await asyncio.sleep(0.5)
+                await async_regenerate_dashboard(hass)
+            asyncio.create_task(_retry_lovelace())
             return
 
-        dashboards = lovelace_data["dashboards"]
+        dashboards = lovelace_data.get("dashboards")
+        if dashboards is None:
+            _LOGGER.debug("lovelace dashboards not initialized yet; scheduling retry in 0.5s")
+            async def _retry():
+                await asyncio.sleep(0.5)
+                await async_regenerate_dashboard(hass)
+            asyncio.create_task(_retry())
+            return
+
         if DASHBOARD_URL_PATH not in dashboards:
             await lovelace_data["dashboards_collection"].async_create_item({
                 "url_path": DASHBOARD_URL_PATH,
