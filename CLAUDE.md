@@ -125,6 +125,54 @@ geraten/konfiguriert.
   (`DEVICE_CLOCK_PARAMETER`/`_READ_PARAMETER`/`_COMMIT_PARAMETER`), damit
   die Parameter-Strings nur an einer Stelle stehen.
 
+## Heizprogramm-Umschalter (`select.py`'s `OekofenHeizprogrammSelect`)
+
+- **Seit 0.13.0**: Ein virtueller Sommer/Übergang/Winter-Schalter, der
+  mehrere echte ÖkOfen-Parameter in einem Schritt umschaltet (Anlage-
+  Betriebsart + jedes Kreises aktives Zeitprogramm) - Details siehe
+  README-Changelog.
+- **Bewusst KEIN `input_select`-Helper + Automatisierung**, obwohl das der
+  erste Ansatz war (live auf der Nutzerinstanz per `create_helper`/
+  `create_automation` gebaut und getestet, dann wieder verworfen): eine
+  generische HA-Helper-Entity anzulegen hätte bedeutet, `input_select`s
+  private `InputSelectStorageCollection`-Internals nachzubauen (dieselbe
+  Art fragiler Abhängigkeit, die bei `dashboard.py`s Lovelace-Integration
+  schon zweimal live gebrochen ist, siehe unten) - und selbst dann hätte
+  die neu erstellte Entity nicht ohne Weiteres im laufenden Boot-Vorgang
+  registriert werden können (siehe Dashboards
+  `_async_create_and_register_dashboard`-Workaround für dasselbe Problem
+  bei Lovelace). Stattdessen: eine ganz normale eigene `SelectEntity`
+  dieser Integration (wie jede andere in `select.py`), die nur andere
+  bereits vorhandene Select-Entities dieses Geräts anschreibt - kein
+  Zugriff auf HA-Core-Internals nötig, automatisch für jeden Nutzer bei
+  jedem Setup erzeugt (nicht nur einmalig manuell auf einer Instanz), und
+  mit denselben Test-Mustern wie der Rest der Integration testbar.
+- **Kein eigener Geräteparameter** - anders als jede andere Entity in
+  dieser Integration hat "Heizprogramm" keine Entsprechung auf dem
+  ÖkOfen-Gerät selbst, sondern bündelt nur Schreibvorgänge auf andere,
+  bereits existierende Parameter. Die zuletzt gewählte Option wird deshalb
+  per `RestoreEntity` über HA-Neustarts hinweg gemerkt (Standard-HA-API,
+  kein fragiler interner Zugriff wie beim verworfenen Helper-Ansatz oben)
+  statt vom Gerät zurückgelesen zu werden.
+- **Erfasst per Live-Optionsliste, nicht per Index-Konstante**: welcher
+  Index am Gerät "Auto"/"Warmwasser" bzw. "Zeit 1"/"Zeit 2" bedeutet, wird
+  bei jedem Schreibvorgang frisch aus `coordinator.data`s `formatTexts`
+  aufgelöst (`_resolve_options()`, dieselbe Logik wie
+  `OekofenModeSelect.options`) statt eine feste Zahl anzunehmen - falls
+  ein Firmware-Update die Reihenfolge der Optionen je ändern sollte, bleibt
+  das Schreiben trotzdem korrekt.
+- **Erfasst automatisch ALLE Zeitprogramm-Kreise, nicht nur Kreis 1**: die
+  Liste der zu setzenden `*_aktives_zeitprogramm`-Parameter kommt aus
+  `build_select_definitions()`s eigenen Definitionen (jeder Key, der auf
+  `_zeitprogramm` endet) - eine Anlage mit mehreren Heizkreisen/
+  Warmwasser-/Zirkulationspumpen-Kreisen bekommt sie also automatisch alle
+  mit erfasst, ohne Codeänderung.
+- Zeigt auf dem Dashboard (`dashboard.py`) eine eigene Karte mit
+  Kurzerklärung, aus der generischen "Weitere Betriebsarten"-Liste
+  herausgelöst (per `_HEIZPROGRAMM_RE`-Namensmatch auf die Object-ID, wie
+  schon die Integrations-Versions-Zeile) - eine reine Grid-Kachel hätte
+  keinen Platz für eine Erklärung, was die drei Optionen bewirken.
+
 ## Frontend/Dashboard (`dashboard.py`)
 
 - **Bis 0.9.8**: eine clientseitige [Lovelace-Dashboard-Strategy](https://www.home-assistant.io/dashboards/strategies/)

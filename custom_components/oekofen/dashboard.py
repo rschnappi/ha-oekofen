@@ -425,7 +425,12 @@ _DOMAIN_TITLES = {
 }
 
 
-def build_overview_views(circuits: list[Circuit], leftover_entity_ids: list[str], states: dict[str, State]) -> list[dict[str, Any]]:
+_HEIZPROGRAMM_RE = re.compile(r"heizprogramm$")
+
+
+def build_overview_views(
+    circuits: list[Circuit], leftover_entity_ids: list[str], states: dict[str, State]
+) -> list[dict[str, Any]]:
     """Übersicht plus two dedicated views split out of it: Diagnose (sensor
     leftovers) and Mail/SMTP (text leftovers) each get long entity lists
     that don't belong sharing a page with everything else."""
@@ -440,6 +445,27 @@ def build_overview_views(circuits: list[Circuit], leftover_entity_ids: list[str]
         state = states.get(version_id)
         if state:
             cards.append(markdown(f"*ÖkOfen Integration v{state.state}*"))
+
+    # The Sommer/Übergang/Winter season switch (select.py's
+    # OekofenHeizprogrammSelect, see CLAUDE.md) is a real select entity of
+    # this device like any other - pulled out of the generic "Weitere
+    # Betriebsarten" leftover grid below into its own card with a short
+    # explanation, since a plain grid tile has no room for one.
+    heizprogramm_id = next(
+        (i for i in leftover_entity_ids if domain_of(i) == "select" and _HEIZPROGRAMM_RE.search(object_id_of(i))),
+        None,
+    )
+    if heizprogramm_id:
+        leftover_entity_ids = [i for i in leftover_entity_ids if i != heizprogramm_id]
+        cards.append(stack([
+            markdown(
+                "## \U0001F326️ Heizprogramm\n\n"
+                "**Winter:** Anlage auf Auto, alle Zeitprogramme auf Zeit 1. "
+                "**Übergang:** Anlage auf Auto, alle Zeitprogramme auf Zeit 2. "
+                "**Sommer:** Anlage auf Warmwasser (Heizkreise aus, nur Warmwasser läuft)."
+            ),
+            tile(heizprogramm_id, "Heizprogramm"),
+        ]))
 
     mode_cards = []
     for circuit in circuits:
