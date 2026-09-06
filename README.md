@@ -310,21 +310,21 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 ### Version 0.12.2
 
 - 🧪 **EXPERIMENTELL - Fix: Geräteuhrzeit-Kompensation war zu klein
-  (-2h statt -4h)**: Ein zweiter Live-Test am Folgemorgen (frisch
-  neu geladene native ÖkoFEN-Web-UI, kein gecachter Tab) zeigte, dass
-  das Gerät beim Übernehmen einer neuen Uhrzeit tatsächlich **4 Stunden**
-  addiert, nicht 2 wie zuvor an nur einem Datenpunkt angenommen. Die
-  Kompensation beim Schreiben der Geräteuhrzeit (sowohl über die
-  `datetime`-Entity als auch über den neuen Sync-Button aus 0.12.0)
-  wurde entsprechend auf -4h korrigiert.
-  ⚠️ **Offene Vermutung**: beide bisherigen Messungen fielen in die
-  Sommerzeit (CEST). Möglich, dass der geräteseitige Shift eigentlich
-  fix +2h ist und nicht DST-bewusst rechnet - dann wäre er während
-  Sommerzeit effektiv +4h, würde aber nach der Zeitumstellung im Herbst
-  auf +2h zurückfallen. Noch nicht als DST-abhängige Logik umgesetzt,
-  da kein Datenpunkt aus der tatsächlichen Winterzeit vorliegt - bitte
-  nach der nächsten Zeitumstellung erneut live prüfen, bevor du dich
-  über eine Saisongrenze hinweg auf diesen Wert verlässt.
+  (-2h statt -4h während Sommerzeit) + jetzt DST-abhängig**: Ein
+  zweiter Live-Test am Folgemorgen (frisch neu geladene native
+  ÖkoFEN-Web-UI, kein gecachter Tab) zeigte, dass das Gerät beim
+  Übernehmen einer neuen Uhrzeit während Sommerzeit (CEST) tatsächlich
+  **4 Stunden** addiert, nicht 2 wie zuvor an nur einem Datenpunkt
+  angenommen.
+  ⚠️ **Arbeitshypothese**: das Gerät kennt vermutlich keine Zeitzone/DST
+  und addiert immer fix 2 Wall-Clock-Stunden - während Sommerzeit macht
+  das in Summe +4h aus, während Winterzeit (CET) sollten es dann nur
+  +2h sein. Die Kompensation beim Schreiben der Geräteuhrzeit (sowohl
+  über die `datetime`-Entity als auch über den Sync-Button aus 0.12.0)
+  prüft deshalb jetzt per DST-Erkennung, ob gerade Sommer- oder
+  Winterzeit ist, und zieht 4h bzw. 2h ab. Der Winterzeit-Zweig ist
+  noch nicht an einem echten Datenpunkt bestätigt - bitte nach der
+  nächsten Zeitumstellung (Ende Oktober) erneut live prüfen.
 
 ### Version 0.12.1
 
