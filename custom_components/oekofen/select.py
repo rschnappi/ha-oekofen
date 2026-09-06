@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .betriebsart import (
@@ -125,6 +126,88 @@ def build_select_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[s
     return defs
 
 
+def _resolve_options(coordinator: OekofenCoordinator, parameter: str, fallback_options: List[str]) -> List[str]:
+    """Shared option-list resolution: read live from the device's own
+    "formatTexts" (same convention the vendor's own web UI's dropdowns use)
+    if present, else fall back to a static list for older firmware that
+    omits it. Used by OekofenModeSelect.options and by
+    OekofenHeizprogrammSelect, which needs to resolve *other* select
+    entities' current option lists to compute the index it writes."""
+    point = coordinator.data.get(parameter)
+    format_texts = (point.get("formatTexts") if point else "") or ""
+    format_texts = format_texts.strip()
+    if format_texts:
+        return [text.strip() for text in format_texts.split("|")]
+    return fallback_options
+
+
+# Sommer/Übergang/Winter (see CLAUDE.md): a virtual season switch, not a
+# real device parameter - it just adjusts several real ÖkOfen parameters
+# together (Anlage-Betriebsart, every circuit's aktives Zeitprogramm) in
+# one step, instead of clicking through each of them by hand.
+HEIZPROGRAMM_OPTIONS = ["Sommer", "Übergang", "Winter"]
+_HEIZPROGRAMM_ANLAGE_OPTION = {"Sommer": "Warmwasser", "Übergang": "Auto", "Winter": "Auto"}
+_HEIZPROGRAMM_ZEITPROGRAMM_OPTION = {"Übergang": "Zeit 2", "Winter": "Zeit 1"}  # Sommer: left as-is
+
+
+class OekofenHeizprogrammSelect(CoordinatorEntity, RestoreEntity, SelectEntity):
+    """Sommer/Übergang/Winter season switch.
+
+    Winter: Anlage-Betriebsart -> Auto, jedes Zeitprogramm -> Zeit 1.
+    Übergang: Anlage-Betriebsart -> Auto, jedes Zeitprogramm -> Zeit 2.
+    Sommer: Anlage-Betriebsart -> Warmwasser (Heizkreise damit geräteseitig
+    abgeschaltet, nur Warmwasser läuft weiter) - Zeitprogramme unverändert,
+    da für abgeschaltete Heizkreise ohnehin irrelevant.
+
+    Purely a convenience toggle over other already-existing select
+    entities on this same device - it carries no device parameter of its
+    own, so its own selection is remembered via RestoreEntity (survives HA
+    restarts) rather than read back from the device.
+    """
+
+    _attr_options = HEIZPROGRAMM_OPTIONS
+    _attr_icon = "mdi:home-thermometer"
+
+    def __init__(
+        self,
+        coordinator: OekofenCoordinator,
+        api: PellematicAPI,
+        entry_id: str,
+        device_name: str,
+        zeitprogramm_parameters: List[str],
+    ) -> None:
+        super().__init__(coordinator)
+        self.api = api
+        self._zeitprogramm_parameters = zeitprogramm_parameters
+        self._attr_unique_id = f"{entry_id}_heizprogramm"
+        self._attr_name = "Heizprogramm"
+        self._attr_device_info = build_device_info(entry_id, device_name)
+        self._attr_current_option: Optional[str] = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state in self.options:
+            self._attr_current_option = last_state.state
+
+    async def async_select_option(self, option: str) -> None:
+        anlage_option = _HEIZPROGRAMM_ANLAGE_OPTION[option]
+        anlage_options = _resolve_options(self.coordinator, ANLAGE_MODE_PARAMETER, ["Aus", "Auto", "Warmwasser"])
+        if anlage_option in anlage_options:
+            await self.api.set_data(ANLAGE_MODE_PARAMETER, anlage_options.index(anlage_option))
+
+        zeitprogramm_option = _HEIZPROGRAMM_ZEITPROGRAMM_OPTION.get(option)
+        if zeitprogramm_option:
+            for parameter in self._zeitprogramm_parameters:
+                options = _resolve_options(self.coordinator, parameter, ["Zeit 1", "Zeit 2"])
+                if zeitprogramm_option in options:
+                    await self.api.set_data(parameter, options.index(zeitprogramm_option))
+
+        self._attr_current_option = option
+        self.async_write_ha_state()
+        await self.coordinator.async_request_refresh()
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -155,6 +238,14 @@ async def async_setup_entry(
         OekofenModeSelect(coordinator, api, key, config, config_entry.entry_id, device_name)
         for key, config in definitions.items()
     ]
+
+    zeitprogramm_parameters = [
+        config["parameter"] for key, config in definitions.items() if key.endswith("_zeitprogramm")
+    ]
+    entities.append(
+        OekofenHeizprogrammSelect(coordinator, api, config_entry.entry_id, device_name, zeitprogramm_parameters)
+    )
+
     async_add_entities(entities)
 
 
@@ -200,12 +291,7 @@ class OekofenModeSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def options(self) -> List[str]:
-        point = self._data_point()
-        format_texts = (point.get("formatTexts") if point else "") or ""
-        format_texts = format_texts.strip()
-        if format_texts:
-            return [text.strip() for text in format_texts.split("|")]
-        return self._fallback_options
+        return _resolve_options(self.coordinator, self._current_parameter(), self._fallback_options)
 
     @property
     def current_option(self) -> Optional[str]:

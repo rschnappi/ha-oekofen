@@ -307,6 +307,42 @@ Die Integration verwendet nur getestete und funktionierende Parameter:
 
 ## 📝 Changelog
 
+### Version 0.13.0
+
+- ✨ **Neu: Heizprogramm-Umschalter (Sommer/Übergang/Winter)**: Eine neue
+  Select-Entity ("Heizprogramm") schaltet mehrere reale ÖkOfen-Parameter
+  in einem Schritt um, statt sie einzeln anzuklicken:
+  - **Winter**: Anlage-Betriebsart auf Auto, jedes Zeitprogramm (Heizkreis,
+    Warmwasser, Zirkulationspumpe - beliebig viele Kreise) auf Zeit 1.
+  - **Übergang**: Anlage-Betriebsart auf Auto, jedes Zeitprogramm auf Zeit 2.
+  - **Sommer**: Anlage-Betriebsart auf Warmwasser (Heizkreise damit
+    geräteseitig abgeschaltet, nur Warmwasser läuft weiter).
+  Erfasst automatisch ALLE vorhandenen Zeitprogramm-Kreise (nicht fest auf
+  Kreis 1 verdrahtet), zeigt auf dem Dashboard eine eigene Karte mit
+  Kurzerklärung, und merkt sich die zuletzt gewählte Option über einen
+  HA-Neustart hinweg (RestoreEntity) - da sie keinen eigenen
+  Geräteparameter hat, sondern nur andere Entities dieser Integration
+  umschaltet.
+
+### Version 0.12.2
+
+- 🧪 **EXPERIMENTELL - Fix: Geräteuhrzeit-Kompensation war zu klein
+  (-2h statt -4h während Sommerzeit) + jetzt DST-abhängig**: Ein
+  zweiter Live-Test am Folgemorgen (frisch neu geladene native
+  ÖkoFEN-Web-UI, kein gecachter Tab) zeigte, dass das Gerät beim
+  Übernehmen einer neuen Uhrzeit während Sommerzeit (CEST) tatsächlich
+  **4 Stunden** addiert, nicht 2 wie zuvor an nur einem Datenpunkt
+  angenommen.
+  ⚠️ **Arbeitshypothese**: das Gerät kennt vermutlich keine Zeitzone/DST
+  und addiert immer fix 2 Wall-Clock-Stunden - während Sommerzeit macht
+  das in Summe +4h aus, während Winterzeit (CET) sollten es dann nur
+  +2h sein. Die Kompensation beim Schreiben der Geräteuhrzeit (sowohl
+  über die `datetime`-Entity als auch über den Sync-Button aus 0.12.0)
+  prüft deshalb jetzt per DST-Erkennung, ob gerade Sommer- oder
+  Winterzeit ist, und zieht 4h bzw. 2h ab. Der Winterzeit-Zweig ist
+  noch nicht an einem echten Datenpunkt bestätigt - bitte nach der
+  nächsten Zeitumstellung (Ende Oktober) erneut live prüfen.
+
 ### Version 0.12.1
 
 - 🐛 **Fix: Sync-Button erschien nirgends auf dem Dashboard**: `button`-
@@ -882,5 +918,5 @@ Diese Integration ist ein inoffizielles Projekt und steht in keiner Verbindung z
 
 ---
 
-**Version**: 0.12.1
+**Version**: 0.13.0
 **Status**: Aktiv weiterentwickelt - basierend auf umfangreichen Tests gegen ein echtes Gerät

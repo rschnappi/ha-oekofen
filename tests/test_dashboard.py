@@ -140,6 +140,29 @@ def test_build_overview_views_splits_diagnose_and_mail_smtp():
     assert titles == ["Übersicht", "Diagnose", "Mail / SMTP"]
 
 
+def test_build_overview_views_gives_heizprogramm_its_own_card_with_description():
+    """select.py's OekofenHeizprogrammSelect is a real select entity like
+    any other - pulled out of the generic leftover select grid into its
+    own card (with a short explanation) rather than left as an
+    unexplained tile among "Weitere Betriebsarten"."""
+    leftover = ["select.x_heizprogramm"]
+
+    views = build_overview_views([], leftover, {})
+
+    rendered = str(views[0])
+    assert "select.x_heizprogramm" in rendered
+    assert "Winter" in rendered and "Sommer" in rendered
+
+
+def test_build_overview_views_heizprogramm_not_duplicated_in_generic_select_grid():
+    leftover = ["select.x_heizprogramm", "select.x_other_mode"]
+
+    views = build_overview_views([], leftover, {})
+
+    rendered = str(views[0])
+    assert rendered.count("select.x_heizprogramm") == 1
+
+
 def test_build_overview_views_surfaces_button_entities():
     """Regression test: button.py's device-clock sync button (and any
     future button entity) is a leftover entity like datetime/select/switch/

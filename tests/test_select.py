@@ -1,11 +1,15 @@
 """Tests for the select platform (select.py)."""
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.oekofen.betriebsart import ANLAGE_MODE_PARAMETER, AUS_MODE_HINWEIS
 from custom_components.oekofen.select import (
+    HEIZPROGRAMM_OPTIONS,
     INSTALLER_WARNING,
+    OekofenHeizprogrammSelect,
     OekofenModeSelect,
     build_select_definitions,
 )
@@ -156,3 +160,97 @@ async def test_async_select_option_rejects_unknown_option():
         await entity.async_select_option("Nonexistent")
 
     api.set_data.assert_not_awaited()
+
+
+# --- OekofenHeizprogrammSelect (Sommer/Übergang/Winter season switch) -------
+
+_ZEIT_HK = "CAPPL:LOCAL.hk[0].aktives_zeitprogramm"
+_ZEIT_WW = "CAPPL:LOCAL.ww[0].aktives_zeitprogramm"
+
+
+def _make_heizprogramm_entity(coordinator, api=None, zeitprogramm_parameters=None):
+    return OekofenHeizprogrammSelect(
+        coordinator,
+        api or AsyncMock(),
+        entry_id="e1",
+        device_name="Test",
+        zeitprogramm_parameters=zeitprogramm_parameters or [_ZEIT_HK, _ZEIT_WW],
+    )
+
+
+def test_heizprogramm_options_are_fixed():
+    entity = _make_heizprogramm_entity(FakeCoordinator({}))
+    assert entity.options == HEIZPROGRAMM_OPTIONS == ["Sommer", "Übergang", "Winter"]
+
+
+async def test_heizprogramm_winter_sets_anlage_auto_and_all_zeitprogramme_zeit_1():
+    api = AsyncMock()
+    coord = FakeCoordinator({
+        ANLAGE_MODE_PARAMETER: make_point("1", format_texts="Aus|Auto|Warmwasser"),
+        _ZEIT_HK: make_point("1", format_texts="Zeit 1|Zeit 2"),
+        _ZEIT_WW: make_point("0", format_texts="Zeit 1|Zeit 2"),
+    })
+    entity = _make_heizprogramm_entity(coord, api=api)
+    entity.async_write_ha_state = MagicMock()
+
+    await entity.async_select_option("Winter")
+
+    api.set_data.assert_any_await(ANLAGE_MODE_PARAMETER, 1)  # Auto
+    api.set_data.assert_any_await(_ZEIT_HK, 0)  # Zeit 1
+    api.set_data.assert_any_await(_ZEIT_WW, 0)  # Zeit 1
+    assert entity.current_option == "Winter"
+    assert coord.refresh_calls == 1
+
+
+async def test_heizprogramm_uebergang_sets_anlage_auto_and_all_zeitprogramme_zeit_2():
+    api = AsyncMock()
+    coord = FakeCoordinator({
+        ANLAGE_MODE_PARAMETER: make_point("2", format_texts="Aus|Auto|Warmwasser"),
+        _ZEIT_HK: make_point("0", format_texts="Zeit 1|Zeit 2"),
+        _ZEIT_WW: make_point("0", format_texts="Zeit 1|Zeit 2"),
+    })
+    entity = _make_heizprogramm_entity(coord, api=api)
+    entity.async_write_ha_state = MagicMock()
+
+    await entity.async_select_option("Übergang")
+
+    api.set_data.assert_any_await(ANLAGE_MODE_PARAMETER, 1)  # Auto
+    api.set_data.assert_any_await(_ZEIT_HK, 1)  # Zeit 2
+    api.set_data.assert_any_await(_ZEIT_WW, 1)  # Zeit 2
+    assert entity.current_option == "Übergang"
+
+
+async def test_heizprogramm_sommer_sets_anlage_warmwasser_and_leaves_zeitprogramme_untouched():
+    api = AsyncMock()
+    coord = FakeCoordinator({
+        ANLAGE_MODE_PARAMETER: make_point("1", format_texts="Aus|Auto|Warmwasser"),
+        _ZEIT_HK: make_point("0", format_texts="Zeit 1|Zeit 2"),
+        _ZEIT_WW: make_point("0", format_texts="Zeit 1|Zeit 2"),
+    })
+    entity = _make_heizprogramm_entity(coord, api=api)
+    entity.async_write_ha_state = MagicMock()
+
+    await entity.async_select_option("Sommer")
+
+    api.set_data.assert_awaited_once_with(ANLAGE_MODE_PARAMETER, 2)  # Warmwasser, only call
+    assert entity.current_option == "Sommer"
+
+
+async def test_heizprogramm_restores_last_option_across_restart():
+    entity = _make_heizprogramm_entity(FakeCoordinator({}))
+    entity.async_get_last_state = AsyncMock(return_value=SimpleNamespace(state="Winter"))
+
+    with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
+        await entity.async_added_to_hass()
+
+    assert entity.current_option == "Winter"
+
+
+async def test_heizprogramm_ignores_invalid_restored_state():
+    entity = _make_heizprogramm_entity(FakeCoordinator({}))
+    entity.async_get_last_state = AsyncMock(return_value=SimpleNamespace(state="unavailable"))
+
+    with patch.object(CoordinatorEntity, "async_added_to_hass", AsyncMock()):
+        await entity.async_added_to_hass()
+
+    assert entity.current_option is None

@@ -9,6 +9,7 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .coordinator import OekofenCoordinator
 from .datetime_common import device_seconds_to_datetime, datetime_to_device_seconds
@@ -34,30 +35,57 @@ DEVICE_CLOCK_COMMIT_PARAMETER = "CAPPL:LOCAL.L_fernwartung_setze_uhrzeit"
 async def async_commit_device_clock(api: PellematicAPI, value: datetime) -> None:
     """Stage `value` into the device's own running clock and commit it.
 
+    *** EXPERIMENTAL - the DST-dependent compensation below is a working
+    hypothesis, not yet confirmed with a real winter-time data point. ***
+
     Shared between OekofenDateTime.async_set_value (device_clock field) and
-    button.py's one-press "sync now" button. Applies a -2h compensation:
-    the device applies its own extra +2h shift once
-    L_fernwartung_setze_uhrzeit actually commits the staged value into the
-    device's *running* clock - unlike every other datetime field here
-    (Party endzeit, Urlaub start/ende), which just store a future timestamp
-    compared against that running clock later and don't exhibit this.
-    Confirmed live against a real device (2026-09-05): setting this entity
-    to a value X made the device's own clock show X+2h, both via this
-    integration and via the device's native web UI's own date/time field -
-    so this correction belongs here, not in datetime_common.py's shared
-    conversion, which the read side (device_seconds_to_datetime, for
-    DEVICE_CLOCK_READ_PARAMETER) and the other fields are already verified
-    correct against.
+    button.py's one-press "sync now" button. Applies a -2h/-4h compensation
+    depending on whether Europe/Vienna is currently on DST (see
+    _device_clock_compensation_hours below for why): the device applies its
+    own extra shift once L_fernwartung_setze_uhrzeit actually commits the
+    staged value into the device's *running* clock - unlike every other
+    datetime field here (Party endzeit, Urlaub start/ende), which just
+    store a future timestamp compared against that running clock later and
+    don't exhibit this. This correction belongs here, not in
+    datetime_common.py's shared conversion, which the read side
+    (device_seconds_to_datetime, for DEVICE_CLOCK_READ_PARAMETER) and the
+    other fields are already verified correct against.
+    History: confirmed live against a real device during CEST
+    (2026-09-05/06), in two rounds - an initial -2h compensation (based on
+    a single same-evening data point) still left the device's native web
+    UI showing 2h ahead of actual time the next morning, on a freshly
+    reloaded page (ruling out a stale browser tab), i.e. the device's own
+    shift during DST is +4h total, not +2h. Both data points so far were
+    taken while DST was active - the device's owner suspects the
+    device-side shift is actually a fixed, DST-naive +2h that only reads
+    as +4h while DST is active (the device presumably has no timezone
+    concept of its own and just always adds a flat 2 wall-clock hours,
+    which happens to line up with CEST-vs-UTC but not with the actual
+    CEST-vs-CET difference) and would drop back to +2h once Europe/Vienna
+    returns to CET (winter time). NOT YET CONFIRMED - no real winter-time
+    data point exists yet; re-verify live around/after the next DST switch
+    (late October) before trusting this across a season boundary.
     CAUTION: setting this field wrong once briefly locked the whole device
     out (HTTP 403 on every request) - the device's session cookie appears
     to be time-bound, so a clock that jumps by hours can invalidate the
     very session used to fix it. Recovery: homeassistant.reload_config_entry
     on this entry (forces a fresh login/cookie) - do NOT restart HA for
     this alone, and don't retry writes to this field in a loop hoping a
-    different value fixes it.
+    different value fixes it. Given the above, treat this field
+    conservatively (verify the result after every use) rather than
+    trusting it unattended.
     """
-    seconds = datetime_to_device_seconds(value) - 2 * 3600
+    compensation_hours = _device_clock_compensation_hours(value)
+    seconds = datetime_to_device_seconds(value) - compensation_hours * 3600
     await api.set_data_multi({DEVICE_CLOCK_PARAMETER: seconds, DEVICE_CLOCK_COMMIT_PARAMETER: 1})
+
+
+def _device_clock_compensation_hours(value: datetime) -> int:
+    """4h while Europe/Vienna is on DST (CEST), 2h otherwise (CET) - see
+    async_commit_device_clock's docstring for the (unconfirmed) reasoning:
+    a hypothesized fixed +2h device-side shift that only reads as +4h
+    because both data points calibrating this were taken during DST."""
+    return 4 if dt_util.as_local(value).dst() else 2
 
 
 def build_datetime_definitions(circuits: Dict[str, List[int]]) -> Dict[str, Dict[str, Any]]:

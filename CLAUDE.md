@@ -59,19 +59,32 @@ geraten/konfiguriert.
   Schreibvorgang auf `L_fernwartung_uhrzeit_neu` wird erst mit
   `L_fernwartung_setze_uhrzeit=1` im selben Request wirksam (`set_data_multi`,
   nicht `set_data`).
-- **Das Gerät addiert beim Commit selbst nochmal +2h** auf den
-  gesendeten Wert — bestätigt live gegen ein echtes Gerät (2026-09-05),
-  sowohl über diese Integration als auch direkt über die native
-  ÖkoFEN-Web-UI des Geräts (dessen eigenes Datum/Uhrzeit-Feld zeigt
-  denselben +2h-Versatz zwischen Eingabe und übernommenem Wert). Das ist
-  also eine Eigenheit der Geräte-Firmware selbst beim *Commit* der
-  laufenden Uhr, keine Bug in `datetime_common.py`s gemeinsamer
-  Umrechnung — die Lese-Seite (`device_seconds_to_datetime`, für den
-  separaten `read_parameter`) und alle anderen Datetime-Felder sind
-  bereits gegen ein echtes Gerät verifiziert und bleiben unangetastet.
-  `async_set_value()` zieht deshalb **nur für dieses eine Feld**
-  (`self._commit_parameter` gesetzt) 2 Stunden vom berechneten
-  Sekundenwert ab, bevor er gesendet wird.
+- **🧪 EXPERIMENTELL — Kompensationswert nicht abschließend gesichert.**
+- **Das Gerät addiert beim Commit selbst nochmal einen Zeit-Shift** auf
+  den gesendeten Wert — bestätigt live gegen ein echtes Gerät, in zwei
+  Runden: eine erste, am selben Abend (2026-09-05) an nur einem
+  Datenpunkt kalibrierte -2h-Kompensation zeigte am nächsten Morgen
+  (2026-09-06), auf einer frisch neu geladenen Seite der nativen
+  ÖkoFEN-Web-UI (also nicht durch einen alten gecachten Browser-Tab
+  erklärbar), das Gerät immer noch 2h vor der tatsächlichen Zeit — die
+  Integration hatte 2h abgezogen, das Gerät aber tatsächlich 4h
+  addiert, macht netto +2h Restfehler. Das ist eine Eigenheit der
+  Geräte-Firmware selbst beim *Commit* der laufenden Uhr, keine Bug in
+  `datetime_common.py`s gemeinsamer Umrechnung — die Lese-Seite
+  (`device_seconds_to_datetime`, für den separaten `read_parameter`)
+  und alle anderen Datetime-Felder sind bereits gegen ein echtes Gerät
+  verifiziert und bleiben unangetastet.
+  - **Seit 0.12.2: DST-abhängig, nicht mehr fix.** Arbeitshypothese des
+    Nutzers: das Gerät hat selbst kein Zeitzonen-/DST-Konzept und
+    addiert immer einen festen Shift von 2 Wall-Clock-Stunden — beide
+    bisherigen Live-Messungen fielen aber in die Sommerzeit (CEST), wo
+    der tatsächliche CEST-vs-UTC-Versatz eben 2h zusätzlich zur
+    CEST-vs-CET-Differenz ausmacht, in Summe +4h. In der Winterzeit
+    (CET) sollte der Shift dann wieder bei nur +2h liegen.
+    `_device_clock_compensation_hours()` (`datetime.py`) prüft per
+    `dt_util.as_local(value).dst()`, ob Europe/Vienna gerade Sommerzeit
+    hat, und zieht **4h** ab, wenn ja, sonst **2h**. Noch NICHT mit
+    einem echten Winterzeit-Datenpunkt bestätigt.
 - **Ein einzelner Fehlversuch hat einmal die komplette Integration
   ausgesperrt**: ein falsch gesetzter Uhrzeit-Wert (Gerät landete ~4h in
   der Zukunft) führte dazu, dass jede folgende Anfrage — nicht nur an
@@ -90,14 +103,19 @@ geraten/konfiguriert.
     wäre nicht nötig gewesen. NICHT wiederholt mit anderen Werten gegen
     das Feld schreiben in der Hoffnung, es löst sich - das verlängert im
     Zweifel nur die Downtime.
-  - Die 2h-Kompensation oben ist nur an EINEM validierten Datenpunkt
-    (Eingabe über diese Integration, direkt beobachtetes Ergebnis)
-    kalibriert. Falls sie sich als nicht robust erweist (andere
-    ÖkOfen-Firmware-Version, andere Zeitzone als Europe/Vienna, DST-Wechsel
-    exakt am Schreibzeitpunkt), das Feld eher konservativ behandeln
-    (z. B. nur lesend nutzen) statt den Offset blind größer zu drehen.
+  - Die 4h/2h-Kompensation oben ist nur für den Sommerzeit-Fall (4h) an
+    zwei Datenpunkten (Integration + native Geräte-UI, je einmal am
+    2026-09-05-Abend und -06-Morgen) validiert - der Winterzeit-Fall
+    (2h) ist reine Hochrechnung aus der DST-Hypothese, noch nicht live
+    getestet. Beides gilt zudem bisher nur für diese eine Anlage/
+    Firmware-Version/Zeitzone. Falls sich das als nicht robust erweist
+    (andere ÖkOfen-Firmware-Version, andere Zeitzone als Europe/Vienna,
+    DST-Wechsel exakt am Schreibzeitpunkt), das Feld eher konservativ
+    behandeln (z. B. nur lesend nutzen) statt den Offset blind weiter zu
+    verändern. **Vor der nächsten Zeitumstellung (Ende Oktober) live
+    erneut verifizieren**, bevor dem Winterzeit-Zweig vertraut wird.
 - **Seit 0.12.0**: Die Commit-Logik (Stage + `L_fernwartung_setze_uhrzeit=1`
-  + die -2h-Kompensation) ist aus `OekofenDateTime.async_set_value` heraus
+  + die Kompensation) ist aus `OekofenDateTime.async_set_value` heraus
   in eine eigene Funktion `async_commit_device_clock()` (`datetime.py`)
   gezogen, damit sie sich nicht dupliziert: `button.py`s neue
   `OekofenSyncClockButton`-Entity ("Geräteuhrzeit synchronisieren", eigene
@@ -106,6 +124,54 @@ geraten/konfiguriert.
   `datetime`-Entity. Verwendet dieselben Modul-Konstanten
   (`DEVICE_CLOCK_PARAMETER`/`_READ_PARAMETER`/`_COMMIT_PARAMETER`), damit
   die Parameter-Strings nur an einer Stelle stehen.
+
+## Heizprogramm-Umschalter (`select.py`'s `OekofenHeizprogrammSelect`)
+
+- **Seit 0.13.0**: Ein virtueller Sommer/Übergang/Winter-Schalter, der
+  mehrere echte ÖkOfen-Parameter in einem Schritt umschaltet (Anlage-
+  Betriebsart + jedes Kreises aktives Zeitprogramm) - Details siehe
+  README-Changelog.
+- **Bewusst KEIN `input_select`-Helper + Automatisierung**, obwohl das der
+  erste Ansatz war (live auf der Nutzerinstanz per `create_helper`/
+  `create_automation` gebaut und getestet, dann wieder verworfen): eine
+  generische HA-Helper-Entity anzulegen hätte bedeutet, `input_select`s
+  private `InputSelectStorageCollection`-Internals nachzubauen (dieselbe
+  Art fragiler Abhängigkeit, die bei `dashboard.py`s Lovelace-Integration
+  schon zweimal live gebrochen ist, siehe unten) - und selbst dann hätte
+  die neu erstellte Entity nicht ohne Weiteres im laufenden Boot-Vorgang
+  registriert werden können (siehe Dashboards
+  `_async_create_and_register_dashboard`-Workaround für dasselbe Problem
+  bei Lovelace). Stattdessen: eine ganz normale eigene `SelectEntity`
+  dieser Integration (wie jede andere in `select.py`), die nur andere
+  bereits vorhandene Select-Entities dieses Geräts anschreibt - kein
+  Zugriff auf HA-Core-Internals nötig, automatisch für jeden Nutzer bei
+  jedem Setup erzeugt (nicht nur einmalig manuell auf einer Instanz), und
+  mit denselben Test-Mustern wie der Rest der Integration testbar.
+- **Kein eigener Geräteparameter** - anders als jede andere Entity in
+  dieser Integration hat "Heizprogramm" keine Entsprechung auf dem
+  ÖkOfen-Gerät selbst, sondern bündelt nur Schreibvorgänge auf andere,
+  bereits existierende Parameter. Die zuletzt gewählte Option wird deshalb
+  per `RestoreEntity` über HA-Neustarts hinweg gemerkt (Standard-HA-API,
+  kein fragiler interner Zugriff wie beim verworfenen Helper-Ansatz oben)
+  statt vom Gerät zurückgelesen zu werden.
+- **Erfasst per Live-Optionsliste, nicht per Index-Konstante**: welcher
+  Index am Gerät "Auto"/"Warmwasser" bzw. "Zeit 1"/"Zeit 2" bedeutet, wird
+  bei jedem Schreibvorgang frisch aus `coordinator.data`s `formatTexts`
+  aufgelöst (`_resolve_options()`, dieselbe Logik wie
+  `OekofenModeSelect.options`) statt eine feste Zahl anzunehmen - falls
+  ein Firmware-Update die Reihenfolge der Optionen je ändern sollte, bleibt
+  das Schreiben trotzdem korrekt.
+- **Erfasst automatisch ALLE Zeitprogramm-Kreise, nicht nur Kreis 1**: die
+  Liste der zu setzenden `*_aktives_zeitprogramm`-Parameter kommt aus
+  `build_select_definitions()`s eigenen Definitionen (jeder Key, der auf
+  `_zeitprogramm` endet) - eine Anlage mit mehreren Heizkreisen/
+  Warmwasser-/Zirkulationspumpen-Kreisen bekommt sie also automatisch alle
+  mit erfasst, ohne Codeänderung.
+- Zeigt auf dem Dashboard (`dashboard.py`) eine eigene Karte mit
+  Kurzerklärung, aus der generischen "Weitere Betriebsarten"-Liste
+  herausgelöst (per `_HEIZPROGRAMM_RE`-Namensmatch auf die Object-ID, wie
+  schon die Integrations-Versions-Zeile) - eine reine Grid-Kachel hätte
+  keinen Platz für eine Erklärung, was die drei Optionen bewirken.
 
 ## Frontend/Dashboard (`dashboard.py`)
 

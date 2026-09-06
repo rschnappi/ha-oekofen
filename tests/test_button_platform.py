@@ -31,12 +31,12 @@ def test_available_reflects_device_clock_read_parameter():
     assert _make_button(FakeCoordinator({})).available is False
 
 
-async def test_press_commits_current_time_with_minus_2h_compensation(monkeypatch):
+async def test_press_commits_current_time_with_minus_4h_compensation_during_dst(monkeypatch):
     api = AsyncMock()
     coord = FakeCoordinator({"CAPPL:LOCAL.L_fernwartung_datum_zeit_sek": make_point("0")})
     button = _make_button(coord, api=api)
 
-    fixed_now = dt_util.as_utc(datetime(2026, 8, 1, 10, 0, 0))
+    fixed_now = dt_util.as_utc(datetime(2026, 8, 1, 10, 0, 0))  # August: CEST/DST active
     monkeypatch.setattr(dt_util, "utcnow", lambda: fixed_now)
 
     await button.async_press()
@@ -50,5 +50,23 @@ async def test_press_commits_current_time_with_minus_2h_compensation(monkeypatch
     }
     assert sent_values["CAPPL:LOCAL.L_fernwartung_setze_uhrzeit"] == 1
     uncompensated = datetime_to_device_seconds(fixed_now)
-    assert sent_values["CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"] == uncompensated - 2 * 3600
+    assert sent_values["CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"] == uncompensated - 4 * 3600
     assert coord.refresh_calls == 1
+
+
+async def test_press_commits_current_time_with_minus_2h_compensation_outside_dst(monkeypatch):
+    """See test_datetime_platform.py's matching test: this DST-dependent
+    2h/4h split is an unconfirmed hypothesis, not yet verified with a real
+    winter-time data point."""
+    api = AsyncMock()
+    coord = FakeCoordinator({"CAPPL:LOCAL.L_fernwartung_datum_zeit_sek": make_point("0")})
+    button = _make_button(coord, api=api)
+
+    fixed_now = dt_util.as_utc(datetime(2026, 1, 15, 10, 0, 0))  # January: CET/DST inactive
+    monkeypatch.setattr(dt_util, "utcnow", lambda: fixed_now)
+
+    await button.async_press()
+
+    (sent_values,), _ = api.set_data_multi.call_args
+    uncompensated = datetime_to_device_seconds(fixed_now)
+    assert sent_values["CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"] == uncompensated - 2 * 3600
