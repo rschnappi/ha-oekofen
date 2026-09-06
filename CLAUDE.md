@@ -59,19 +59,25 @@ geraten/konfiguriert.
   Schreibvorgang auf `L_fernwartung_uhrzeit_neu` wird erst mit
   `L_fernwartung_setze_uhrzeit=1` im selben Request wirksam (`set_data_multi`,
   nicht `set_data`).
-- **Das Gerät addiert beim Commit selbst nochmal +2h** auf den
-  gesendeten Wert — bestätigt live gegen ein echtes Gerät (2026-09-05),
-  sowohl über diese Integration als auch direkt über die native
-  ÖkoFEN-Web-UI des Geräts (dessen eigenes Datum/Uhrzeit-Feld zeigt
-  denselben +2h-Versatz zwischen Eingabe und übernommenem Wert). Das ist
-  also eine Eigenheit der Geräte-Firmware selbst beim *Commit* der
-  laufenden Uhr, keine Bug in `datetime_common.py`s gemeinsamer
-  Umrechnung — die Lese-Seite (`device_seconds_to_datetime`, für den
-  separaten `read_parameter`) und alle anderen Datetime-Felder sind
-  bereits gegen ein echtes Gerät verifiziert und bleiben unangetastet.
-  `async_set_value()` zieht deshalb **nur für dieses eine Feld**
-  (`self._commit_parameter` gesetzt) 2 Stunden vom berechneten
-  Sekundenwert ab, bevor er gesendet wird.
+- **🧪 EXPERIMENTELL — Kompensationswert nicht abschließend gesichert.**
+- **Das Gerät addiert beim Commit selbst nochmal +4h** auf den
+  gesendeten Wert — bestätigt live gegen ein echtes Gerät, in zwei
+  Runden: eine erste, am selben Abend (2026-09-05) an nur einem
+  Datenpunkt kalibrierte -2h-Kompensation zeigte am nächsten Morgen
+  (2026-09-06), auf einer frisch neu geladenen Seite der nativen
+  ÖkoFEN-Web-UI (also nicht durch einen alten gecachten Browser-Tab
+  erklärbar), das Gerät immer noch 2h vor der tatsächlichen Zeit — die
+  Integration hatte 2h abgezogen, das Gerät aber tatsächlich 4h
+  addiert, macht netto +2h Restfehler. Die Kompensation wurde daraufhin
+  auf -4h korrigiert (0.12.2). Das ist eine Eigenheit der
+  Geräte-Firmware selbst beim *Commit* der laufenden Uhr, keine Bug in
+  `datetime_common.py`s gemeinsamer Umrechnung — die Lese-Seite
+  (`device_seconds_to_datetime`, für den separaten `read_parameter`)
+  und alle anderen Datetime-Felder sind bereits gegen ein echtes Gerät
+  verifiziert und bleiben unangetastet. `async_commit_device_clock()`
+  zieht deshalb **nur für dieses eine Feld** (`self._commit_parameter`
+  gesetzt) 4 Stunden vom berechneten Sekundenwert ab, bevor er gesendet
+  wird.
 - **Ein einzelner Fehlversuch hat einmal die komplette Integration
   ausgesperrt**: ein falsch gesetzter Uhrzeit-Wert (Gerät landete ~4h in
   der Zukunft) führte dazu, dass jede folgende Anfrage — nicht nur an
@@ -90,14 +96,29 @@ geraten/konfiguriert.
     wäre nicht nötig gewesen. NICHT wiederholt mit anderen Werten gegen
     das Feld schreiben in der Hoffnung, es löst sich - das verlängert im
     Zweifel nur die Downtime.
-  - Die 2h-Kompensation oben ist nur an EINEM validierten Datenpunkt
-    (Eingabe über diese Integration, direkt beobachtetes Ergebnis)
-    kalibriert. Falls sie sich als nicht robust erweist (andere
+  - Die 4h-Kompensation oben ist an zwei Datenpunkten (Integration +
+    native Geräte-UI, je einmal am 2026-09-05-Abend und -06-Morgen)
+    validiert, aber immer noch nur an dieser einen Anlage/Firmware-
+    Version/Zeitzone. Falls sie sich als nicht robust erweist (andere
     ÖkOfen-Firmware-Version, andere Zeitzone als Europe/Vienna, DST-Wechsel
     exakt am Schreibzeitpunkt), das Feld eher konservativ behandeln
     (z. B. nur lesend nutzen) statt den Offset blind größer zu drehen.
+  - **Offene Frage / unbestätigte Vermutung des Nutzers**: beide bisher
+    live vermessenen Datenpunkte lagen während der Sommerzeit (CEST,
+    Europe/Vienna UTC+2). Es ist möglich, dass der geräteseitige
+    Zusatz-Shift tatsächlich fix +2h ist und selbst nicht
+    DST-bewusst rechnet - was während aktiver Sommerzeit wie +4h
+    aussehen würde, aber nach der Zeitumstellung zurück auf CET
+    (Winterzeit, UTC+1) wieder auf effektiv +2h zurückfallen könnte.
+    D.h. die aktuelle feste `-4h`-Kompensation könnte nur für die
+    Sommerzeit stimmen und im Winter erneut zu einem +2h-Restfehler
+    führen. Nicht umgesetzt (kein DST-abhängiges Umschalten der
+    Konstante) mangels eines Datenpunkts aus der tatsächlichen
+    Winterzeit - vor der nächsten Zeitumstellung (Ende Oktober) live
+    erneut verifizieren, bevor diesem Wert über eine Saisongrenze
+    hinweg vertraut wird.
 - **Seit 0.12.0**: Die Commit-Logik (Stage + `L_fernwartung_setze_uhrzeit=1`
-  + die -2h-Kompensation) ist aus `OekofenDateTime.async_set_value` heraus
+  + die Kompensation) ist aus `OekofenDateTime.async_set_value` heraus
   in eine eigene Funktion `async_commit_device_clock()` (`datetime.py`)
   gezogen, damit sie sich nicht dupliziert: `button.py`s neue
   `OekofenSyncClockButton`-Entity ("Geräteuhrzeit synchronisieren", eigene

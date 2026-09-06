@@ -112,15 +112,19 @@ async def test_device_clock_set_value_writes_value_and_commit_flag_together():
     assert coord.refresh_calls == 1
 
 
-async def test_device_clock_set_value_compensates_devices_own_plus_2h_commit_shift():
-    """Live-confirmed against a real device (2026-09-05): committing a
+async def test_device_clock_set_value_compensates_devices_own_plus_4h_commit_shift():
+    """Live-confirmed against a real device (2026-09-05/06): committing a
     staged device_clock value via L_fernwartung_setze_uhrzeit=1 makes the
-    device's own running clock end up 2 hours ahead of whatever was sent -
+    device's own running clock end up 4 hours ahead of whatever was sent -
     both through this integration and through the device's native web UI's
     own date/time field, so it's the device's own commit-time behavior,
     not a bug in datetime_common.py's shared conversion (which the read
     side and every other datetime field remain verified correct against).
-    Regression test for the -2h compensation this needs."""
+    (An initial round found only +2h from a single same-evening data
+    point; a fresh page reload the next morning still showed the device
+    2h ahead of actual time even with that -2h compensation applied,
+    revealing the real shift is +4h.) Regression test for the -4h
+    compensation this needs."""
     api = AsyncMock()
     coord = FakeCoordinator({"CAPPL:LOCAL.L_fernwartung_datum_zeit_sek": make_point("0")})
     entity = _make_device_clock_entity(coord, api=api)
@@ -130,4 +134,4 @@ async def test_device_clock_set_value_compensates_devices_own_plus_2h_commit_shi
 
     (sent_values,), _ = api.set_data_multi.call_args
     uncompensated = datetime_to_device_seconds(value)
-    assert sent_values["CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"] == uncompensated - 2 * 3600
+    assert sent_values["CAPPL:LOCAL.L_fernwartung_uhrzeit_neu"] == uncompensated - 4 * 3600
